@@ -1,0 +1,25 @@
+# ローカル開発用のサービス。起動：docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: uchinokusa
+      POSTGRES_PASSWORD: uchinokusa
+      POSTGRES_DB: uchinokusa
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uchinokusa -d uchinokusa"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  firebase-auth:
+    build: ./dev/firebase-emulator
+    ports:
+      - "9099:9099"
+
+volumes:
+  postgres-data:

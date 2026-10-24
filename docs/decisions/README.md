@@ -10,3 +10,4 @@
 | 番号 | 題名 | 状態 | 日付 |
 |---|---|---|---|
 | [0001](0001-api-contract-directory.md) | API の定義を `api/` ディレクトリに YAML で置く | 採用 | 2026-10-24 |
+| [0002](0002-local-dev-environment.md) | ローカル開発環境を Docker Compose と Firebase のデモプロジェクトで作る | 採用 | 2026-10-24 |

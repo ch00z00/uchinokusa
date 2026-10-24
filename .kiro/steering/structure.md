@@ -1,6 +1,6 @@
 # プロジェクトの構成
 
-まだ実装前のため、以下は**予定の構成**である。実装が進んだら `/kiro:steering` で実態に合わせて更新する。
+実装の途中のため、以下には**予定の構成**を含む。実装が進んだら `/kiro:steering` で実態に合わせて更新する。
 
 ## リポジトリ（モノレポ）
 ```
@@ -12,6 +12,9 @@ uchinokusa/
 │   └── specs/                機能ごとの仕様（要件・設計・タスク）
 ├── docs/
 │   └── decisions/            開発ログ（判断の記録：背景・検討した案・理由）
+├── compose.yaml              ローカル開発用の PostgreSQL と Firebase Auth Emulator
+├── dev/
+│   └── firebase-emulator/    Auth Emulator のイメージ（理由は docs/decisions/0002）
 ├── api/
 │   └── openapi.yaml          API 定義（サーバーとアプリの型の唯一の正。理由は docs/decisions/0001）
 ├── server/                   Go の API サーバー
@@ -24,11 +27,13 @@ uchinokusa/
 server/
 ├── cmd/uchinokusa/           エントリーポイント（serve / migrate / seed のサブコマンド）
 ├── internal/
+│   ├── config/               環境変数からの設定の読み込み
+│   ├── logging/              JSON の構造化ログ、context のリクエスト ID をログに付ける
 │   ├── domain/               エンティティ、値オブジェクト、次回予定の計算、季節の判定（純粋なロジック）
 │   ├── app/                  ユースケース（各 Service）、権限の判定、トランザクションの境界
 │   ├── advisor/              助言プロバイダの取り決め、レジストリ、植え替えのプロバイダ
 │   ├── adapter/
-│   │   ├── http/             生成したハンドラーの実装、ミドルウェア（認証など）
+│   │   ├── httpapi/          ルーティング、生成したハンドラーの実装、ミドルウェア（リクエスト ID、アクセスログ、認証など）
 │   │   ├── ws/               WebSocket の接続管理
 │   │   ├── postgres/         sqlc で生成したコード、リポジトリ、LISTEN/NOTIFY
 │   │   ├── firebase/         ID トークンの検証、FCM の送信
@@ -57,7 +62,7 @@ mobile/
 ```
 
 ## 命名と規約
-- **Go**：パッケージ名は小文字の単語1つ。エラーはドメインのエラー型に正規化し、HTTP 層の一か所で変換する
+- **Go**：パッケージ名は小文字の単語1つで、ディレクトリ名とそろえる（標準ライブラリと同じ名前は避ける。例：`http` ではなく `httpapi`）。エラーはドメインのエラー型に正規化し、HTTP 層の一か所で変換する
 - **API**：ベースパスは `/v1`。JSON の項目名はキャメルケース。日付は `YYYY-MM-DD`、日時は RFC 3339（UTC）
 - **互換性**：API は項目の追加だけを許可する。アプリは知らない項目・列挙値を無視する
 - **DB**：テーブル名・列名はスネークケースの複数形。主キーは UUIDv7。世帯配下のテーブルには `household_id` を持たせ、クエリには必ず世帯の条件を含める
