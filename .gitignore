@@ -1,0 +1,32 @@
+# OS / エディタ
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code のローカル設定
+.claude/settings.local.json
+
+# 秘密情報
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+service-account*.json
+google-services.json
+GoogleService-Info.plist
+
+# Go
+server/bin/
+*.test
+*.out
+coverage.*
+
+# Node / Expo
+node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+*.log
