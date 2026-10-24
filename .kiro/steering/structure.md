@@ -10,8 +10,10 @@ uchinokusa/
 ├── .kiro/
 │   ├── steering/             プロダクト・技術・構成の方針（このファイルを含む）
 │   └── specs/                機能ごとの仕様（要件・設計・タスク）
+├── docs/
+│   └── decisions/            開発ログ（判断の記録：背景・検討した案・理由）
 ├── api/
-│   └── openapi.yaml          API 定義（サーバーとアプリの型の唯一の正）
+│   └── openapi.yaml          API 定義（サーバーとアプリの型の唯一の正。理由は docs/decisions/0001）
 ├── server/                   Go の API サーバー
 └── mobile/                   React Native（Expo）のアプリ
 ```

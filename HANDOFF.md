@@ -35,6 +35,10 @@
 - 天気連動の助言はフェーズ2。ただし植物マスタと置き場所の項目は、MVPで用意する
 - 技術：React Native（Expo）／Go＋PostgreSQL／Firebase Auth＋FCM／WebSocket（詳細は `.kiro/steering/tech.md`）
 
+## 開発ログ
+- 設計や運用の判断は、背景と理由とあわせて `docs/decisions/` に1件1ファイルで残す（一覧は `docs/decisions/README.md`）
+- 実装中に新しい判断（ライブラリの選定、構成の変更など）をしたら、記録を追加する
+
 ## 環境
 - リモート：https://github.com/ch00z00/uchinokusa.git（ブランチ `main`）
 - ローカルのパス：`/Users/Yusuke1/choozoo/uchinokusa`
