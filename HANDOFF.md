@@ -40,6 +40,7 @@
 ## 開発ログ
 - 設計や運用の判断は、背景と理由とあわせて `docs/decisions/` に1件1ファイルで残す（一覧は `docs/decisions/README.md`）
 - 実装中に新しい判断（ライブラリの選定、構成の変更など）をしたら、記録を追加する
+- ユーザーの技術的な質問と答えは、`docs/learning/` に話題ごとにまとめる（一覧は `docs/learning/README.md`）
 
 ## 環境
 - リモート：https://github.com/ch00z00/uchinokusa.git（ブランチ `main`）

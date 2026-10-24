@@ -11,7 +11,8 @@ uchinokusa/
 │   ├── steering/             プロダクト・技術・構成の方針（このファイルを含む）
 │   └── specs/                機能ごとの仕様（要件・設計・タスク）
 ├── docs/
-│   └── decisions/            開発ログ（判断の記録：背景・検討した案・理由）
+│   ├── decisions/            開発ログ（判断の記録：背景・検討した案・理由）
+│   └── learning/             学習ノート（開発中の技術的な疑問と答え）
 ├── compose.yaml              ローカル開発用の PostgreSQL と Firebase Auth Emulator
 ├── dev/
 │   └── firebase-emulator/    Auth Emulator のイメージ（理由は docs/decisions/0002）
