@@ -1,0 +1,120 @@
+# uchinokusa の API 定義。サーバーとアプリの取り決めの唯一の正（docs/decisions/0001）。
+# 変更したら、リポジトリのルートで `make gen-api` を実行して、両方の型を生成し直す。
+openapi: 3.1.0
+info:
+  title: uchinokusa API
+  version: 0.1.0
+  description: |
+    家族で共有できる室内観葉植物の管理アプリ（uchinokusa）の API。
+
+    ## 表現のルール
+    - JSON の項目名はキャメルケースとする
+    - 日付は `YYYY-MM-DD`（`Date`）、日時は RFC 3339 の UTC（`DateTime`、例：`2026-10-26T09:30:00Z`）とする
+    - エラーは、どのステータスでも `Error` の形で返す。アプリは `code` で分岐し、`message` は画面に表示しない
+
+    ## 互換性のルール（要件19-9）
+    - この定義には、項目・列挙値・エンドポイントの**追加だけ**を行う。削除や意味の変更は `/v2` で行う
+    - アプリは、知らない項目を無視する。知らない列挙値（エラーの `code` を含む）は「不明」として扱い、エラーにしない
+    - そのため、レスポンスのスキーマには `additionalProperties: false` を付けない
+    - サーバーも、リクエストの知らない項目を無視する（新しいアプリから古いサーバーへのリクエストを受け付けるため）
+
+servers:
+  - url: /v1
+
+# エンドポイントは、各タスク（2.1 以降）で追加する
+paths: {}
+
+components:
+  schemas:
+    Date:
+      description: 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
+      type: string
+      format: date
+      examples: ["2026-10-26"]
+
+    DateTime:
+      description: 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+      type: string
+      format: date-time
+      examples: ["2026-10-26T09:30:00Z"]
+
+    ErrorCode:
+      description: |
+        エラーの種類。アプリはこの値で分岐する。値は今後も追加されるため、知らない値は「不明なエラー」として扱う。
+
+        | code | HTTP | 意味 |
+        |---|---|---|
+        | `bad_request` | 400 | リクエストの形式の誤り（JSON として読めない、パラメーターの型が違う、など） |
+        | `validation_failed` | 422 | 入力の内容の誤り。`fields` に入力欄ごとの理由が入る |
+        | `unauthenticated` | 401 | ID トークンがない・無効・期限切れ |
+        | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
+        | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
+        | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+        | `internal` | 500 | サーバーの障害 |
+      type: string
+      enum:
+        - bad_request
+        - validation_failed
+        - unauthenticated
+        - forbidden
+        - not_found
+        - conflict
+        - internal
+
+    Error:
+      description: |
+        すべてのエラーレスポンスの共通の形。
+        エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          description: 開発者向けの説明（英語）。画面には表示せず、表示する文言は `code` から i18n で引く
+          type: string
+        fields:
+          description: |
+            入力欄ごとのエラーの理由（`validation_failed` のとき）。キーは項目名、値は理由のコード（`required`、`too_long` など）
+          type: object
+          additionalProperties:
+            type: string
+          examples:
+            - { name: required }
+
+  responses:
+    BadRequest:
+      description: リクエストの形式の誤り
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: 認証が必要
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: 権限がない
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: 見つからない
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: 状態の衝突
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: 入力の内容の誤り
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Internal:
+      description: サーバーの障害
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

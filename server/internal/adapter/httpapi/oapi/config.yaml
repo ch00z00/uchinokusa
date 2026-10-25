@@ -1,0 +1,14 @@
+# oapi-codegen の設定。api/openapi.yaml から、型と net/http 用のサーバーのインターフェースを生成する。
+package: oapi
+output: oapi.gen.go
+generate:
+  models: true
+  std-http-server: true
+  strict-server: true
+compatibility:
+  # 定数名に型名を付ける（例：ErrorCodeNotFound）。列挙値が増えても名前がぶつからないようにする
+  always-prefix-enum-values: true
+output-options:
+  # 標準では、エンドポイントから参照されていないスキーマは生成されない。
+  # 共通のスキーマ（Error など）は、参照するエンドポイントがなくても使うため、すべて生成する
+  skip-prune: true

@@ -11,3 +11,4 @@
 |---|---|---|---|
 | [0001](0001-api-contract-directory.md) | API の定義を `api/` ディレクトリに YAML で置く | 採用 | 2026-10-24 |
 | [0002](0002-local-dev-environment.md) | ローカル開発環境を Docker Compose と Firebase のデモプロジェクトで作る | 採用 | 2026-10-24 |
+| [0003](0003-api-codegen-and-errors.md) | API のコード生成は oapi-codegen の strict-server を使い、エラーの変換を一か所にまとめる | 採用 | 2026-10-26 |
