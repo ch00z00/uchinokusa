@@ -9,3 +9,7 @@
 | ファイル | 内容 |
 |---|---|
 | [docker-compose.md](docker-compose.md) | `compose.yaml` という名前、Compose Specification、`version` の廃止、`depends_on`、Docker Swarm |
+| [go-project-layout.md](go-project-layout.md) | `package main` と `cmd/`・`internal/` の構成、`main.go` の流れ、`main()` と `run()` を分ける理由、グレースフルシャットダウン |
+| [code-reading-main-go.md](code-reading-main-go.md) | `server/cmd/uchinokusa/main.go` を上から1ブロックずつ読む（Go の基本の書き方） |
+| [go-standard-library.md](go-standard-library.md) | `os` は Operating System、`os`・`os/signal`・`syscall` の関係、シグナル（終了以外のものも含む、実際に送って確かめた結果）、import パスの `/` |
+| [go-goroutine.md](go-goroutine.md) | goroutine・チャネル・select を図で説明（`serve` の 96〜107行目）、JavaScript との比較 |
