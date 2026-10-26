@@ -6,6 +6,10 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres/pgtest"
 )
 
 func envFrom(m map[string]string) func(string) string {
@@ -49,15 +53,32 @@ func TestRun_InvalidConfig(t *testing.T) {
 func TestRun_NotImplementedYet(t *testing.T) {
 	t.Parallel()
 
-	// migrate と seed は、タスク 1.3 で実装する
-	for _, cmd := range []string{"migrate", "seed"} {
-		t.Run(cmd, func(t *testing.T) {
-			t.Parallel()
+	// seed は、タスク 6.1 で植物マスタの初期データとあわせて実装する
+	err := run(context.Background(), []string{"seed"}, envFrom(validEnv), io.Discard)
+	if !errors.Is(err, errNotImplemented) {
+		t.Errorf("run(seed) error = %v, want errNotImplemented", err)
+	}
+}
 
-			err := run(context.Background(), []string{cmd}, envFrom(validEnv), io.Discard)
-			if !errors.Is(err, errNotImplemented) {
-				t.Errorf("run(%s) error = %v, want errNotImplemented", cmd, err)
-			}
-		})
+func TestRun_Migrate(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	dbURL := pgtest.NewEmptyURL(t)
+
+	if err := run(ctx, []string{"migrate"}, envFrom(map[string]string{"DATABASE_URL": dbURL}), io.Discard); err != nil {
+		t.Fatalf("run(migrate) error = %v", err)
+	}
+
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	var exists bool
+	if err := conn.QueryRow(ctx, `SELECT to_regclass('public.care_records') IS NOT NULL`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Error("care_records table does not exist after migrate")
 	}
 }

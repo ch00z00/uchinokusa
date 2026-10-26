@@ -1,9 +1,10 @@
-# API 定義（api/openapi.yaml）から、サーバーとアプリの型を生成する。
-# 定義を変えたら `make gen-api` を実行し、生成したファイルも一緒にコミットする。
+# 定義ファイルから、コードを生成する。生成したファイルも一緒にコミットする。
+# - API 定義（api/openapi.yaml）を変えたら `make gen-api`
+# - マイグレーション・クエリ（server/db/）を変えたら `make gen-db`
 
 OPENAPI_TYPESCRIPT_VERSION := 7.13.0
 
-.PHONY: gen-api gen-api-server gen-api-mobile check-api
+.PHONY: gen-api gen-api-server gen-api-mobile gen-db check-gen
 
 gen-api: gen-api-server gen-api-mobile
 
@@ -19,6 +20,10 @@ gen-api-mobile:
 		echo "mobile/ がまだないため、アプリの型の生成を飛ばす"; \
 	fi
 
+# sqlc：server/db/queries/*.sql → server/internal/adapter/postgres/sqlcgen/
+gen-db:
+	cd server && go generate ./internal/adapter/postgres
+
 # 生成したファイルが定義と一致しているか（生成し直し忘れがないか）を確かめる
-check-api: gen-api
-	git diff --exit-code -- server/internal/adapter/httpapi/oapi mobile/src/api
+check-gen: gen-api gen-db
+	git diff --exit-code -- server/internal/adapter/httpapi/oapi server/internal/adapter/postgres/sqlcgen mobile/src/api

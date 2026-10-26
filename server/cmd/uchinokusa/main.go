@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
@@ -53,10 +54,10 @@ func main() {
 type command func(ctx context.Context, cfg config.Config, logger *slog.Logger) error
 
 var commands = map[string]command{
-	"serve": serve,
-	// migrate と seed は、タスク 1.3 で goose と sqlc を導入するときに実装する
-	"migrate": notImplemented("migrate"),
-	"seed":    notImplemented("seed"),
+	"serve":   serve,
+	"migrate": migrate,
+	// seed は、タスク 6.1 で植物マスタの初期データとあわせて実装する
+	"seed": notImplemented("seed"),
 }
 
 // run は、サブコマンドを振り分けて実行する。テストしやすいように、外部への依存を引数で受け取る。
@@ -82,6 +83,15 @@ func notImplemented(name string) command {
 	return func(context.Context, config.Config, *slog.Logger) error {
 		return fmt.Errorf("%s: %w", name, errNotImplemented)
 	}
+}
+
+// migrate は、まだ適用していないマイグレーションをすべて適用する。
+func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+	if err := postgres.Migrate(ctx, cfg.DatabaseURL); err != nil {
+		return err
+	}
+	logger.Info("migrations applied")
+	return nil
 }
 
 // serve は、HTTP サーバーを起動し、ctx が終わったらグレースフルに停止する。

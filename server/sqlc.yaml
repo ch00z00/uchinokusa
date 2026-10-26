@@ -1,0 +1,32 @@
+# sqlc の設定。db/queries/*.sql から、型安全なクエリの Go のコードを生成する。
+# 生成：リポジトリのルートで `make gen-db`
+version: "2"
+sql:
+  - engine: postgresql
+    schema: db/migrations # goose の Up の部分だけを読む
+    queries: db/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/adapter/postgres/sqlcgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        # 頭字語を大文字にする（firebase_uid → FirebaseUID）
+        initialisms: [id, uid, fcm, url]
+        overrides:
+          # uuid は pgtype.UUID ではなく、google/uuid の型にする
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: NullUUID
+          # 日時は pgtype.Timestamptz ではなく time.Time にする（NULL になりうる列はポインター）
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true
