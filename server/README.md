@@ -12,6 +12,12 @@ go run ./cmd/uchinokusa migrate
 go run ./cmd/uchinokusa serve
 
 curl -i http://localhost:8080/healthz
+
+# Emulator でユーザーを作って ID トークンを取り、API を呼ぶ（API キーは任意の値でよい）
+TOKEN=$(curl -s -X POST "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"dev@example.com","password":"password","displayName":"開発者","returnSecureToken":true}' | jq -r .idToken)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/me
 ```
 
 ## サブコマンド
@@ -53,4 +59,5 @@ make check-gen   # 生成したファイルが定義と一致しているかを�
 go test -race ./...         # 結合テストを含む（Docker が必要）
 go test -race -short ./...  # 結合テストを飛ばす
 ```
-- 結合テストは、`internal/adapter/postgres/pgtest` が testcontainers で PostgreSQL を起動する。テストごとに、マイグレーション済みのテンプレートから新しいデータベースを複製するため、並行に実行できる
+- 結合テストは、`internal/adapter/postgres/pgtest` が testcontainers で PostgreSQL を、`internal/adapter/firebase/fbtest` が Firebase Auth Emulator を起動する。Emulator のイメージは初回だけビルドに1分ほどかかる
+- PostgreSQL はテストごとに、マイグレーション済みのテンプレートから新しいデータベースを複製するため、並行に実行できる

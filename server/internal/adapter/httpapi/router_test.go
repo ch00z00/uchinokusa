@@ -19,7 +19,11 @@ func newTestRouter(t *testing.T) (http.Handler, *bytes.Buffer) {
 
 	var buf bytes.Buffer
 	logger := slog.New(logging.NewHandler(&buf, slog.LevelInfo))
-	return httpapi.NewRouter(logger), &buf
+	return httpapi.NewRouter(httpapi.Deps{
+		Logger:   logger,
+		Verifier: &fakeVerifier{},
+		Accounts: &fakeAccounts{},
+	}), &buf
 }
 
 func TestHealthz(t *testing.T) {

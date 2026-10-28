@@ -12,8 +12,16 @@ import (
 // basePath は、API 定義（api/openapi.yaml）の servers の URL である。
 const basePath = "/v1"
 
+// Deps は、ルーターが使う依存である。
+type Deps struct {
+	Logger   *slog.Logger
+	Verifier TokenVerifier
+	Accounts AccountService
+}
+
 // NewRouter は、API のすべてのエンドポイントを登録したハンドラーを返す。
-func NewRouter(logger *slog.Logger) http.Handler {
+func NewRouter(d Deps) http.Handler {
+	logger := d.Logger
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz)
 
@@ -22,7 +30,7 @@ func NewRouter(logger *slog.Logger) http.Handler {
 	onRequestError := func(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, r, logger, &badRequestError{err: err})
 	}
-	strict := oapi.NewStrictHandlerWithOptions(&server{}, nil, oapi.StrictHTTPServerOptions{
+	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts}, nil, oapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: onRequestError,
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, r, logger, err)
@@ -32,6 +40,8 @@ func NewRouter(logger *slog.Logger) http.Handler {
 		BaseURL:          basePath,
 		BaseRouter:       mux,
 		ErrorHandlerFunc: onRequestError,
+		// /v1 のすべてのエンドポイントで、ID トークンを検証する（/healthz は対象外）
+		Middlewares: []oapi.MiddlewareFunc{withAuth(logger, d.Verifier, d.Accounts)},
 	})
 
 	// 外側から順に実行される：リクエスト ID の付与 → アクセスログ → 各ハンドラー

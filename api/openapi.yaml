@@ -21,11 +21,76 @@ info:
 servers:
   - url: /v1
 
-# エンドポイントは、各タスク（2.1 以降）で追加する
-paths: {}
+# すべてのエンドポイントで、Firebase の ID トークンが必要（要件1-3）
+security:
+  - firebaseIdToken: []
+
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: 自分のプロフィールを取得する
+      description: 初めてアクセスしたユーザーの場合は、認証プロバイダから受け取った名前を表示名の初期値にして、ユーザーを作る
+      tags: [account]
+      responses:
+        "200":
+          description: 自分のプロフィール
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "500": { $ref: "#/components/responses/Internal" }
+    put:
+      operationId: updateMe
+      summary: 自分の表示名を変更する
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMeRequest" }
+      responses:
+        "200":
+          description: 変更後のプロフィール
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
 
 components:
+  securitySchemes:
+    firebaseIdToken:
+      description: "Firebase Auth の ID トークン（`Authorization: Bearer <トークン>`）。期限が切れたら、アプリで更新して送り直す"
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
+    Me:
+      description: 自分のプロフィール
+      type: object
+      required: [id, displayName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          description: 世帯のメンバーに表示する名前。認証プロバイダから名前を受け取れなかった場合は空文字になる（アプリで設定を促す）
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    UpdateMeRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          description: 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
+          type: string
+
     Date:
       description: 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
       type: string

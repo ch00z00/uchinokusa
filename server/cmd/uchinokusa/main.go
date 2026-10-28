@@ -19,8 +19,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/firebase"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
+	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
@@ -96,9 +98,25 @@ func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error 
 
 // serve は、HTTP サーバーを起動し、ctx が終わったらグレースフルに停止する。
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	verifier, err := firebase.NewVerifier(ctx, cfg.FirebaseProjectID, cfg.FirebaseCredentialsFile)
+	if err != nil {
+		return err
+	}
+
+	router := httpapi.NewRouter(httpapi.Deps{
+		Logger:   logger,
+		Verifier: verifier,
+		Accounts: app.NewAccountService(postgres.NewUserRepository(pool)),
+	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),
-		Handler:           httpapi.NewRouter(logger),
+		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second, // ヘッダーを少しずつ送る攻撃（Slowloris）への対策
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}

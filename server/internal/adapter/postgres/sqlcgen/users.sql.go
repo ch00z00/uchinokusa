@@ -7,22 +7,26 @@ package sqlcgen
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
-const createUser = `-- name: CreateUser :one
+const createUserIfNotExists = `-- name: CreateUserIfNotExists :one
 INSERT INTO users (firebase_uid, display_name, auth_provider)
 VALUES ($1, $2, $3)
+ON CONFLICT (firebase_uid) DO NOTHING
 RETURNING id, firebase_uid, display_name, auth_provider, deleted_at, created_at, updated_at
 `
 
-type CreateUserParams struct {
+type CreateUserIfNotExistsParams struct {
 	FirebaseUID  string
 	DisplayName  string
 	AuthProvider string
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.FirebaseUID, arg.DisplayName, arg.AuthProvider)
+// すでに同じ firebase_uid の行があれば何もせず、行を返さない（同時に作ろうとした場合に、片方だけが作る）
+func (q *Queries) CreateUserIfNotExists(ctx context.Context, arg CreateUserIfNotExistsParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUserIfNotExists, arg.FirebaseUID, arg.DisplayName, arg.AuthProvider)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -43,6 +47,32 @@ WHERE firebase_uid = $1 AND deleted_at IS NULL
 
 func (q *Queries) GetUserByFirebaseUID(ctx context.Context, firebaseUid string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByFirebaseUID, firebaseUid)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.FirebaseUID,
+		&i.DisplayName,
+		&i.AuthProvider,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserDisplayName = `-- name: UpdateUserDisplayName :one
+UPDATE users SET display_name = $2
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, firebase_uid, display_name, auth_provider, deleted_at, created_at, updated_at
+`
+
+type UpdateUserDisplayNameParams struct {
+	ID          uuid.UUID
+	DisplayName string
+}
+
+func (q *Queries) UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserDisplayName, arg.ID, arg.DisplayName)
 	var i User
 	err := row.Scan(
 		&i.ID,
