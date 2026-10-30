@@ -19,13 +19,22 @@ type UserRepository interface {
 	UpdateDisplayName(ctx context.Context, userID uuid.UUID, name string) (domain.User, error)
 }
 
-// AccountService は、サインインしたユーザーの特定と、プロフィールの変更を扱う（要件1）。
-type AccountService struct {
-	users UserRepository
+// DeviceRepository は、プッシュ通知の送信先となる端末の保存先である（実装は adapter/postgres）。
+type DeviceRepository interface {
+	// Upsert は、FCM トークンが同じ端末があれば上書きし、なければ作る。別のユーザーの端末なら、userID のユーザーに付け替える。
+	Upsert(ctx context.Context, userID uuid.UUID, reg domain.DeviceRegistration) (domain.Device, error)
+	// Delete は、userID のユーザーの端末を消す。該当する端末がなくてもエラーにしない。
+	Delete(ctx context.Context, userID, deviceID uuid.UUID) error
 }
 
-func NewAccountService(users UserRepository) *AccountService {
-	return &AccountService{users: users}
+// AccountService は、サインインしたユーザーの特定と、プロフィール・端末の変更を扱う（要件1）。
+type AccountService struct {
+	users   UserRepository
+	devices DeviceRepository
+}
+
+func NewAccountService(users UserRepository, devices DeviceRepository) *AccountService {
+	return &AccountService{users: users, devices: devices}
 }
 
 // SignIn は、認証済みの Identity に対応するユーザーを返す。初めてのユーザーなら作る（要件1-2）。
@@ -46,6 +55,21 @@ func (s *AccountService) UpdateDisplayName(ctx context.Context, userID uuid.UUID
 		return domain.User{}, err
 	}
 	return s.users.UpdateDisplayName(ctx, userID, name)
+}
+
+// RegisterDevice は、端末を検証して、プッシュ通知の送信先に登録・更新する。
+// アプリの起動のたびに呼ばれ、端末のタイムゾーンを最新に保つ（要件15-7）。
+func (s *AccountService) RegisterDevice(ctx context.Context, userID uuid.UUID, fcmToken, platform, timeZone string) (domain.Device, error) {
+	reg, err := domain.NewDeviceRegistration(fcmToken, platform, timeZone)
+	if err != nil {
+		return domain.Device{}, err
+	}
+	return s.devices.Upsert(ctx, userID, reg)
+}
+
+// UnregisterDevice は、端末をプッシュ通知の送信先から外す（要件1-5）。
+func (s *AccountService) UnregisterDevice(ctx context.Context, userID, deviceID uuid.UUID) error {
+	return s.devices.Delete(ctx, userID, deviceID)
 }
 
 // initialDisplayName は、プロバイダから受け取った名前を表示名の初期値にする。

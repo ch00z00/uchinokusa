@@ -2,9 +2,9 @@
 
 新しいエージェント（または新しいチャット）で作業を再開するときは、まずこのファイルを読むこと。
 
-## 現在の状況（2026-10-26 時点）
+## 現在の状況（2026-10-30 時点）
 - 仕様駆動開発（Kiro 方式）で、**要件・設計・タスクの3つのフェーズがすべて承認済み**
-- 実装フェーズ中。**完了したタスク：1.1**（Go の API サーバーの雛形、ローカル開発環境）、**1.2**（API 定義、コードの生成、エラーの変換）、**1.3**（DB のスキーマ、migrate、sqlc、結合テストの基盤）、**2.1**（ID トークンの認証、`/v1/me`）
+- 実装フェーズ中。**完了したタスク：1.1**（Go の API サーバーの雛形、ローカル開発環境）、**1.2**（API 定義、コードの生成、エラーの変換）、**1.3**（DB のスキーマ、migrate、sqlc、結合テストの基盤）、**2.1**（ID トークンの認証、`/v1/me`）、**2.2**（端末の登録・解除、`/v1/me/devices`）
   - サーバーの起動方法・環境変数は `server/README.md` を参照
 - 仕様：`.kiro/specs/household-plant-care-mvp/`
   - `requirements.md`：要件（20項目、EARS の考え方で日本語化した受け入れ基準）
@@ -15,10 +15,11 @@
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 2.2
+/kiro:spec-impl household-plant-care-mvp 3.1
 ```
 - API 定義は `api/openapi.yaml`。変えたら `make gen-api`。アプリの型の生成は、`mobile/` を作るタスク 14.1 から有効になる（その際 `openapi-typescript` を devDependency にする）。生成し直し忘れの確認は `make check-gen`
-- **タスクは1つずつ進める**（1.1 → 1.2 → 1.3 → 2.1 …）
+- **タスクは1つずつ進める**（1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 …）
+- DB の結合テストには Docker が必要（起動していないと testcontainers が失敗する）
 - `seed` のサブコマンドは入口だけ作ってある（未実装のエラーを返す）。6.1 で植物マスタとあわせて実装する
 - エンドポイントを追加するときは、`api/openapi.yaml` → `make gen-api` → `httpapi/server.go` にメソッドを実装、の順。認証は自動でかかり、ハンドラーでは `currentUser(ctx)` でユーザーを取れる
 - DB のクエリは `server/db/queries/` に書き、`make gen-db` で生成する。結合テストは `pgtest.New(t)` でテストごとのデータベースを使う

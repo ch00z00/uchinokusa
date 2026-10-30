@@ -60,6 +60,53 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /me/devices:
+    post:
+      operationId: registerDevice
+      summary: プッシュ通知の送信先となる端末を登録・更新する
+      description: |
+        アプリの起動時と、FCM トークンが変わったときに呼ぶ。同じ `fcmToken` の端末がすでにあれば、
+        その端末の OS の種類・タイムゾーンを更新する（要件15-7）。
+        別のユーザーで登録されていた場合は、リクエストしたユーザーの端末に付け替える（1台の端末で、ユーザーを切り替えた場合）。
+      tags: [account]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDeviceRequest" }
+      responses:
+        "200":
+          description: 登録・更新した端末。`id` はサインアウト時の解除に使うため、アプリに保存する
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Device" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /me/devices/{deviceId}:
+    delete:
+      operationId: unregisterDevice
+      summary: 端末をプッシュ通知の送信先から外す
+      description: |
+        サインアウトの前に呼ぶ（要件1-5）。自分の端末でない場合や、すでに外れている場合も 204 を返す
+        （サインアウトを止めないため。ほかのユーザーの端末の有無も明かさない）。
+      tags: [account]
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: 外した（または、もともと送信先ではなかった）
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
   securitySchemes:
     firebaseIdToken:
@@ -90,6 +137,42 @@ components:
         displayName:
           description: 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
           type: string
+
+    Platform:
+      description: 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
+      type: string
+      enum: [ios, android]
+
+    RegisterDeviceRequest:
+      type: object
+      required: [fcmToken, platform, timeZone]
+      properties:
+        fcmToken:
+          description: FCM の登録トークン。空の場合は `fields.fcmToken = required`、長すぎる場合は `too_long`
+          type: string
+        platform:
+          description: 知らない値の場合は `fields.platform = invalid`
+          type: string
+        timeZone:
+          description: 端末の IANA タイムゾーン（`Asia/Tokyo` など）。リマインダーの日付と時刻の判定に使う。不明な名前の場合は `fields.timeZone = invalid`
+          type: string
+          examples: ["Asia/Tokyo"]
+
+    Device:
+      description: プッシュ通知の送信先となる端末
+      type: object
+      required: [id, platform, timeZone, lastSeenAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          $ref: "#/components/schemas/Platform"
+        timeZone:
+          type: string
+        lastSeenAt:
+          description: 最後に登録・更新した日時
+          $ref: "#/components/schemas/DateTime"
 
     Date:
       description: 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す

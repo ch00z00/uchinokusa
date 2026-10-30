@@ -17,10 +17,12 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, idToken string) (domain.Identity, error)
 }
 
-// AccountService は、ユーザーの特定とプロフィールの変更を行う（実装は app.AccountService）。
+// AccountService は、ユーザーの特定と、プロフィール・端末の変更を行う（実装は app.AccountService）。
 type AccountService interface {
 	SignIn(ctx context.Context, id domain.Identity) (domain.User, error)
 	UpdateDisplayName(ctx context.Context, userID uuid.UUID, name string) (domain.User, error)
+	RegisterDevice(ctx context.Context, userID uuid.UUID, fcmToken, platform, timeZone string) (domain.Device, error)
+	UnregisterDevice(ctx context.Context, userID, deviceID uuid.UUID) error
 }
 
 type userKey struct{}

@@ -18,6 +18,9 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	// タイムゾーンのデータをバイナリに埋め込む。実行環境（コンテナ）に tzdata がなくても、
+	// 端末のタイムゾーンの検証とリマインダーの判定ができるようにする
+	_ "time/tzdata"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/firebase"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
@@ -112,7 +115,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:   logger,
 		Verifier: verifier,
-		Accounts: app.NewAccountService(postgres.NewUserRepository(pool)),
+		Accounts: app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

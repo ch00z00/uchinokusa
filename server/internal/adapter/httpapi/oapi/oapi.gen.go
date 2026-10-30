@@ -50,6 +50,24 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for Platform.
+const (
+	PlatformAndroid Platform = "android"
+	PlatformIos     Platform = "ios"
+)
+
+// Valid indicates whether the value is a known member of the Platform enum.
+func (e Platform) Valid() bool {
+	switch e {
+	case PlatformAndroid:
+		return true
+	case PlatformIos:
+		return true
+	default:
+		return false
+	}
+}
+
 // Date 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
 //
 // Examples: 2026-10-26
@@ -59,6 +77,20 @@ type Date = openapi_types.Date
 //
 // Examples: 2026-10-26T09:30:00Z
 type DateTime = time.Time
+
+// Device プッシュ通知の送信先となる端末
+type Device struct {
+	Id openapi_types.UUID `json:"id"`
+
+	// LastSeenAt 最後に登録・更新した日時
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	LastSeenAt DateTime `json:"lastSeenAt"`
+
+	// Platform 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
+	Platform Platform `json:"platform"`
+	TimeZone string   `json:"timeZone"`
+}
 
 // Error すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
@@ -111,6 +143,23 @@ type Me struct {
 	Id          openapi_types.UUID `json:"id"`
 }
 
+// Platform 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
+type Platform string
+
+// RegisterDeviceRequest defines model for RegisterDeviceRequest.
+type RegisterDeviceRequest struct {
+	// FcmToken FCM の登録トークン。空の場合は `fields.fcmToken = required`、長すぎる場合は `too_long`
+	FcmToken string `json:"fcmToken"`
+
+	// Platform 知らない値の場合は `fields.platform = invalid`
+	Platform string `json:"platform"`
+
+	// TimeZone 端末の IANA タイムゾーン（`Asia/Tokyo` など）。リマインダーの日付と時刻の判定に使う。不明な名前の場合は `fields.timeZone = invalid`
+	//
+	// Examples: Asia/Tokyo
+	TimeZone string `json:"timeZone"`
+}
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// DisplayName 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
@@ -148,6 +197,9 @@ type ValidationFailed = Error
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
+// RegisterDeviceJSONRequestBody defines body for RegisterDevice for application/json ContentType.
+type RegisterDeviceJSONRequestBody = RegisterDeviceRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// GetMe 自分のプロフィールを取得する
@@ -156,6 +208,12 @@ type ServerInterface interface {
 	// UpdateMe 自分の表示名を変更する
 	// (PUT /me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// RegisterDevice プッシュ通知の送信先となる端末を登録・更新する
+	// (POST /me/devices)
+	RegisterDevice(w http.ResponseWriter, r *http.Request)
+	// UnregisterDevice 端末をプッシュ通知の送信先から外す
+	// (DELETE /me/devices/{deviceId})
+	UnregisterDevice(w http.ResponseWriter, r *http.Request, deviceId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -186,6 +244,46 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterDevice operation middleware
+func (siw *ServerInterfaceWrapper) RegisterDevice(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterDevice(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnregisterDevice operation middleware
+func (siw *ServerInterfaceWrapper) UnregisterDevice(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "deviceId" -------------
+	var deviceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "deviceId", r.PathValue("deviceId"), &deviceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "deviceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnregisterDevice(w, r, deviceId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -317,6 +415,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me", wrapper.UpdateMe)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/devices", wrapper.RegisterDevice)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/devices/{deviceId}", wrapper.UnregisterDevice)
 
 	return m
 }
@@ -462,6 +562,142 @@ func (response UpdateMe500JSONResponse) VisitUpdateMeResponse(w http.ResponseWri
 	return err
 }
 
+type RegisterDeviceRequestObject struct {
+	Body *RegisterDeviceJSONRequestBody
+}
+
+type RegisterDeviceResponseObject interface {
+	VisitRegisterDeviceResponse(w http.ResponseWriter) error
+}
+
+type RegisterDevice200JSONResponse Device
+
+func (response RegisterDevice200JSONResponse) VisitRegisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterDevice400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RegisterDevice400JSONResponse) VisitRegisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterDevice401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response RegisterDevice401JSONResponse) VisitRegisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterDevice422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response RegisterDevice422JSONResponse) VisitRegisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterDevice500JSONResponse struct{ InternalJSONResponse }
+
+func (response RegisterDevice500JSONResponse) VisitRegisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnregisterDeviceRequestObject struct {
+	DeviceId openapi_types.UUID `json:"deviceId"`
+}
+
+type UnregisterDeviceResponseObject interface {
+	VisitUnregisterDeviceResponse(w http.ResponseWriter) error
+}
+
+type UnregisterDevice204Response struct {
+}
+
+func (response UnregisterDevice204Response) VisitUnregisterDeviceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UnregisterDevice400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UnregisterDevice400JSONResponse) VisitUnregisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnregisterDevice401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UnregisterDevice401JSONResponse) VisitUnregisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnregisterDevice500JSONResponse struct{ InternalJSONResponse }
+
+func (response UnregisterDevice500JSONResponse) VisitUnregisterDeviceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetMe 自分のプロフィールを取得する
@@ -470,6 +706,12 @@ type StrictServerInterface interface {
 	// UpdateMe 自分の表示名を変更する
 	// (PUT /me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// RegisterDevice プッシュ通知の送信先となる端末を登録・更新する
+	// (POST /me/devices)
+	RegisterDevice(ctx context.Context, request RegisterDeviceRequestObject) (RegisterDeviceResponseObject, error)
+	// UnregisterDevice 端末をプッシュ通知の送信先から外す
+	// (DELETE /me/devices/{deviceId})
+	UnregisterDevice(ctx context.Context, request UnregisterDeviceRequestObject) (UnregisterDeviceResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -559,6 +801,63 @@ func (sh *strictHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
 		if err := validResponse.VisitUpdateMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterDevice operation middleware
+func (sh *strictHandler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
+	var request RegisterDeviceRequestObject
+
+	var body RegisterDeviceJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterDevice(ctx, request.(RegisterDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterDevice")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterDeviceResponseObject); ok {
+		if err := validResponse.VisitRegisterDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnregisterDevice operation middleware
+func (sh *strictHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request, deviceId openapi_types.UUID) {
+	var request UnregisterDeviceRequestObject
+
+	request.DeviceId = deviceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnregisterDevice(ctx, request.(UnregisterDeviceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnregisterDevice")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnregisterDeviceResponseObject); ok {
+		if err := validResponse.VisitUnregisterDeviceResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

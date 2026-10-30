@@ -27,6 +27,26 @@ func (s *server) UpdateMe(ctx context.Context, req oapi.UpdateMeRequestObject) (
 	return oapi.UpdateMe200JSONResponse(toMe(u)), nil
 }
 
+func (s *server) RegisterDevice(ctx context.Context, req oapi.RegisterDeviceRequestObject) (oapi.RegisterDeviceResponseObject, error) {
+	d, err := s.accounts.RegisterDevice(ctx, currentUser(ctx).ID, req.Body.FcmToken, req.Body.Platform, req.Body.TimeZone)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.RegisterDevice200JSONResponse(oapi.Device{
+		Id:         d.ID,
+		Platform:   oapi.Platform(d.Platform),
+		TimeZone:   d.TimeZone,
+		LastSeenAt: d.LastSeenAt.UTC(),
+	}), nil
+}
+
+func (s *server) UnregisterDevice(ctx context.Context, req oapi.UnregisterDeviceRequestObject) (oapi.UnregisterDeviceResponseObject, error) {
+	if err := s.accounts.UnregisterDevice(ctx, currentUser(ctx).ID, req.DeviceId); err != nil {
+		return nil, err
+	}
+	return oapi.UnregisterDevice204Response{}, nil
+}
+
 func toMe(u domain.User) oapi.Me {
 	return oapi.Me{
 		Id:          u.ID,

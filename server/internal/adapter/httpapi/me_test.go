@@ -40,8 +40,9 @@ var testUser = domain.User{
 
 // fakeAccounts は、app.AccountService の偽物である。
 type fakeAccounts struct {
-	signInErr error
-	signedIn  []domain.Identity
+	signInErr    error
+	signedIn     []domain.Identity
+	unregistered []uuid.UUID
 }
 
 func (f *fakeAccounts) SignIn(_ context.Context, id domain.Identity) (domain.User, error) {
@@ -60,6 +61,29 @@ func (f *fakeAccounts) UpdateDisplayName(_ context.Context, userID uuid.UUID, na
 	u := testUser
 	u.DisplayName = n
 	return u, nil
+}
+
+func (f *fakeAccounts) RegisterDevice(_ context.Context, userID uuid.UUID, fcmToken, platform, timeZone string) (domain.Device, error) {
+	reg, err := domain.NewDeviceRegistration(fcmToken, platform, timeZone)
+	if err != nil {
+		return domain.Device{}, err
+	}
+	return domain.Device{
+		ID:         testDeviceID,
+		UserID:     userID,
+		FCMToken:   reg.FCMToken,
+		Platform:   reg.Platform,
+		TimeZone:   reg.TimeZone,
+		LastSeenAt: time.Date(2026, 10, 30, 8, 0, 0, 0, time.FixedZone("JST", 9*60*60)),
+	}, nil
+}
+
+func (f *fakeAccounts) UnregisterDevice(_ context.Context, userID, deviceID uuid.UUID) error {
+	if userID != testUser.ID {
+		return errors.New("unexpected user")
+	}
+	f.unregistered = append(f.unregistered, deviceID)
+	return nil
 }
 
 func newMeRouter(t *testing.T, accounts *fakeAccounts) http.Handler {

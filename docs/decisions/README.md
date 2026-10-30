@@ -14,3 +14,4 @@
 | [0003](0003-api-codegen-and-errors.md) | API のコード生成は oapi-codegen の strict-server を使い、エラーの変換を一か所にまとめる | 採用 | 2026-10-26 |
 | [0004](0004-database-schema-conventions.md) | DB のスキーマの取り決め（複合外部キー、text + CHECK、UUIDv7、テストごとのデータベース） | 採用 | 2026-10-26 |
 | [0005](0005-authentication.md) | 認証は生成したルーティングのミドルウェアで行い、ユーザーは初回のアクセスで作る | 採用 | 2026-10-29 |
+| [0006](0006-device-registration.md) | 端末の登録は FCM トークンで上書きし、解除は常に 204 を返す | 採用 | 2026-10-30 |
