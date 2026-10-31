@@ -70,11 +70,7 @@ const (
 
 // SeasonOf は、日付の季節を返す。北半球では、春 3〜5月、夏 6〜8月、秋 9〜11月、冬 12〜2月とする。
 func SeasonOf(d civil.Date, h Hemisphere) Season {
-	m := d.Month
-	if h == HemisphereSouth {
-		m = (m+5)%12 + 1 // 6か月ずらす（1月 → 7月、7月 → 1月）
-	}
-	switch m {
+	switch northernMonth(d, h) {
 	case time.March, time.April, time.May:
 		return SeasonSpring
 	case time.June, time.July, time.August:
@@ -83,6 +79,15 @@ func SeasonOf(d civil.Date, h Hemisphere) Season {
 		return SeasonAutumn
 	}
 	return SeasonWinter
+}
+
+// northernMonth は、日付の月を、北半球での同じ季節の月に置き換える。
+// 季節や植え替えの適期の判定は、北半球の月で書き、南半球にはこの関数で対応する。
+func northernMonth(d civil.Date, h Hemisphere) time.Month {
+	if h == HemisphereSouth {
+		return (d.Month+5)%12 + 1 // 6か月ずらす（1月 → 7月、7月 → 1月）
+	}
+	return d.Month
 }
 
 // SeasonalIntervals は、季節ごとの周期である。設定のない季節は、基本の周期を使う。
