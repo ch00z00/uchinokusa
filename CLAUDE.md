@@ -23,6 +23,7 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 - Think in English, but generate responses in Japanese (思考は英語、回答の生成は日本語で行うように)
 - 作業を再開するときは、まず `HANDOFF.md` を読み、現在の状況と次にやることを確認する
 - 実装は `/kiro:spec-impl household-plant-care-mvp <タスク番号>` で1タスクずつ進め、各タスクで「何を・なぜ」を説明し、ユーザーの確認をもらってから次へ進む（ユーザーはバックエンドの実装経験を積みたい）
+- デザイン（Figma での作業を含む）と、モバイルアプリ（`mobile/`）の画面・部品の実装では、必ず `.kiro/steering/design.md` を読んで従う（OS の標準部品とアプリのデザインシステムの使い分け、Figma とコードの名前のそろえ方）
 
 ## Workflow
 
@@ -61,7 +62,7 @@ Managed by `/kiro:steering` command. Updates here reflect command changes.
 - `structure.md`: Always included - File organization and code patterns
 
 ### Custom Steering Files
-- なし
+- `design.md`: Conditional（`mobile/**/*`、`docs/design/**/*`）- デザインと画面の実装の方針。デザインや `mobile/` の作業では必ず読む
 <!-- Added by /kiro:steering-custom command -->
 <!-- Format:
 - `filename.md`: Mode - Pattern(s) - Description
