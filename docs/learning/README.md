@@ -16,3 +16,5 @@
 | [openapi.md](openapi.md) | `api/openapi.yaml` に今定義されているもの、`oapi/` のコード生成（oapi-codegen、strict-server） |
 | [db-migration.md](db-migration.md) | マイグレーションとは何か、解決するペイン、`00001_init.sql` を作るタイミング、PostgreSQL での注意点（ロック、CONCURRENTLY、expand / contract）、シーディングのタイミングと冪等性 |
 | [db-queries-sqlc.md](db-queries-sqlc.md) | `db/migrations/` と `db/queries/` の違い、sqlc による型つきの Go のコードの生成、GraphQL Code Generator との比較 |
+| [authentication-and-firebase.md](authentication-and-firebase.md) | 認証と認可、世の中の認証方法と方式（セッション・トークン・JWT）、Firebase の基礎と ID トークンの仕組み、このプロダクトに Firebase Auth＋Apple / Google が合う理由 |
+| [design-system.md](design-system.md) | 自分の言葉でのまとめ（デザインシステムの定義と①〜⑥のプロセス）、デザインシステムとは何か（トークン・部品・パターン）、セマンティックなトークン、フロントエンドの経験との対応、uchinokusa で作る範囲 |
