@@ -118,6 +118,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Verifier:   verifier,
 		Accounts:   app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
 		Households: app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
+		Members:    app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

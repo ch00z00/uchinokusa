@@ -12,6 +12,7 @@ import (
 type server struct {
 	accounts   AccountService
 	households HouseholdService
+	members    MembershipService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)

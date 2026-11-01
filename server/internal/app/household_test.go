@@ -41,6 +41,7 @@ func (f *fakeHouseholds) Delete(_ context.Context, id uuid.UUID) error {
 type householdFixture struct {
 	household, owner, editor, viewer, stranger uuid.UUID
 	households                                 *fakeHouseholds
+	authz                                      *app.Authorizer
 	svc                                        *app.HouseholdService
 }
 
@@ -57,7 +58,8 @@ func newHouseholdFixture() householdFixture {
 	for user, role := range map[uuid.UUID]domain.Role{f.owner: domain.RoleOwner, f.editor: domain.RoleEditor, f.viewer: domain.RoleViewer} {
 		memberships.byKey[[2]uuid.UUID{f.household, user}] = domain.Membership{HouseholdID: f.household, UserID: user, Role: role}
 	}
-	f.svc = app.NewHouseholdService(f.households, app.NewAuthorizer(memberships))
+	f.authz = app.NewAuthorizer(memberships)
+	f.svc = app.NewHouseholdService(f.households, f.authz)
 	return f
 }
 

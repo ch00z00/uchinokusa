@@ -23,6 +23,7 @@ const (
 	ErrorCodeConflict         ErrorCode = "conflict"
 	ErrorCodeForbidden        ErrorCode = "forbidden"
 	ErrorCodeInternal         ErrorCode = "internal"
+	ErrorCodeLastOwner        ErrorCode = "last_owner"
 	ErrorCodeNotFound         ErrorCode = "not_found"
 	ErrorCodeUnauthenticated  ErrorCode = "unauthenticated"
 	ErrorCodeValidationFailed ErrorCode = "validation_failed"
@@ -38,6 +39,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeForbidden:
 		return true
 	case ErrorCodeInternal:
+		return true
+	case ErrorCodeLastOwner:
 		return true
 	case ErrorCodeNotFound:
 		return true
@@ -156,6 +159,7 @@ type Error struct {
 	// | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
 	// | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
 	// | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+	// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
 	// | `internal` | 500 | サーバーの障害 |
 	Code ErrorCode `json:"code"`
 
@@ -179,6 +183,7 @@ type Error struct {
 // | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
 // | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
 // | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
 // | `internal` | 500 | サーバーの障害 |
 type ErrorCode string
 
@@ -220,6 +225,34 @@ type Me struct {
 	Id          openapi_types.UUID `json:"id"`
 }
 
+// Member 世帯のメンバー
+type Member struct {
+	DisplayName string `json:"displayName"`
+
+	// JoinedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	JoinedAt DateTime `json:"joinedAt"`
+
+	// Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
+	Role   Role               `json:"role"`
+	UserId openapi_types.UUID `json:"userId"`
+}
+
+// NotificationSettings 世帯ごとの、自分の通知設定（要件15-3・16-3）
+type NotificationSettings struct {
+	// CompletionNotifyEnabled ほかのメンバーの完了通知を受け取るか（初期値 true）
+	CompletionNotifyEnabled bool `json:"completionNotifyEnabled"`
+
+	// ReminderEnabled リマインダーを受け取るか（初期値 true）
+	ReminderEnabled bool `json:"reminderEnabled"`
+
+	// ReminderTime リマインダーを受け取る時刻（`HH:MM`、端末のタイムゾーン。初期値 `08:00`）。形式が違う場合は `fields.reminderTime = invalid`
+	//
+	// Examples: 08:00
+	ReminderTime string `json:"reminderTime"`
+}
+
 // Platform 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
 type Platform string
 
@@ -240,6 +273,12 @@ type RegisterDeviceRequest struct {
 // Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
 type Role string
 
+// TransferOwnershipRequest defines model for TransferOwnershipRequest.
+type TransferOwnershipRequest struct {
+	// UserId 新しいオーナー。自分自身なら `fields.userId = invalid`、世帯のメンバーでなければ `not_member`
+	UserId openapi_types.UUID `json:"userId"`
+}
+
 // UpdateHouseholdRequest 送った項目だけを変更する。検証の規則は CreateHouseholdRequest と同じ
 type UpdateHouseholdRequest struct {
 	Name *string `json:"name,omitempty"`
@@ -255,6 +294,12 @@ type UpdateHouseholdRequest struct {
 type UpdateMeRequest struct {
 	// DisplayName 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
 	DisplayName string `json:"displayName"`
+}
+
+// UpdateMemberRoleRequest defines model for UpdateMemberRoleRequest.
+type UpdateMemberRoleRequest struct {
+	// Role `editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`
+	Role string `json:"role"`
 }
 
 // HouseholdId defines model for HouseholdId.
@@ -294,6 +339,15 @@ type CreateHouseholdJSONRequestBody = CreateHouseholdRequest
 // UpdateHouseholdJSONRequestBody defines body for UpdateHousehold for application/json ContentType.
 type UpdateHouseholdJSONRequestBody = UpdateHouseholdRequest
 
+// UpdateNotificationSettingsJSONRequestBody defines body for UpdateNotificationSettings for application/json ContentType.
+type UpdateNotificationSettingsJSONRequestBody = NotificationSettings
+
+// UpdateMemberRoleJSONRequestBody defines body for UpdateMemberRole for application/json ContentType.
+type UpdateMemberRoleJSONRequestBody = UpdateMemberRoleRequest
+
+// TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
+type TransferOwnershipJSONRequestBody = TransferOwnershipRequest
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
@@ -314,6 +368,24 @@ type ServerInterface interface {
 	// UpdateHousehold 世帯名・地域を変更する（オーナーのみ）
 	// (PATCH /households/{householdId})
 	UpdateHousehold(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// ListMembers 世帯のメンバーの一覧
+	// (GET /households/{householdId}/members)
+	ListMembers(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// GetNotificationSettings この世帯での自分の通知設定を取得する
+	// (GET /households/{householdId}/members/me/notification-settings)
+	GetNotificationSettings(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// UpdateNotificationSettings この世帯での自分の通知設定を変更する（閲覧者も変更できる）
+	// (PUT /households/{householdId}/members/me/notification-settings)
+	UpdateNotificationSettings(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// RemoveMember メンバーを世帯から外す（自分なら退出）
+	// (DELETE /households/{householdId}/members/{userId})
+	RemoveMember(w http.ResponseWriter, r *http.Request, householdId HouseholdId, userId openapi_types.UUID)
+	// UpdateMemberRole メンバーのロールを変更する（オーナーのみ）
+	// (PATCH /households/{householdId}/members/{userId})
+	UpdateMemberRole(w http.ResponseWriter, r *http.Request, householdId HouseholdId, userId openapi_types.UUID)
+	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
+	// (POST /households/{householdId}/ownership-transfer)
+	TransferOwnership(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -408,6 +480,180 @@ func (siw *ServerInterfaceWrapper) UpdateHousehold(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateHousehold(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMembers(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationSettings(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationSettings(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveMember operation middleware
+func (siw *ServerInterfaceWrapper) RemoveMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveMember(w, r, householdId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMemberRole operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMemberRole(w, r, householdId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TransferOwnership operation middleware
+func (siw *ServerInterfaceWrapper) TransferOwnership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TransferOwnership(w, r, householdId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -613,6 +859,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households", wrapper.CreateHousehold)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/households/{householdId}", wrapper.DeleteHousehold)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/households/{householdId}", wrapper.UpdateHousehold)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/members", wrapper.ListMembers)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/households/{householdId}/members/{userId}", wrapper.RemoveMember)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/households/{householdId}/members/{userId}", wrapper.UpdateMemberRole)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/ownership-transfer", wrapper.TransferOwnership)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/members/me/notification-settings", wrapper.GetNotificationSettings)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/households/{householdId}/members/me/notification-settings", wrapper.UpdateNotificationSettings)
 
 	return m
 }
@@ -953,6 +1205,581 @@ func (response UpdateHousehold500JSONResponse) VisitUpdateHouseholdResponse(w ht
 	return err
 }
 
+type ListMembersRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+}
+
+type ListMembersResponseObject interface {
+	VisitListMembersResponse(w http.ResponseWriter) error
+}
+
+type ListMembers200JSONResponse struct {
+	Members []Member `json:"members"`
+}
+
+func (response ListMembers200JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMembers400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListMembers400JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMembers401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListMembers401JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMembers404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListMembers404JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListMembers500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListMembers500JSONResponse) VisitListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettingsRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+}
+
+type GetNotificationSettingsResponseObject interface {
+	VisitGetNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationSettings200JSONResponse NotificationSettings
+
+func (response GetNotificationSettings200JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetNotificationSettings400JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetNotificationSettings401JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetNotificationSettings404JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetNotificationSettings500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetNotificationSettings500JSONResponse) VisitGetNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettingsRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Body        *UpdateNotificationSettingsJSONRequestBody
+}
+
+type UpdateNotificationSettingsResponseObject interface {
+	VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationSettings200JSONResponse NotificationSettings
+
+func (response UpdateNotificationSettings200JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateNotificationSettings400JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdateNotificationSettings401JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateNotificationSettings404JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdateNotificationSettings422JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNotificationSettings500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateNotificationSettings500JSONResponse) VisitUpdateNotificationSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMemberRequestObject struct {
+	HouseholdId HouseholdId        `json:"householdId"`
+	UserId      openapi_types.UUID `json:"userId"`
+}
+
+type RemoveMemberResponseObject interface {
+	VisitRemoveMemberResponse(w http.ResponseWriter) error
+}
+
+type RemoveMember204Response struct {
+}
+
+func (response RemoveMember204Response) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveMember400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RemoveMember400JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMember401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response RemoveMember401JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMember403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemoveMember403JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMember404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RemoveMember404JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMember409JSONResponse struct{ ConflictJSONResponse }
+
+func (response RemoveMember409JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveMember500JSONResponse struct{ InternalJSONResponse }
+
+func (response RemoveMember500JSONResponse) VisitRemoveMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRoleRequestObject struct {
+	HouseholdId HouseholdId        `json:"householdId"`
+	UserId      openapi_types.UUID `json:"userId"`
+	Body        *UpdateMemberRoleJSONRequestBody
+}
+
+type UpdateMemberRoleResponseObject interface {
+	VisitUpdateMemberRoleResponse(w http.ResponseWriter) error
+}
+
+type UpdateMemberRole200JSONResponse Member
+
+func (response UpdateMemberRole200JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateMemberRole400JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdateMemberRole401JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateMemberRole403JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateMemberRole404JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UpdateMemberRole409JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdateMemberRole422JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateMemberRole500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateMemberRole500JSONResponse) VisitUpdateMemberRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnershipRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Body        *TransferOwnershipJSONRequestBody
+}
+
+type TransferOwnershipResponseObject interface {
+	VisitTransferOwnershipResponse(w http.ResponseWriter) error
+}
+
+type TransferOwnership204Response struct {
+}
+
+func (response TransferOwnership204Response) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type TransferOwnership400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response TransferOwnership400JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnership401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response TransferOwnership401JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnership403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response TransferOwnership403JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnership404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response TransferOwnership404JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnership422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response TransferOwnership422JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TransferOwnership500JSONResponse struct{ InternalJSONResponse }
+
+func (response TransferOwnership500JSONResponse) VisitTransferOwnershipResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMeRequestObject struct {
 }
 
@@ -1230,6 +2057,24 @@ type StrictServerInterface interface {
 	// UpdateHousehold 世帯名・地域を変更する（オーナーのみ）
 	// (PATCH /households/{householdId})
 	UpdateHousehold(ctx context.Context, request UpdateHouseholdRequestObject) (UpdateHouseholdResponseObject, error)
+	// ListMembers 世帯のメンバーの一覧
+	// (GET /households/{householdId}/members)
+	ListMembers(ctx context.Context, request ListMembersRequestObject) (ListMembersResponseObject, error)
+	// GetNotificationSettings この世帯での自分の通知設定を取得する
+	// (GET /households/{householdId}/members/me/notification-settings)
+	GetNotificationSettings(ctx context.Context, request GetNotificationSettingsRequestObject) (GetNotificationSettingsResponseObject, error)
+	// UpdateNotificationSettings この世帯での自分の通知設定を変更する（閲覧者も変更できる）
+	// (PUT /households/{householdId}/members/me/notification-settings)
+	UpdateNotificationSettings(ctx context.Context, request UpdateNotificationSettingsRequestObject) (UpdateNotificationSettingsResponseObject, error)
+	// RemoveMember メンバーを世帯から外す（自分なら退出）
+	// (DELETE /households/{householdId}/members/{userId})
+	RemoveMember(ctx context.Context, request RemoveMemberRequestObject) (RemoveMemberResponseObject, error)
+	// UpdateMemberRole メンバーのロールを変更する（オーナーのみ）
+	// (PATCH /households/{householdId}/members/{userId})
+	UpdateMemberRole(ctx context.Context, request UpdateMemberRoleRequestObject) (UpdateMemberRoleResponseObject, error)
+	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
+	// (POST /households/{householdId}/ownership-transfer)
+	TransferOwnership(ctx context.Context, request TransferOwnershipRequestObject) (TransferOwnershipResponseObject, error)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -1390,6 +2235,185 @@ func (sh *strictHandler) UpdateHousehold(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateHouseholdResponseObject); ok {
 		if err := validResponse.VisitUpdateHouseholdResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMembers operation middleware
+func (sh *strictHandler) ListMembers(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request ListMembersRequestObject
+
+	request.HouseholdId = householdId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMembers(ctx, request.(ListMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMembersResponseObject); ok {
+		if err := validResponse.VisitListMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationSettings operation middleware
+func (sh *strictHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request GetNotificationSettingsRequestObject
+
+	request.HouseholdId = householdId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationSettings(ctx, request.(GetNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationSettings operation middleware
+func (sh *strictHandler) UpdateNotificationSettings(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request UpdateNotificationSettingsRequestObject
+
+	request.HouseholdId = householdId
+
+	var body UpdateNotificationSettingsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationSettings(ctx, request.(UpdateNotificationSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveMember operation middleware
+func (sh *strictHandler) RemoveMember(w http.ResponseWriter, r *http.Request, householdId HouseholdId, userId openapi_types.UUID) {
+	var request RemoveMemberRequestObject
+
+	request.HouseholdId = householdId
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveMember(ctx, request.(RemoveMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveMemberResponseObject); ok {
+		if err := validResponse.VisitRemoveMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMemberRole operation middleware
+func (sh *strictHandler) UpdateMemberRole(w http.ResponseWriter, r *http.Request, householdId HouseholdId, userId openapi_types.UUID) {
+	var request UpdateMemberRoleRequestObject
+
+	request.HouseholdId = householdId
+	request.UserId = userId
+
+	var body UpdateMemberRoleJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMemberRole(ctx, request.(UpdateMemberRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMemberRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMemberRoleResponseObject); ok {
+		if err := validResponse.VisitUpdateMemberRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TransferOwnership operation middleware
+func (sh *strictHandler) TransferOwnership(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request TransferOwnershipRequestObject
+
+	request.HouseholdId = householdId
+
+	var body TransferOwnershipJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TransferOwnership(ctx, request.(TransferOwnershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TransferOwnership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TransferOwnershipResponseObject); ok {
+		if err := validResponse.VisitTransferOwnershipResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

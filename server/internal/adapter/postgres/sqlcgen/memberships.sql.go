@@ -7,8 +7,10 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getMembership = `-- name: GetMembership :one
@@ -35,5 +37,216 @@ func (q *Queries) GetMembership(ctx context.Context, arg GetMembershipParams) (M
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getNotificationSettings = `-- name: GetNotificationSettings :one
+SELECT reminder_enabled, reminder_time, completion_notify_enabled FROM memberships
+WHERE household_id = $1 AND user_id = $2
+`
+
+type GetNotificationSettingsParams struct {
+	HouseholdID uuid.UUID
+	UserID      uuid.UUID
+}
+
+type GetNotificationSettingsRow struct {
+	ReminderEnabled         bool
+	ReminderTime            pgtype.Time
+	CompletionNotifyEnabled bool
+}
+
+func (q *Queries) GetNotificationSettings(ctx context.Context, arg GetNotificationSettingsParams) (GetNotificationSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getNotificationSettings, arg.HouseholdID, arg.UserID)
+	var i GetNotificationSettingsRow
+	err := row.Scan(&i.ReminderEnabled, &i.ReminderTime, &i.CompletionNotifyEnabled)
+	return i, err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT memberships.user_id, users.display_name, memberships.role, memberships.created_at
+FROM memberships
+JOIN users ON users.id = memberships.user_id
+WHERE memberships.household_id = $1
+ORDER BY memberships.created_at, memberships.id
+`
+
+type ListMembersRow struct {
+	UserID      uuid.UUID
+	DisplayName string
+	Role        string
+	CreatedAt   time.Time
+}
+
+func (q *Queries) ListMembers(ctx context.Context, householdID uuid.UUID) ([]ListMembersRow, error) {
+	rows, err := q.db.Query(ctx, listMembers, householdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMembersRow{}
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.DisplayName,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockMemberships = `-- name: LockMemberships :many
+SELECT id, household_id, user_id, role, reminder_enabled, reminder_time, completion_notify_enabled, created_at, updated_at FROM memberships
+WHERE household_id = $1 AND user_id = ANY($2::uuid[])
+ORDER BY id
+FOR UPDATE
+`
+
+type LockMembershipsParams struct {
+	HouseholdID uuid.UUID
+	UserIds     []uuid.UUID
+}
+
+// 移譲の対象の行をロックする。ID の順にロックして、同時の移譲でのデッドロックを避ける
+func (q *Queries) LockMemberships(ctx context.Context, arg LockMembershipsParams) ([]Membership, error) {
+	rows, err := q.db.Query(ctx, lockMemberships, arg.HouseholdID, arg.UserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Membership{}
+	for rows.Next() {
+		var i Membership
+		if err := rows.Scan(
+			&i.ID,
+			&i.HouseholdID,
+			&i.UserID,
+			&i.Role,
+			&i.ReminderEnabled,
+			&i.ReminderTime,
+			&i.CompletionNotifyEnabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeMember = `-- name: RemoveMember :execrows
+DELETE FROM memberships
+WHERE household_id = $1 AND user_id = $2 AND role <> 'owner'
+`
+
+type RemoveMemberParams struct {
+	HouseholdID uuid.UUID
+	UserID      uuid.UUID
+}
+
+// オーナーは外さない。0行なら、メンバーでないかオーナーである
+func (q *Queries) RemoveMember(ctx context.Context, arg RemoveMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeMember, arg.HouseholdID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMemberRole = `-- name: SetMemberRole :exec
+UPDATE memberships SET role = $3
+WHERE household_id = $1 AND user_id = $2
+`
+
+type SetMemberRoleParams struct {
+	HouseholdID uuid.UUID
+	UserID      uuid.UUID
+	Role        string
+}
+
+func (q *Queries) SetMemberRole(ctx context.Context, arg SetMemberRoleParams) error {
+	_, err := q.db.Exec(ctx, setMemberRole, arg.HouseholdID, arg.UserID, arg.Role)
+	return err
+}
+
+const updateMemberRole = `-- name: UpdateMemberRole :one
+WITH updated AS (
+  UPDATE memberships SET role = $1
+  WHERE household_id = $2 AND user_id = $3 AND role <> 'owner'
+  RETURNING user_id, role, created_at
+)
+SELECT updated.user_id, users.display_name, updated.role, updated.created_at
+FROM updated JOIN users ON users.id = updated.user_id
+`
+
+type UpdateMemberRoleParams struct {
+	Role        string
+	HouseholdID uuid.UUID
+	UserID      uuid.UUID
+}
+
+type UpdateMemberRoleRow struct {
+	UserID      uuid.UUID
+	DisplayName string
+	Role        string
+	CreatedAt   time.Time
+}
+
+// オーナーの行は変えない（オーナーの交代は移譲で行う）。行が返らなければ、メンバーでないかオーナーである
+func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) (UpdateMemberRoleRow, error) {
+	row := q.db.QueryRow(ctx, updateMemberRole, arg.Role, arg.HouseholdID, arg.UserID)
+	var i UpdateMemberRoleRow
+	err := row.Scan(
+		&i.UserID,
+		&i.DisplayName,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateNotificationSettings = `-- name: UpdateNotificationSettings :one
+UPDATE memberships
+SET reminder_enabled = $3, reminder_time = $4, completion_notify_enabled = $5
+WHERE household_id = $1 AND user_id = $2
+RETURNING reminder_enabled, reminder_time, completion_notify_enabled
+`
+
+type UpdateNotificationSettingsParams struct {
+	HouseholdID             uuid.UUID
+	UserID                  uuid.UUID
+	ReminderEnabled         bool
+	ReminderTime            pgtype.Time
+	CompletionNotifyEnabled bool
+}
+
+type UpdateNotificationSettingsRow struct {
+	ReminderEnabled         bool
+	ReminderTime            pgtype.Time
+	CompletionNotifyEnabled bool
+}
+
+func (q *Queries) UpdateNotificationSettings(ctx context.Context, arg UpdateNotificationSettingsParams) (UpdateNotificationSettingsRow, error) {
+	row := q.db.QueryRow(ctx, updateNotificationSettings,
+		arg.HouseholdID,
+		arg.UserID,
+		arg.ReminderEnabled,
+		arg.ReminderTime,
+		arg.CompletionNotifyEnabled,
+	)
+	var i UpdateNotificationSettingsRow
+	err := row.Scan(&i.ReminderEnabled, &i.ReminderTime, &i.CompletionNotifyEnabled)
 	return i, err
 }

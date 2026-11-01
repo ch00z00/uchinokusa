@@ -185,6 +185,143 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/members:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: listMembers
+      summary: 世帯のメンバーの一覧
+      tags: [member]
+      responses:
+        "200":
+          description: メンバー（参加の古い順）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateMemberRole
+      summary: メンバーのロールを変更する（オーナーのみ）
+      description: |
+        `owner` は指定できない（オーナーの交代は ownership-transfer で行う）。
+        オーナー自身のロールは変えられない（`409 last_owner`）
+      tags: [member]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMemberRoleRequest" }
+      responses:
+        "200":
+          description: 変更後のメンバー
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: removeMember
+      summary: メンバーを世帯から外す（自分なら退出）
+      description: |
+        `userId` が自分なら退出、ほかの人ならオーナーによる削除になる。
+        オーナーは退出できない（`409 last_owner`）。ほかにメンバーがいれば先にオーナー権限を移し、自分だけなら世帯を削除する（要件2-8）。
+        外れたメンバーの過去の記録は、作業者名を残したまま保持する（要件4-7）
+      tags: [member]
+      responses:
+        "204":
+          description: 外した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}/ownership-transfer:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    post:
+      operationId: transferOwnership
+      summary: オーナー権限を別のメンバーに移す（オーナーのみ）
+      description: 移した先のメンバーがオーナーになり、元のオーナーは編集者になる（要件4-8）
+      tags: [member]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransferOwnershipRequest" }
+      responses:
+        "204":
+          description: 移した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}/members/me/notification-settings:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: getNotificationSettings
+      summary: この世帯での自分の通知設定を取得する
+      tags: [member]
+      responses:
+        "200":
+          description: 通知設定
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+    put:
+      operationId: updateNotificationSettings
+      summary: この世帯での自分の通知設定を変更する（閲覧者も変更できる）
+      tags: [member]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NotificationSettings" }
+      responses:
+        "200":
+          description: 変更後の通知設定
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationSettings" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
   parameters:
     HouseholdId:
@@ -287,6 +424,54 @@ components:
           description: 空文字を送ると、未設定に戻す
           type: string
 
+    Member:
+      description: 世帯のメンバー
+      type: object
+      required: [userId, displayName, role, joinedAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        joinedAt:
+          $ref: "#/components/schemas/DateTime"
+
+    UpdateMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          description: "`editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`"
+          type: string
+
+    TransferOwnershipRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          description: 新しいオーナー。自分自身なら `fields.userId = invalid`、世帯のメンバーでなければ `not_member`
+          type: string
+          format: uuid
+
+    NotificationSettings:
+      description: 世帯ごとの、自分の通知設定（要件15-3・16-3）
+      type: object
+      required: [reminderEnabled, reminderTime, completionNotifyEnabled]
+      properties:
+        reminderEnabled:
+          description: リマインダーを受け取るか（初期値 true）
+          type: boolean
+        reminderTime:
+          description: リマインダーを受け取る時刻（`HH:MM`、端末のタイムゾーン。初期値 `08:00`）。形式が違う場合は `fields.reminderTime = invalid`
+          type: string
+          examples: ["08:00"]
+        completionNotifyEnabled:
+          description: ほかのメンバーの完了通知を受け取るか（初期値 true）
+          type: boolean
+
     Platform:
       description: 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
       type: string
@@ -347,6 +532,7 @@ components:
         | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
         | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
         | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+        | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
         | `internal` | 500 | サーバーの障害 |
       type: string
       enum:
@@ -356,6 +542,7 @@ components:
         - forbidden
         - not_found
         - conflict
+        - last_owner
         - internal
 
     Error:
