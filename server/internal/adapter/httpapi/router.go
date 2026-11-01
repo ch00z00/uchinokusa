@@ -14,9 +14,10 @@ const basePath = "/v1"
 
 // Deps は、ルーターが使う依存である。
 type Deps struct {
-	Logger   *slog.Logger
-	Verifier TokenVerifier
-	Accounts AccountService
+	Logger     *slog.Logger
+	Verifier   TokenVerifier
+	Accounts   AccountService
+	Households HouseholdService
 }
 
 // NewRouter は、API のすべてのエンドポイントを登録したハンドラーを返す。
@@ -30,7 +31,7 @@ func NewRouter(d Deps) http.Handler {
 	onRequestError := func(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, r, logger, &badRequestError{err: err})
 	}
-	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts}, nil, oapi.StrictHTTPServerOptions{
+	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts, households: d.Households}, nil, oapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: onRequestError,
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, r, logger, err)

@@ -107,7 +107,94 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households:
+    get:
+      operationId: listHouseholds
+      summary: 所属するすべての世帯を、自分のロールとともに返す
+      tags: [household]
+      responses:
+        "200":
+          description: 所属する世帯（作成の古い順）。どこにも所属していなければ空の配列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [households]
+                properties:
+                  households:
+                    type: array
+                    items: { $ref: "#/components/schemas/Household" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createHousehold
+      summary: 世帯を作成し、作成したユーザーをオーナーにする
+      tags: [household]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateHouseholdRequest" }
+      responses:
+        "201":
+          description: 作成した世帯（`role` は `owner`）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Household" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    patch:
+      operationId: updateHousehold
+      summary: 世帯名・地域を変更する（オーナーのみ）
+      description: 送った項目だけを変更する。地域を未設定に戻すには、空文字を送る
+      tags: [household]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateHouseholdRequest" }
+      responses:
+        "200":
+          description: 変更後の世帯
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Household" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteHousehold
+      summary: 世帯を削除する（オーナーのみ）
+      description: 植物・タスク・記録・メモ・招待など、世帯の配下のデータもすべて削除する。元に戻せないため、アプリで確認してから呼ぶ（要件2-6）
+      tags: [household]
+      responses:
+        "204":
+          description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
+  parameters:
+    HouseholdId:
+      name: householdId
+      in: path
+      required: true
+      description: 世帯の ID。所属していない世帯の場合は 404 を返す（存在を明かさない）
+      schema:
+        type: string
+        format: uuid
   securitySchemes:
     firebaseIdToken:
       description: "Firebase Auth の ID トークン（`Authorization: Bearer <トークン>`）。期限が切れたら、アプリで更新して送り直す"
@@ -136,6 +223,68 @@ components:
       properties:
         displayName:
           description: 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
+          type: string
+
+    Role:
+      description: 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
+      type: string
+      enum: [owner, editor, viewer]
+
+    Hemisphere:
+      type: string
+      enum: [north, south]
+
+    Household:
+      description: 世帯。`role` はリクエストしたユーザーのロール
+      type: object
+      required: [id, name, role, timeZone, hemisphere, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        regionPrefecture:
+          description: 都道府県。未設定なら項目がない
+          type: string
+        regionCity:
+          description: 市区町村。未設定なら項目がない
+          type: string
+        timeZone:
+          description: 世帯の IANA タイムゾーン（現在は `Asia/Tokyo` 固定）
+          type: string
+        hemisphere:
+          $ref: "#/components/schemas/Hemisphere"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateHouseholdRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          description: 前後の空白を除いて1〜30文字。空の場合は `fields.name = required`、長すぎる場合は `too_long`
+          type: string
+        regionPrefecture:
+          description: 任意。前後の空白を除いて50文字まで（`too_long`）。空文字は未設定として扱う
+          type: string
+        regionCity:
+          description: 任意。前後の空白を除いて50文字まで（`too_long`）。空文字は未設定として扱う
+          type: string
+
+    UpdateHouseholdRequest:
+      description: 送った項目だけを変更する。検証の規則は CreateHouseholdRequest と同じ
+      type: object
+      properties:
+        name:
+          type: string
+        regionPrefecture:
+          description: 空文字を送ると、未設定に戻す
+          type: string
+        regionCity:
+          description: 空文字を送ると、未設定に戻す
           type: string
 
     Platform:

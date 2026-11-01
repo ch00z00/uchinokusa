@@ -17,14 +17,14 @@ type CareRecord struct {
 	PlantID          uuid.UUID
 	TaskID           uuid.NullUUID
 	TaskKind         string
-	TaskCustomName   pgtype.Text
+	TaskCustomName   *string
 	Outcome          string
 	PerformedOn      pgtype.Date
 	PerformedAt      time.Time
 	ActorUserID      uuid.NullUUID
 	ActorDisplayName string
-	SkipReasonCode   pgtype.Text
-	SkipReasonText   pgtype.Text
+	SkipReasonCode   *string
+	SkipReasonText   *string
 	RecheckOn        pgtype.Date
 	CycleSeq         int32
 	IsExtra          bool
@@ -39,12 +39,12 @@ type CareTask struct {
 	HouseholdID       uuid.UUID
 	PlantID           uuid.UUID
 	Kind              string
-	CustomName        pgtype.Text
+	CustomName        *string
 	IntervalValue     int32
 	IntervalUnit      string
 	SeasonalIntervals []byte
-	ConditionText     pgtype.Text
-	Note              pgtype.Text
+	ConditionText     *string
+	Note              *string
 	NextDueOn         pgtype.Date
 	DueOverridden     bool
 	CycleSeq          int32
@@ -57,8 +57,8 @@ type CareTask struct {
 type Household struct {
 	ID               uuid.UUID
 	Name             string
-	RegionPrefecture pgtype.Text
-	RegionCity       pgtype.Text
+	RegionPrefecture *string
+	RegionCity       *string
 	TimeZone         string
 	Hemisphere       string
 	Version          int64
@@ -84,9 +84,9 @@ type Location struct {
 	HouseholdID     uuid.UUID
 	Name            string
 	IsIndoor        bool
-	WindowDirection pgtype.Text
-	WindowDistance  pgtype.Text
-	Shading         pgtype.Text
+	WindowDirection *string
+	WindowDistance  *string
+	Shading         *string
 	Attributes      []byte
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -133,7 +133,7 @@ type Plant struct {
 	HouseholdID     uuid.UUID
 	Name            string
 	SpeciesID       uuid.NullUUID
-	SpeciesFreeText pgtype.Text
+	SpeciesFreeText *string
 	LocationID      uuid.NullUUID
 	AcquiredOn      pgtype.Date
 	ArchivedAt      *time.Time
@@ -152,13 +152,13 @@ type ReminderDispatch struct {
 type Species struct {
 	ID              uuid.UUID
 	NameJa          string
-	ScientificName  pgtype.Text
+	ScientificName  *string
 	Aliases         []string
-	LightLevel      pgtype.Text
+	LightLevel      *string
 	MinTempC        pgtype.Numeric
-	HumidityLevel   pgtype.Text
-	AirflowNeed     pgtype.Text
-	WaterTendency   pgtype.Text
+	HumidityLevel   *string
+	AirflowNeed     *string
+	WaterTendency   *string
 	OutdoorOk       pgtype.Bool
 	RecommendedCare []byte
 	Attributes      []byte
@@ -174,9 +174,9 @@ type Suggestion struct {
 	ProviderID    string
 	Kind          string
 	Action        string
-	TaskKind      pgtype.Text
+	TaskKind      *string
 	ProposedDate  pgtype.Date
-	ConditionText pgtype.Text
+	ConditionText *string
 	MessageKey    string
 	MessageParams []byte
 	ReasonKey     string

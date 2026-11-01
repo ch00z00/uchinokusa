@@ -10,7 +10,8 @@ import (
 // server は、API 定義から生成したインターフェース（oapi.StrictServerInterface）を実装する。
 // 各メソッドは、成功のレスポンスを返すか、ドメインのエラーを返す（エラーは writeError が変換する）。
 type server struct {
-	accounts AccountService
+	accounts   AccountService
+	households HouseholdService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)

@@ -112,10 +112,12 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
+	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	router := httpapi.NewRouter(httpapi.Deps{
-		Logger:   logger,
-		Verifier: verifier,
-		Accounts: app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
+		Logger:     logger,
+		Verifier:   verifier,
+		Accounts:   app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
+		Households: app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

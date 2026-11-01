@@ -25,6 +25,12 @@ sql:
           # 日時は pgtype.Timestamptz ではなく time.Time にする（NULL になりうる列はポインター）
           - db_type: timestamptz
             go_type: time.Time
+          # NULL になりうる text は、pgtype.Text ではなく *string にする
+          - db_type: text
+            nullable: true
+            go_type:
+              type: string
+              pointer: true
           - db_type: timestamptz
             nullable: true
             go_type:
