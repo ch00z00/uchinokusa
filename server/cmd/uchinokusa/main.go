@@ -101,6 +101,10 @@ func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error 
 
 // serve は、HTTP サーバーを起動し、ctx が終わったらグレースフルに停止する。
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+	if cfg.InviteBaseURL == nil {
+		return errors.New("INVITE_BASE_URL is required to serve")
+	}
+
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
@@ -114,11 +118,12 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	router := httpapi.NewRouter(httpapi.Deps{
-		Logger:     logger,
-		Verifier:   verifier,
-		Accounts:   app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
-		Households: app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
-		Members:    app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
+		Logger:      logger,
+		Verifier:    verifier,
+		Accounts:    app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
+		Households:  app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
+		Members:     app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
+		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

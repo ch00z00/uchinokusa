@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"log/slog"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -33,6 +34,10 @@ func TestLoad_Defaults(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 0 {
 		t.Errorf("AllowedOrigins = %v, want empty", cfg.AllowedOrigins)
 	}
+	// 招待リンクのドメインは serve でだけ使うため、Load では必須にしない（migrate などで要らない）
+	if cfg.InviteBaseURL != nil {
+		t.Errorf("InviteBaseURL = %v, want nil", cfg.InviteBaseURL)
+	}
 }
 
 func TestLoad_AllValues(t *testing.T) {
@@ -45,6 +50,7 @@ func TestLoad_AllValues(t *testing.T) {
 		"GOOGLE_APPLICATION_CREDENTIALS": "/secrets/service-account.json",
 		"ALLOWED_ORIGINS":                " https://uchinokusa.app , ,https://dev.uchinokusa.app",
 		"LOG_LEVEL":                      "debug",
+		"INVITE_BASE_URL":                "https://invite.uchinokusa.app",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -57,6 +63,7 @@ func TestLoad_AllValues(t *testing.T) {
 		FirebaseCredentialsFile: "/secrets/service-account.json",
 		AllowedOrigins:          []string{"https://uchinokusa.app", "https://dev.uchinokusa.app"},
 		LogLevel:                slog.LevelDebug,
+		InviteBaseURL:           &url.URL{Scheme: "https", Host: "invite.uchinokusa.app"},
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -90,6 +97,21 @@ func TestLoad_Errors(t *testing.T) {
 			name:    "LOG_LEVEL が不正",
 			env:     map[string]string{"DATABASE_URL": "postgres://x", "LOG_LEVEL": "verbose"},
 			wantMsg: []string{"LOG_LEVEL"},
+		},
+		{
+			name:    "INVITE_BASE_URL がスキームのない URL",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "INVITE_BASE_URL": "invite.uchinokusa.app"},
+			wantMsg: []string{"INVITE_BASE_URL"},
+		},
+		{
+			name:    "INVITE_BASE_URL が http(s) でない",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "INVITE_BASE_URL": "ftp://invite.uchinokusa.app"},
+			wantMsg: []string{"INVITE_BASE_URL"},
+		},
+		{
+			name:    "INVITE_BASE_URL にクエリがある",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "INVITE_BASE_URL": "https://invite.uchinokusa.app?ref=1"},
+			wantMsg: []string{"INVITE_BASE_URL"},
 		},
 		{
 			// 複数の誤りは、1回でまとめて知らせる

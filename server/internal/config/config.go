@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -24,6 +25,9 @@ type Config struct {
 	AllowedOrigins []string
 	// LogLevel は、出力するログの最小レベル（LOG_LEVEL：debug / info / warn / error、初期値 info）。
 	LogLevel slog.Level
+	// InviteBaseURL は、招待リンクのドメイン（INVITE_BASE_URL、例：https://invite.example.com）。
+	// serve でだけ使うため、Load では必須にせず、未設定なら nil にする。
+	InviteBaseURL *url.URL
 }
 
 // Load は、getenv（通常は os.Getenv）から設定を読み込む。
@@ -59,10 +63,35 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
+	if v := getenv("INVITE_BASE_URL"); v != "" {
+		u, err := parseBaseURL(v)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("INVITE_BASE_URL %w, got %q", err, v))
+		} else {
+			cfg.InviteBaseURL = u
+		}
+	}
+
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
 	return cfg, nil
+}
+
+// parseBaseURL は、パスを足して使う URL（スキームとホストだけ、または末尾のパスまで）を読む。
+func parseBaseURL(s string) (*url.URL, error) {
+	u, err := url.Parse(s)
+	switch {
+	case err != nil:
+		return nil, errors.New("must be a valid URL")
+	case u.Scheme != "https" && u.Scheme != "http":
+		return nil, errors.New("must start with https:// or http://")
+	case u.Host == "":
+		return nil, errors.New("must have a host")
+	case u.RawQuery != "" || u.Fragment != "":
+		return nil, errors.New("must not have a query or fragment")
+	}
+	return u, nil
 }
 
 // splitList は、カンマ区切りの値を分割し、前後の空白と空の要素を取り除く。

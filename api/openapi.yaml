@@ -322,6 +322,77 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: listInvitations
+      summary: 有効な招待の一覧（オーナーのみ）
+      description: 取り消されておらず、期限が切れていない招待を、新しい順に返す。招待リンクの URL は作成時にしか返せない（トークンを保存しないため）ので、ここには含まない
+      tags: [invitation]
+      responses:
+        "200":
+          description: 有効な招待
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invitations]
+                properties:
+                  invitations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createInvitation
+      summary: 招待を作成する（オーナーのみ）
+      description: 有効期限は作成から7日。期限内は複数人が使える（要件3-1）
+      tags: [invitation]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateInvitationRequest" }
+      responses:
+        "201":
+          description: 作成した招待と、招待リンクの URL。URL はこのレスポンスでしか受け取れない
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedInvitation" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}/invitations/{invitationId}:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+      - name: invitationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: revokeInvitation
+      summary: 招待を取り消す（オーナーのみ）
+      description: 取り消した招待は、ただちに使えなくなる（要件3-7）。すでに取り消し済み・期限切れでも 204 を返す
+      tags: [invitation]
+      responses:
+        "204":
+          description: 取り消した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
   parameters:
     HouseholdId:
@@ -471,6 +542,45 @@ components:
         completionNotifyEnabled:
           description: ほかのメンバーの完了通知を受け取るか（初期値 true）
           type: boolean
+
+    Invitation:
+      description: 世帯への招待
+      type: object
+      required: [id, role, code, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/Role"
+        code:
+          description: アプリで手入力する8文字の招待コード（紛らわしい文字 0・O・1・I・L を含まない英大文字と数字）
+          type: string
+          examples: ["K7MP2QXA"]
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreatedInvitation:
+      description: 作成した招待。`url` を共有機能や QR コードで渡す
+      allOf:
+        - $ref: "#/components/schemas/Invitation"
+        - type: object
+          required: [url]
+          properties:
+            url:
+              description: 招待リンク（`https://<招待用ドメイン>/i/<トークン>`）
+              type: string
+              format: uri
+
+    CreateInvitationRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          description: "`editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`"
+          type: string
 
     Platform:
       description: 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する

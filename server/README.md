@@ -37,6 +37,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/me
 | `FIREBASE_AUTH_EMULATOR_HOST` | | — | 設定すると、Firebase Admin SDK が Emulator に接続する |
 | `GOOGLE_APPLICATION_CREDENTIALS` | | — | サービスアカウントの鍵ファイル（Cloud Run では不要） |
 | `ALLOWED_ORIGINS` | | — | 許可するオリジン（カンマ区切り） |
+| `INVITE_BASE_URL` | `serve` のみ ○ | — | 招待リンクのドメイン（例：`https://invite.example.com`）。招待の URL は `<この値>/i/<トークン>` になる |
 
 ## API 定義からのコードの生成
 API 定義は `api/openapi.yaml` が唯一の正である（`docs/decisions/0001`）。定義を変えたら、リポジトリのルートで生成し直す。
