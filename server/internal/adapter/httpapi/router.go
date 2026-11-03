@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi/oapi"
 )
@@ -33,7 +36,10 @@ func NewRouter(d Deps) http.Handler {
 	onRequestError := func(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, r, logger, &badRequestError{err: err})
 	}
-	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts, households: d.Households, members: d.Members, invitations: d.Invitations}, nil, oapi.StrictHTTPServerOptions{
+	// 招待の確認と参加は、招待コードの総当たりを防ぐため、利用者ごとに回数を制限する（要件20-3）。
+	// 10回まで続けて呼べ、6秒ごとに1回分回復する（1分に約10回）
+	invitationLimit := withRateLimit(newUserRateLimiter(rate.Every(6*time.Second), 10, time.Now), "GetInvitation", "AcceptInvitation")
+	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts, households: d.Households, members: d.Members, invitations: d.Invitations}, []oapi.StrictMiddlewareFunc{invitationLimit}, oapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: onRequestError,
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, r, logger, err)

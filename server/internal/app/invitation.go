@@ -21,6 +21,11 @@ type InvitationRepository interface {
 	ListActive(ctx context.Context, householdID uuid.UUID) ([]domain.Invitation, error)
 	// Revoke は、招待を取り消す。世帯の招待でなければ domain.ErrNotFound を返す。取り消し済みでもエラーにしない。
 	Revoke(ctx context.Context, householdID, invitationID uuid.UUID) error
+	// Preview は、有効な招待の内容と、userID がすでにメンバーかを返す。無効なら domain.ErrInvitationInvalid を返す。
+	Preview(ctx context.Context, key domain.InvitationKey, userID uuid.UUID) (domain.InvitationPreview, error)
+	// Accept は、userID を招待のロールで世帯に追加し、オーナーへの通知をアウトボックスに積む。
+	// 無効なら domain.ErrInvitationInvalid、すでにメンバーなら domain.ConflictError（already_member）を返す。
+	Accept(ctx context.Context, key domain.InvitationKey, userID uuid.UUID) (domain.HouseholdWithRole, error)
 }
 
 // CreatedInvitation は、作成した招待と、招待リンクの URL である。
@@ -86,4 +91,15 @@ func (s *InvitationService) Revoke(ctx context.Context, actorID, householdID, in
 		return err
 	}
 	return s.invitations.Revoke(ctx, householdID, invitationID)
+}
+
+// Preview は、招待リンクのトークンか招待コードから、参加の確認画面に表示する内容を返す（要件3-3・3-6）。
+// 招待された人はまだメンバーではないので、Authorizer は通さない（招待を知っていることが、見る資格になる）。
+func (s *InvitationService) Preview(ctx context.Context, userID uuid.UUID, tokenOrCode string) (domain.InvitationPreview, error) {
+	return s.invitations.Preview(ctx, domain.ParseInvitationKey(tokenOrCode), userID)
+}
+
+// Accept は、招待を受けて世帯に参加する（要件3-3・3-8）。
+func (s *InvitationService) Accept(ctx context.Context, userID uuid.UUID, tokenOrCode string) (domain.HouseholdWithRole, error) {
+	return s.invitations.Accept(ctx, domain.ParseInvitationKey(tokenOrCode), userID)
 }

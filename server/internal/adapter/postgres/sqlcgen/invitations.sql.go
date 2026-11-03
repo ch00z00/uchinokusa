@@ -7,9 +7,31 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const addMemberIfAbsent = `-- name: AddMemberIfAbsent :one
+INSERT INTO memberships (household_id, user_id, role)
+VALUES ($1, $2, $3)
+ON CONFLICT (household_id, user_id) DO NOTHING
+RETURNING id
+`
+
+type AddMemberIfAbsentParams struct {
+	HouseholdID uuid.UUID
+	UserID      uuid.UUID
+	Role        string
+}
+
+// すでにメンバーなら何もせず、行を返さない
+func (q *Queries) AddMemberIfAbsent(ctx context.Context, arg AddMemberIfAbsentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, addMemberIfAbsent, arg.HouseholdID, arg.UserID, arg.Role)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
 
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO invitations (household_id, role, token_hash, code, created_by)
@@ -49,6 +71,23 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 	return i, err
 }
 
+const enqueueMemberJoined = `-- name: EnqueueMemberJoined :exec
+INSERT INTO notification_outbox (household_id, kind, actor_user_id, payload)
+VALUES ($1, 'member_joined', $2, $3)
+`
+
+type EnqueueMemberJoinedParams struct {
+	HouseholdID uuid.UUID
+	ActorUserID uuid.NullUUID
+	Payload     []byte
+}
+
+// 参加の通知を予約する。送信はジョブ（タスク 12.x）が行う
+func (q *Queries) EnqueueMemberJoined(ctx context.Context, arg EnqueueMemberJoinedParams) error {
+	_, err := q.db.Exec(ctx, enqueueMemberJoined, arg.HouseholdID, arg.ActorUserID, arg.Payload)
+	return err
+}
+
 const listActiveInvitations = `-- name: ListActiveInvitations :many
 SELECT id, household_id, role, token_hash, code, expires_at, revoked_at, created_by, created_at FROM invitations
 WHERE household_id = $1 AND revoked_at IS NULL AND expires_at > now()
@@ -83,6 +122,75 @@ func (q *Queries) ListActiveInvitations(ctx context.Context, householdID uuid.UU
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockValidInvitation = `-- name: LockValidInvitation :one
+SELECT id, household_id, role, token_hash, code, expires_at, revoked_at, created_by, created_at FROM invitations
+WHERE (code = $1 OR token_hash = $2)
+  AND revoked_at IS NULL AND expires_at > now()
+FOR SHARE
+`
+
+type LockValidInvitationParams struct {
+	Code      *string
+	TokenHash []byte
+}
+
+// 参加のあいだ、取り消し（UPDATE）を待たせる。取り消しが先に終わっていれば、待ったあとに条件で外れる
+func (q *Queries) LockValidInvitation(ctx context.Context, arg LockValidInvitationParams) (Invitation, error) {
+	row := q.db.QueryRow(ctx, lockValidInvitation, arg.Code, arg.TokenHash)
+	var i Invitation
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.Role,
+		&i.TokenHash,
+		&i.Code,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const previewInvitation = `-- name: PreviewInvitation :one
+
+SELECT households.name AS household_name, invitations.role, invitations.expires_at,
+  EXISTS (
+    SELECT 1 FROM memberships
+    WHERE memberships.household_id = invitations.household_id AND memberships.user_id = $1
+  ) AS already_member
+FROM invitations
+JOIN households ON households.id = invitations.household_id
+WHERE (invitations.code = $2 OR invitations.token_hash = $3)
+  AND invitations.revoked_at IS NULL AND invitations.expires_at > now()
+`
+
+type PreviewInvitationParams struct {
+	UserID    uuid.UUID
+	Code      *string
+	TokenHash []byte
+}
+
+type PreviewInvitationRow struct {
+	HouseholdName string
+	Role          string
+	ExpiresAt     time.Time
+	AlreadyMember bool
+}
+
+// 招待は、コードかトークンのハッシュのどちらか一方で探す（もう一方は NULL にする。NULL との = は一致しない）
+func (q *Queries) PreviewInvitation(ctx context.Context, arg PreviewInvitationParams) (PreviewInvitationRow, error) {
+	row := q.db.QueryRow(ctx, previewInvitation, arg.UserID, arg.Code, arg.TokenHash)
+	var i PreviewInvitationRow
+	err := row.Scan(
+		&i.HouseholdName,
+		&i.Role,
+		&i.ExpiresAt,
+		&i.AlreadyMember,
+	)
+	return i, err
 }
 
 const revokeInvitation = `-- name: RevokeInvitation :execrows

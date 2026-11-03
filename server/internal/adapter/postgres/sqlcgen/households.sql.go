@@ -78,6 +78,28 @@ func (q *Queries) DeleteHousehold(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getHousehold = `-- name: GetHousehold :one
+SELECT id, name, region_prefecture, region_city, time_zone, hemisphere, version, attributes, created_at, updated_at FROM households WHERE id = $1
+`
+
+func (q *Queries) GetHousehold(ctx context.Context, id uuid.UUID) (Household, error) {
+	row := q.db.QueryRow(ctx, getHousehold, id)
+	var i Household
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.RegionPrefecture,
+		&i.RegionCity,
+		&i.TimeZone,
+		&i.Hemisphere,
+		&i.Version,
+		&i.Attributes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listHouseholdsByUser = `-- name: ListHouseholdsByUser :many
 SELECT households.id, households.name, households.region_prefecture, households.region_city, households.time_zone, households.hemisphere, households.version, households.attributes, households.created_at, households.updated_at, memberships.role
 FROM households

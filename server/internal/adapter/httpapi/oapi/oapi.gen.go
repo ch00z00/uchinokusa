@@ -19,19 +19,24 @@ import (
 
 // Defines values for ErrorCode.
 const (
-	ErrorCodeBadRequest       ErrorCode = "bad_request"
-	ErrorCodeConflict         ErrorCode = "conflict"
-	ErrorCodeForbidden        ErrorCode = "forbidden"
-	ErrorCodeInternal         ErrorCode = "internal"
-	ErrorCodeLastOwner        ErrorCode = "last_owner"
-	ErrorCodeNotFound         ErrorCode = "not_found"
-	ErrorCodeUnauthenticated  ErrorCode = "unauthenticated"
-	ErrorCodeValidationFailed ErrorCode = "validation_failed"
+	ErrorCodeAlreadyMember     ErrorCode = "already_member"
+	ErrorCodeBadRequest        ErrorCode = "bad_request"
+	ErrorCodeConflict          ErrorCode = "conflict"
+	ErrorCodeForbidden         ErrorCode = "forbidden"
+	ErrorCodeInternal          ErrorCode = "internal"
+	ErrorCodeInvitationInvalid ErrorCode = "invitation_invalid"
+	ErrorCodeLastOwner         ErrorCode = "last_owner"
+	ErrorCodeNotFound          ErrorCode = "not_found"
+	ErrorCodeRateLimited       ErrorCode = "rate_limited"
+	ErrorCodeUnauthenticated   ErrorCode = "unauthenticated"
+	ErrorCodeValidationFailed  ErrorCode = "validation_failed"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
 func (e ErrorCode) Valid() bool {
 	switch e {
+	case ErrorCodeAlreadyMember:
+		return true
 	case ErrorCodeBadRequest:
 		return true
 	case ErrorCodeConflict:
@@ -40,9 +45,13 @@ func (e ErrorCode) Valid() bool {
 		return true
 	case ErrorCodeInternal:
 		return true
+	case ErrorCodeInvitationInvalid:
+		return true
 	case ErrorCodeLastOwner:
 		return true
 	case ErrorCodeNotFound:
+		return true
+	case ErrorCodeRateLimited:
 		return true
 	case ErrorCodeUnauthenticated:
 		return true
@@ -191,6 +200,9 @@ type Error struct {
 	// | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
 	// | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
 	// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
+	// | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
+	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
 	Code ErrorCode `json:"code"`
 
@@ -215,6 +227,9 @@ type Error struct {
 // | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
 // | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
 // | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
+// | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
+// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 // | `internal` | 500 | サーバーの障害 |
 type ErrorCode string
 
@@ -261,6 +276,21 @@ type Invitation struct {
 	// Examples: 2026-10-26T09:30:00Z
 	ExpiresAt DateTime           `json:"expiresAt"`
 	Id        openapi_types.UUID `json:"id"`
+
+	// Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
+	Role Role `json:"role"`
+}
+
+// InvitationPreview 参加の確認画面に表示する、招待の内容
+type InvitationPreview struct {
+	// AlreadyMember すでにこの世帯のメンバーなら true（参加済みであることを表示する。要件3-6）
+	AlreadyMember bool `json:"alreadyMember"`
+
+	// ExpiresAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	ExpiresAt     DateTime `json:"expiresAt"`
+	HouseholdName string   `json:"householdName"`
 
 	// Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
 	Role Role `json:"role"`
@@ -358,6 +388,9 @@ type UpdateMemberRoleRequest struct {
 // HouseholdId defines model for HouseholdId.
 type HouseholdId = openapi_types.UUID
 
+// TokenOrCode defines model for TokenOrCode.
+type TokenOrCode = string
+
 // BadRequest すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type BadRequest = Error
@@ -370,6 +403,10 @@ type Conflict = Error
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type Forbidden = Error
 
+// Gone すべてのエラーレスポンスの共通の形。
+// エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
+type Gone = Error
+
 // Internal すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type Internal = Error
@@ -377,6 +414,10 @@ type Internal = Error
 // NotFound すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type NotFound = Error
+
+// TooManyRequests すべてのエラーレスポンスの共通の形。
+// エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
+type TooManyRequests = Error
 
 // Unauthenticated すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
@@ -451,6 +492,12 @@ type ServerInterface interface {
 	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
 	// (POST /households/{householdId}/ownership-transfer)
 	TransferOwnership(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
+	// (GET /invitations/{tokenOrCode})
+	GetInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode)
+	// AcceptInvitation 招待を受けて、世帯に参加する
+	// (POST /invitations/{tokenOrCode}/accept)
+	AcceptInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -815,6 +862,58 @@ func (siw *ServerInterfaceWrapper) TransferOwnership(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetInvitation operation middleware
+func (siw *ServerInterfaceWrapper) GetInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tokenOrCode" -------------
+	var tokenOrCode TokenOrCode
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tokenOrCode", r.PathValue("tokenOrCode"), &tokenOrCode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tokenOrCode", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInvitation(w, r, tokenOrCode)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcceptInvitation operation middleware
+func (siw *ServerInterfaceWrapper) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "tokenOrCode" -------------
+	var tokenOrCode TokenOrCode
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tokenOrCode", r.PathValue("tokenOrCode"), &tokenOrCode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tokenOrCode", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptInvitation(w, r, tokenOrCode)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -1020,6 +1119,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/invitations", wrapper.ListInvitations)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/invitations", wrapper.CreateInvitation)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/households/{householdId}/invitations/{invitationId}", wrapper.RevokeInvitation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/invitations/{tokenOrCode}", wrapper.GetInvitation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/invitations/{tokenOrCode}/accept", wrapper.AcceptInvitation)
 
 	return m
 }
@@ -1030,9 +1131,20 @@ type ConflictJSONResponse Error
 
 type ForbiddenJSONResponse Error
 
+type GoneJSONResponse Error
+
 type InternalJSONResponse Error
 
 type NotFoundJSONResponse Error
+
+type TooManyRequestsResponseHeaders struct {
+	RetryAfter *int
+}
+type TooManyRequestsJSONResponse struct {
+	Body Error
+
+	Headers TooManyRequestsResponseHeaders
+}
 
 type UnauthenticatedJSONResponse Error
 
@@ -2223,6 +2335,182 @@ func (response TransferOwnership500JSONResponse) VisitTransferOwnershipResponse(
 	return err
 }
 
+type GetInvitationRequestObject struct {
+	TokenOrCode TokenOrCode `json:"tokenOrCode"`
+}
+
+type GetInvitationResponseObject interface {
+	VisitGetInvitationResponse(w http.ResponseWriter) error
+}
+
+type GetInvitation200JSONResponse InvitationPreview
+
+func (response GetInvitation200JSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvitation401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetInvitation401JSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvitation410JSONResponse struct{ GoneJSONResponse }
+
+func (response GetInvitation410JSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvitation429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response GetInvitation429JSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvitation500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetInvitation500JSONResponse) VisitGetInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitationRequestObject struct {
+	TokenOrCode TokenOrCode `json:"tokenOrCode"`
+}
+
+type AcceptInvitationResponseObject interface {
+	VisitAcceptInvitationResponse(w http.ResponseWriter) error
+}
+
+type AcceptInvitation200JSONResponse Household
+
+func (response AcceptInvitation200JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitation401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response AcceptInvitation401JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitation409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AcceptInvitation409JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitation410JSONResponse struct{ GoneJSONResponse }
+
+func (response AcceptInvitation410JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(410)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitation429JSONResponse struct{ TooManyRequestsJSONResponse }
+
+func (response AcceptInvitation429JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptInvitation500JSONResponse struct{ InternalJSONResponse }
+
+func (response AcceptInvitation500JSONResponse) VisitAcceptInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMeRequestObject struct {
 }
 
@@ -2527,6 +2815,12 @@ type StrictServerInterface interface {
 	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
 	// (POST /households/{householdId}/ownership-transfer)
 	TransferOwnership(ctx context.Context, request TransferOwnershipRequestObject) (TransferOwnershipResponseObject, error)
+	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
+	// (GET /invitations/{tokenOrCode})
+	GetInvitation(ctx context.Context, request GetInvitationRequestObject) (GetInvitationResponseObject, error)
+	// AcceptInvitation 招待を受けて、世帯に参加する
+	// (POST /invitations/{tokenOrCode}/accept)
+	AcceptInvitation(ctx context.Context, request AcceptInvitationRequestObject) (AcceptInvitationResponseObject, error)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -2952,6 +3246,58 @@ func (sh *strictHandler) TransferOwnership(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TransferOwnershipResponseObject); ok {
 		if err := validResponse.VisitTransferOwnershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInvitation operation middleware
+func (sh *strictHandler) GetInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode) {
+	var request GetInvitationRequestObject
+
+	request.TokenOrCode = tokenOrCode
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInvitation(ctx, request.(GetInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInvitationResponseObject); ok {
+		if err := validResponse.VisitGetInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AcceptInvitation operation middleware
+func (sh *strictHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode) {
+	var request AcceptInvitationRequestObject
+
+	request.TokenOrCode = tokenOrCode
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AcceptInvitation(ctx, request.(AcceptInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AcceptInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AcceptInvitationResponseObject); ok {
+		if err := validResponse.VisitAcceptInvitationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

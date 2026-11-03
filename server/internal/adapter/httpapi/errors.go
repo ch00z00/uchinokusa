@@ -3,7 +3,9 @@ package httpapi
 import (
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi/oapi"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
@@ -22,9 +24,10 @@ func (e *badRequestError) Unwrap() error { return e.err }
 // ドメインのエラーから HTTP への変換は、すべてここで行う。
 func writeError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err error) {
 	var (
-		badRequest *badRequestError
-		validation *domain.ValidationError
-		conflict   *domain.ConflictError
+		badRequest  *badRequestError
+		validation  *domain.ValidationError
+		conflict    *domain.ConflictError
+		rateLimited *rateLimitedError
 	)
 
 	switch {
@@ -40,6 +43,12 @@ func writeError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, err
 		writeJSON(w, http.StatusUnauthorized, oapi.Error{Code: oapi.ErrorCodeUnauthenticated, Message: "authentication required"})
 	case errors.Is(err, domain.ErrForbidden):
 		writeJSON(w, http.StatusForbidden, oapi.Error{Code: oapi.ErrorCodeForbidden, Message: "permission denied"})
+	case errors.Is(err, domain.ErrInvitationInvalid):
+		writeJSON(w, http.StatusGone, oapi.Error{Code: oapi.ErrorCodeInvitationInvalid, Message: "invitation is expired, revoked, or unknown"})
+	case errors.As(err, &rateLimited):
+		// 秒に切り上げる（0秒と伝えると、すぐに送り直されてしまう）
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(rateLimited.retryAfter.Seconds()))))
+		writeJSON(w, http.StatusTooManyRequests, oapi.Error{Code: oapi.ErrorCodeRateLimited, Message: "too many requests"})
 	case errors.Is(err, domain.ErrNotFound):
 		writeJSON(w, http.StatusNotFound, oapi.Error{Code: oapi.ErrorCodeNotFound, Message: "not found"})
 	case errors.As(err, &conflict):

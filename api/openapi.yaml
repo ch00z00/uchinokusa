@@ -393,8 +393,58 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /invitations/{tokenOrCode}:
+    parameters:
+      - $ref: "#/components/parameters/TokenOrCode"
+    get:
+      operationId: getInvitation
+      summary: 招待の内容（世帯名と付与されるロール）を取得する
+      description: |
+        参加の確認画面に使う（要件3-3）。期限切れ・取り消し済み・存在しない招待は、区別せずに `410 invitation_invalid` を返す。
+        利用者ごとにレート制限があり、超えると `429 rate_limited` を返す
+      tags: [invitation]
+      responses:
+        "200":
+          description: 招待の内容
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationPreview" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /invitations/{tokenOrCode}/accept:
+    parameters:
+      - $ref: "#/components/parameters/TokenOrCode"
+    post:
+      operationId: acceptInvitation
+      summary: 招待を受けて、世帯に参加する
+      description: |
+        招待のロールで世帯に追加し、オーナーへの通知を予約する（要件3-3・3-8）。
+        すでにメンバーなら `409 already_member`（重複して追加しない。要件3-6）、無効な招待なら `410 invitation_invalid`
+      tags: [invitation]
+      responses:
+        "200":
+          description: 参加した世帯（`role` は招待のロール）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Household" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
   parameters:
+    TokenOrCode:
+      name: tokenOrCode
+      in: path
+      required: true
+      description: 招待リンクのトークン、または8文字の招待コード。コードは大文字・小文字を区別せず、空白とハイフンを無視する
+      schema:
+        type: string
     HouseholdId:
       name: householdId
       in: path
@@ -582,6 +632,21 @@ components:
           description: "`editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`"
           type: string
 
+    InvitationPreview:
+      description: 参加の確認画面に表示する、招待の内容
+      type: object
+      required: [householdName, role, expiresAt, alreadyMember]
+      properties:
+        householdName:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        expiresAt:
+          $ref: "#/components/schemas/DateTime"
+        alreadyMember:
+          description: すでにこの世帯のメンバーなら true（参加済みであることを表示する。要件3-6）
+          type: boolean
+
     Platform:
       description: 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
       type: string
@@ -643,6 +708,9 @@ components:
         | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
         | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
         | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
+        | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+        | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
+        | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
         | `internal` | 500 | サーバーの障害 |
       type: string
       enum:
@@ -653,6 +721,9 @@ components:
         - not_found
         - conflict
         - last_owner
+        - already_member
+        - invitation_invalid
+        - rate_limited
         - internal
 
     Error:
@@ -704,6 +775,21 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     ValidationFailed:
       description: 入力の内容の誤り
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Gone:
+      description: 招待が無効（期限切れ・取り消し済み・存在しない）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: リクエストが多すぎる
+      headers:
+        Retry-After:
+          description: 送り直すまでに待つ秒数
+          schema:
+            type: integer
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

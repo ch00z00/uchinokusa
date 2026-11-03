@@ -15,7 +15,13 @@ var (
 	// ErrNotFound は、対象が存在しないこと、または所属していない世帯のデータであることを表す。
 	// 所属していない世帯については、存在を明かさないためにこのエラーを使う（要件4-4）。
 	ErrNotFound = errors.New("not found")
+	// ErrInvitationInvalid は、招待が期限切れ・取り消し済み・存在しないことを表す（要件3-5）。
+	// 理由を区別しないのは、総当たりする人に「このコードは存在する」と知らせないためである。
+	ErrInvitationInvalid = errors.New("invitation invalid")
 )
+
+// ConflictAlreadyMember は、すでに世帯のメンバーである人が招待を受けたときの衝突のコードである（要件3-6）。
+const ConflictAlreadyMember = "already_member"
 
 // ConflictError は、状態の衝突を表す（すでに完了済み、など）。
 // Code は API 定義の ErrorCode の値で、アプリはこの値で分岐する。

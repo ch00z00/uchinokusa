@@ -15,6 +15,8 @@ type InvitationService interface {
 	Create(ctx context.Context, actorID, householdID uuid.UUID, role string) (app.CreatedInvitation, error)
 	List(ctx context.Context, actorID, householdID uuid.UUID) ([]domain.Invitation, error)
 	Revoke(ctx context.Context, actorID, householdID, invitationID uuid.UUID) error
+	Preview(ctx context.Context, userID uuid.UUID, tokenOrCode string) (domain.InvitationPreview, error)
+	Accept(ctx context.Context, userID uuid.UUID, tokenOrCode string) (domain.HouseholdWithRole, error)
 }
 
 func (s *server) CreateInvitation(ctx context.Context, req oapi.CreateInvitationRequestObject) (oapi.CreateInvitationResponseObject, error) {
@@ -60,4 +62,25 @@ func toInvitation(inv domain.Invitation) oapi.Invitation {
 		ExpiresAt: inv.ExpiresAt.UTC(),
 		CreatedAt: inv.CreatedAt.UTC(),
 	}
+}
+
+func (s *server) GetInvitation(ctx context.Context, req oapi.GetInvitationRequestObject) (oapi.GetInvitationResponseObject, error) {
+	p, err := s.invitations.Preview(ctx, currentUser(ctx).ID, req.TokenOrCode)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.GetInvitation200JSONResponse{
+		HouseholdName: p.HouseholdName,
+		Role:          oapi.Role(p.Role),
+		ExpiresAt:     p.ExpiresAt.UTC(),
+		AlreadyMember: p.AlreadyMember,
+	}, nil
+}
+
+func (s *server) AcceptInvitation(ctx context.Context, req oapi.AcceptInvitationRequestObject) (oapi.AcceptInvitationResponseObject, error) {
+	h, err := s.invitations.Accept(ctx, currentUser(ctx).ID, req.TokenOrCode)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.AcceptInvitation200JSONResponse(toHousehold(h)), nil
 }

@@ -77,3 +77,38 @@ func TestNewInvitationSecret_Random(t *testing.T) {
 		}
 	}
 }
+
+func TestParseInvitationKey(t *testing.T) {
+	t.Parallel()
+
+	token := strings.Repeat("a", 43)
+	tests := []struct {
+		name     string
+		in       string
+		wantCode string // 空ならトークンとして扱う
+	}{
+		{name: "コード", in: "K7MP2QXA", wantCode: "K7MP2QXA"},
+		{name: "小文字のコードは大文字にそろえる", in: "k7mp2qxa", wantCode: "K7MP2QXA"},
+		{name: "空白とハイフンは無視する", in: " K7MP-2QXA ", wantCode: "K7MP2QXA"},
+		{name: "使わない文字（O）を含む8文字は、コードではない", in: "K7MP2QXO"},
+		{name: "8文字でなければ、コードではない", in: "K7MP2QX"},
+		{name: "トークン", in: token},
+		{name: "空", in: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := domain.ParseInvitationKey(tt.in)
+			if tt.wantCode != "" {
+				if got.Code != tt.wantCode || got.TokenHash != nil {
+					t.Errorf("got %+v, want code %s", got, tt.wantCode)
+				}
+				return
+			}
+			// トークンは、受け取ったままの文字列のハッシュで探す
+			if got.Code != "" || !bytes.Equal(got.TokenHash, domain.HashInvitationToken(tt.in)) {
+				t.Errorf("got %+v, want the token hash of %q", got, tt.in)
+			}
+		})
+	}
+}

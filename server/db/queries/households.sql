@@ -29,3 +29,6 @@ RETURNING *;
 -- name: DeleteHousehold :exec
 -- 配下のデータ（メンバー・招待・置き場所・植物・タスク・記録・メモ・提案など）は ON DELETE CASCADE で消える
 DELETE FROM households WHERE id = $1;
+
+-- name: GetHousehold :one
+SELECT * FROM households WHERE id = $1;

@@ -19,6 +19,8 @@ type fakeInvitations struct {
 	attempts  int
 	created   []domain.InvitationSecret
 	revoked   []uuid.UUID
+	keys      []domain.InvitationKey
+	joined    []uuid.UUID
 }
 
 func (f *fakeInvitations) Create(_ context.Context, householdID, _ uuid.UUID, role domain.Role, s domain.InvitationSecret) (domain.Invitation, error) {
@@ -32,6 +34,26 @@ func (f *fakeInvitations) Create(_ context.Context, householdID, _ uuid.UUID, ro
 
 func (f *fakeInvitations) ListActive(_ context.Context, _ uuid.UUID) ([]domain.Invitation, error) {
 	return []domain.Invitation{}, nil
+}
+
+// validCode は、fakeInvitations が有効として扱う唯一の招待コードである。
+const validCode = "K7MP2QXA"
+
+func (f *fakeInvitations) Preview(_ context.Context, key domain.InvitationKey, _ uuid.UUID) (domain.InvitationPreview, error) {
+	f.keys = append(f.keys, key)
+	if key.Code != validCode {
+		return domain.InvitationPreview{}, domain.ErrInvitationInvalid
+	}
+	return domain.InvitationPreview{HouseholdName: "自宅", Role: domain.RoleEditor}, nil
+}
+
+func (f *fakeInvitations) Accept(_ context.Context, key domain.InvitationKey, userID uuid.UUID) (domain.HouseholdWithRole, error) {
+	f.keys = append(f.keys, key)
+	if key.Code != validCode {
+		return domain.HouseholdWithRole{}, domain.ErrInvitationInvalid
+	}
+	f.joined = append(f.joined, userID)
+	return domain.HouseholdWithRole{Household: domain.Household{Name: "自宅"}, Role: domain.RoleEditor}, nil
 }
 
 func (f *fakeInvitations) Revoke(_ context.Context, _, invitationID uuid.UUID) error {
@@ -160,4 +182,47 @@ func TestInvitationService_ListAndRevoke(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInvitationService_PreviewAndAccept(t *testing.T) {
+	t.Parallel()
+
+	t.Run("手入力のコードを正規化して探す", func(t *testing.T) {
+		t.Parallel()
+		invitations := &fakeInvitations{}
+		f, svc := newInvitationService(t, invitations)
+
+		p, err := svc.Preview(t.Context(), f.stranger, "k7mp-2qxa")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.HouseholdName != "自宅" || invitations.keys[0].Code != validCode {
+			t.Errorf("preview = %+v, key = %+v", p, invitations.keys[0])
+		}
+	})
+
+	t.Run("参加すると、招待のロールの世帯を返す", func(t *testing.T) {
+		t.Parallel()
+		invitations := &fakeInvitations{}
+		f, svc := newInvitationService(t, invitations)
+
+		h, err := svc.Accept(t.Context(), f.stranger, validCode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h.Role != domain.RoleEditor || len(invitations.joined) != 1 || invitations.joined[0] != f.stranger {
+			t.Errorf("household = %+v, joined = %v", h, invitations.joined)
+		}
+	})
+
+	t.Run("無効な招待は ErrInvitationInvalid", func(t *testing.T) {
+		t.Parallel()
+		f, svc := newInvitationService(t, &fakeInvitations{})
+		if _, err := svc.Preview(t.Context(), f.stranger, "AAAAAAAA"); !errors.Is(err, domain.ErrInvitationInvalid) {
+			t.Errorf("preview: err = %v", err)
+		}
+		if _, err := svc.Accept(t.Context(), f.stranger, "some-token"); !errors.Is(err, domain.ErrInvitationInvalid) {
+			t.Errorf("accept: err = %v", err)
+		}
+	})
 }

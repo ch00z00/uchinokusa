@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,4 +65,29 @@ func NewInvitationSecret() (InvitationSecret, error) {
 func HashInvitationToken(token string) []byte {
 	h := sha256.Sum256([]byte(token))
 	return h[:]
+}
+
+// InvitationKey は、招待を探すための鍵である。Code か TokenHash のどちらか一方だけを持つ。
+type InvitationKey struct {
+	Code      string
+	TokenHash []byte
+}
+
+// ParseInvitationKey は、招待リンクのトークンか招待コードを読む。
+// 空白とハイフンを除いて大文字にした結果が、使える文字だけの8文字ならコード、そうでなければトークンとして扱う。
+// トークン（43文字）とコード（8文字）は長さが違うので、取り違えることはない。
+func ParseInvitationKey(s string) InvitationKey {
+	code := strings.ToUpper(strings.NewReplacer(" ", "", "-", "").Replace(s))
+	if len(code) == invitationCodeLength && strings.Trim(code, InvitationCodeAlphabet) == "" {
+		return InvitationKey{Code: code}
+	}
+	return InvitationKey{TokenHash: HashInvitationToken(s)}
+}
+
+// InvitationPreview は、参加の確認画面に表示する、招待の内容である（要件3-3・3-6）。
+type InvitationPreview struct {
+	HouseholdName string
+	Role          Role
+	ExpiresAt     time.Time
+	AlreadyMember bool
 }
