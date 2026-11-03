@@ -1,4 +1,4 @@
-// Package db は、マイグレーションの SQL ファイルをバイナリに埋め込んで提供する。
+// Package db は、マイグレーションの SQL ファイルと初期データをバイナリに埋め込んで提供する。
 package db
 
 import "embed"
@@ -7,3 +7,8 @@ import "embed"
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS
+
+// SpeciesSeed は、植物マスタの初期データ（seeds/species.yaml）である。
+//
+//go:embed seeds/species.yaml
+var SpeciesSeed []byte

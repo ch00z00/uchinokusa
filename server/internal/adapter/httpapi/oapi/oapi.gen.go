@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -80,6 +81,27 @@ func (e Hemisphere) Valid() bool {
 	}
 }
 
+// Defines values for Level.
+const (
+	LevelHigh   Level = "high"
+	LevelLow    Level = "low"
+	LevelMedium Level = "medium"
+)
+
+// Valid indicates whether the value is a known member of the Level enum.
+func (e Level) Valid() bool {
+	switch e {
+	case LevelHigh:
+		return true
+	case LevelLow:
+		return true
+	case LevelMedium:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for Platform.
 const (
 	PlatformAndroid Platform = "android"
@@ -113,6 +135,27 @@ func (e Role) Valid() bool {
 	case RoleOwner:
 		return true
 	case RoleViewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WaterTendency.
+const (
+	WaterTendencyLess     WaterTendency = "less"
+	WaterTendencyModerate WaterTendency = "moderate"
+	WaterTendencyMore     WaterTendency = "more"
+)
+
+// Valid indicates whether the value is a known member of the WaterTendency enum.
+func (e WaterTendency) Valid() bool {
+	switch e {
+	case WaterTendencyLess:
+		return true
+	case WaterTendencyModerate:
+		return true
+	case WaterTendencyMore:
 		return true
 	default:
 		return false
@@ -296,6 +339,9 @@ type InvitationPreview struct {
 	Role Role `json:"role"`
 }
 
+// Level 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
+type Level string
+
 // Me 自分のプロフィール
 type Me struct {
 	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
@@ -356,6 +402,32 @@ type RegisterDeviceRequest struct {
 // Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
 type Role string
 
+// Species 植物マスタの1種類（全ユーザー共通）。性質の項目は、出典で確かめられたものだけを持つ。
+// 項目がない場合は「わからない」を表す（推測した値は入れない）
+type Species struct {
+	// AirflowNeed 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
+	AirflowNeed *Level   `json:"airflowNeed,omitempty"`
+	Aliases     []string `json:"aliases"`
+
+	// HumidityLevel 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
+	HumidityLevel *Level             `json:"humidityLevel,omitempty"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// LightLevel 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
+	LightLevel *Level `json:"lightLevel,omitempty"`
+
+	// MinTempC 冬越しの最低温度の目安（℃）
+	MinTempC *float64 `json:"minTempC,omitempty"`
+	NameJa   string   `json:"nameJa"`
+
+	// OutdoorOk 春〜秋に屋外に出せるか
+	OutdoorOk      *bool   `json:"outdoorOk,omitempty"`
+	ScientificName *string `json:"scientificName,omitempty"`
+
+	// WaterTendency 水やりの量の傾向（`less`：乾かし気味、`moderate`：鉢土の表面が乾いたら、`more`：乾かさない）
+	WaterTendency *WaterTendency `json:"waterTendency,omitempty"`
+}
+
 // TransferOwnershipRequest defines model for TransferOwnershipRequest.
 type TransferOwnershipRequest struct {
 	// UserId 新しいオーナー。自分自身なら `fields.userId = invalid`、世帯のメンバーでなければ `not_member`
@@ -384,6 +456,9 @@ type UpdateMemberRoleRequest struct {
 	// Role `editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`
 	Role string `json:"role"`
 }
+
+// WaterTendency 水やりの量の傾向（`less`：乾かし気味、`moderate`：鉢土の表面が乾いたら、`more`：乾かさない）
+type WaterTendency string
 
 // HouseholdId defines model for HouseholdId.
 type HouseholdId = openapi_types.UUID
@@ -426,6 +501,12 @@ type Unauthenticated = Error
 // ValidationFailed すべてのエラーレスポンスの共通の形。
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type ValidationFailed = Error
+
+// SearchSpeciesParams defines parameters for SearchSpecies.
+type SearchSpeciesParams struct {
+	// Q 検索語。100文字まで（長すぎる場合は `fields.q = too_long`）
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
 
 // CreateHouseholdJSONRequestBody defines body for CreateHousehold for application/json ContentType.
 type CreateHouseholdJSONRequestBody = CreateHouseholdRequest
@@ -510,6 +591,9 @@ type ServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(w http.ResponseWriter, r *http.Request, deviceId openapi_types.UUID)
+	// SearchSpecies 植物マスタを和名・学名・別名で検索する
+	// (GET /species)
+	SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -982,6 +1066,39 @@ func (siw *ServerInterfaceWrapper) UnregisterDevice(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// SearchSpecies operation middleware
+func (siw *ServerInterfaceWrapper) SearchSpecies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SearchSpeciesParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SearchSpecies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1121,6 +1238,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/households/{householdId}/invitations/{invitationId}", wrapper.RevokeInvitation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/invitations/{tokenOrCode}", wrapper.GetInvitation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/invitations/{tokenOrCode}/accept", wrapper.AcceptInvitation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
 }
@@ -2774,6 +2892,72 @@ func (response UnregisterDevice500JSONResponse) VisitUnregisterDeviceResponse(w 
 	return err
 }
 
+type SearchSpeciesRequestObject struct {
+	Params SearchSpeciesParams
+}
+
+type SearchSpeciesResponseObject interface {
+	VisitSearchSpeciesResponse(w http.ResponseWriter) error
+}
+
+type SearchSpecies200JSONResponse struct {
+	Species []Species `json:"species"`
+}
+
+func (response SearchSpecies200JSONResponse) VisitSearchSpeciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchSpecies401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response SearchSpecies401JSONResponse) VisitSearchSpeciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchSpecies422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response SearchSpecies422JSONResponse) VisitSearchSpeciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchSpecies500JSONResponse struct{ InternalJSONResponse }
+
+func (response SearchSpecies500JSONResponse) VisitSearchSpeciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -2833,6 +3017,9 @@ type StrictServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(ctx context.Context, request UnregisterDeviceRequestObject) (UnregisterDeviceResponseObject, error)
+	// SearchSpecies 植物マスタを和名・学名・別名で検索する
+	// (GET /species)
+	SearchSpecies(ctx context.Context, request SearchSpeciesRequestObject) (SearchSpeciesResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -3410,6 +3597,32 @@ func (sh *strictHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UnregisterDeviceResponseObject); ok {
 		if err := validResponse.VisitUnregisterDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SearchSpecies operation middleware
+func (sh *strictHandler) SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams) {
+	var request SearchSpeciesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchSpecies(ctx, request.(SearchSpeciesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchSpecies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SearchSpeciesResponseObject); ok {
+		if err := validResponse.VisitSearchSpeciesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

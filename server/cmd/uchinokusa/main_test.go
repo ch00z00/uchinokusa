@@ -50,13 +50,33 @@ func TestRun_InvalidConfig(t *testing.T) {
 	}
 }
 
-func TestRun_NotImplementedYet(t *testing.T) {
+// seed は、何度実行しても同じ結果になる（植物マスタの行が重ならない）。
+func TestRun_Seed(t *testing.T) {
 	t.Parallel()
+	ctx := t.Context()
+	dbURL := pgtest.NewEmptyURL(t)
+	env := envFrom(map[string]string{"DATABASE_URL": dbURL})
 
-	// seed は、タスク 6.1 で植物マスタの初期データとあわせて実装する
-	err := run(context.Background(), []string{"seed"}, envFrom(validEnv), io.Discard)
-	if !errors.Is(err, errNotImplemented) {
-		t.Errorf("run(seed) error = %v, want errNotImplemented", err)
+	if err := run(ctx, []string{"migrate"}, env, io.Discard); err != nil {
+		t.Fatalf("run(migrate) error = %v", err)
+	}
+	for i := range 2 {
+		if err := run(ctx, []string{"seed"}, env, io.Discard); err != nil {
+			t.Fatalf("run(seed) #%d error = %v", i+1, err)
+		}
+	}
+
+	conn, err := pgx.Connect(ctx, dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	var total, distinct int
+	if err := conn.QueryRow(ctx, `SELECT count(*), count(DISTINCT slug) FROM species`).Scan(&total, &distinct); err != nil {
+		t.Fatal(err)
+	}
+	if total < 30 || total != distinct {
+		t.Errorf("species: total = %d, distinct slugs = %d, want at least 30 and no duplicates", total, distinct)
 	}
 }
 

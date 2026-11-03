@@ -14,6 +14,7 @@ type server struct {
 	households  HouseholdService
 	members     MembershipService
 	invitations InvitationService
+	species     SpeciesService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)

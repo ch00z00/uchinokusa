@@ -31,6 +31,17 @@ sql:
             go_type:
               type: string
               pointer: true
+          # NULL になりうる numeric（植物マスタの最低温度）は、pgtype.Numeric ではなく *float64 にする
+          - db_type: pg_catalog.numeric
+            nullable: true
+            go_type:
+              type: float64
+              pointer: true
+          - db_type: pg_catalog.bool
+            nullable: true
+            go_type:
+              type: bool
+              pointer: true
           - db_type: timestamptz
             nullable: true
             go_type:

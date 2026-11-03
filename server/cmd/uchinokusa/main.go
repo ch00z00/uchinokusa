@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,9 +23,11 @@ import (
 	// 端末のタイムゾーンの検証とリマインダーの判定ができるようにする
 	_ "time/tzdata"
 
+	"github.com/ch00z00/uchinokusa/server/db"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/firebase"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/seedfile"
 	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
@@ -37,10 +40,7 @@ commands:
   migrate  run database migrations
   seed     load the plant species master data`
 
-var (
-	errUsage          = errors.New(usage)
-	errNotImplemented = errors.New("not implemented yet")
-)
+var errUsage = errors.New(usage)
 
 // shutdownTimeout は、停止の合図を受けてから、処理中のリクエストの完了を待つ時間である。
 // Cloud Run は SIGTERM のあと10秒で強制終了するため、それより短くする。
@@ -61,8 +61,7 @@ type command func(ctx context.Context, cfg config.Config, logger *slog.Logger) e
 var commands = map[string]command{
 	"serve":   serve,
 	"migrate": migrate,
-	// seed は、タスク 6.1 で植物マスタの初期データとあわせて実装する
-	"seed": notImplemented("seed"),
+	"seed":    seed,
 }
 
 // run は、サブコマンドを振り分けて実行する。テストしやすいように、外部への依存を引数で受け取る。
@@ -84,10 +83,25 @@ func run(ctx context.Context, args []string, getenv func(string) string, logOut 
 	return cmd(ctx, cfg, logger)
 }
 
-func notImplemented(name string) command {
-	return func(context.Context, config.Config, *slog.Logger) error {
-		return fmt.Errorf("%s: %w", name, errNotImplemented)
+// seed は、植物マスタの初期データ（db/seeds/species.yaml）を検証してから投入する。
+// slug をキーに追加・上書きするので、何度実行しても同じ結果になる。データに誤りがあれば、何も投入しない。
+func seed(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+	list, err := seedfile.ParseSpecies(bytes.NewReader(db.SpeciesSeed))
+	if err != nil {
+		return fmt.Errorf("seed: %w", err)
 	}
+	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	res, err := postgres.NewSpeciesRepository(pool).UpsertAll(ctx, list)
+	if err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+	logger.Info("species seeded", slog.Int("inserted", res.Inserted), slog.Int("updated", res.Updated))
+	return nil
 }
 
 // migrate は、まだ適用していないマイグレーションをすべて適用する。
@@ -124,6 +138,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Households:  app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
 		Members:     app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
 		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),
+		Species:     app.NewSpeciesService(postgres.NewSpeciesRepository(pool)),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

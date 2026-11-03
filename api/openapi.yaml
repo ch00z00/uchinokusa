@@ -436,6 +436,38 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /species:
+    get:
+      operationId: searchSpecies
+      summary: 植物マスタを和名・学名・別名で検索する
+      description: |
+        部分一致で探す。ひらがな・カタカナ、全角・半角、大文字・小文字を区別せず、空白と中黒（・）を無視する（要件6-2）。
+        和名で一致したものを先に、最大20件を返す。`q` が空なら、和名の順に20件を返す。
+        見つからない種類は、植物の登録で自由入力できる（要件6-3）
+      tags: [species]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: 検索語。100文字まで（長すぎる場合は `fields.q = too_long`）
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 一致した種類
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [species]
+                properties:
+                  species:
+                    type: array
+                    items: { $ref: "#/components/schemas/Species" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
 components:
   parameters:
     TokenOrCode:
@@ -645,6 +677,50 @@ components:
           $ref: "#/components/schemas/DateTime"
         alreadyMember:
           description: すでにこの世帯のメンバーなら true（参加済みであることを表示する。要件3-6）
+          type: boolean
+
+    Level:
+      description: 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
+      type: string
+      enum: [low, medium, high]
+
+    WaterTendency:
+      description: 水やりの量の傾向（`less`：乾かし気味、`moderate`：鉢土の表面が乾いたら、`more`：乾かさない）
+      type: string
+      enum: [less, moderate, more]
+
+    Species:
+      description: |
+        植物マスタの1種類（全ユーザー共通）。性質の項目は、出典で確かめられたものだけを持つ。
+        項目がない場合は「わからない」を表す（推測した値は入れない）
+      type: object
+      required: [id, nameJa, aliases]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nameJa:
+          type: string
+        scientificName:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        lightLevel:
+          $ref: "#/components/schemas/Level"
+        minTempC:
+          description: 冬越しの最低温度の目安（℃）
+          type: number
+          format: double
+        humidityLevel:
+          $ref: "#/components/schemas/Level"
+        airflowNeed:
+          $ref: "#/components/schemas/Level"
+        waterTendency:
+          $ref: "#/components/schemas/WaterTendency"
+        outdoorOk:
+          description: 春〜秋に屋外に出せるか
           type: boolean
 
     Platform:

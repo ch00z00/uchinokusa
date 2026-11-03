@@ -155,15 +155,17 @@ type Species struct {
 	ScientificName  *string
 	Aliases         []string
 	LightLevel      *string
-	MinTempC        pgtype.Numeric
+	MinTempC        *float64
 	HumidityLevel   *string
 	AirflowNeed     *string
 	WaterTendency   *string
-	OutdoorOk       pgtype.Bool
+	OutdoorOk       *bool
 	RecommendedCare []byte
 	Attributes      []byte
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	Slug            string
+	SearchText      string
 }
 
 type Suggestion struct {

@@ -9,6 +9,7 @@ docker compose up -d
 cp .env.example .env
 set -a; source .env; set +a
 go run ./cmd/uchinokusa migrate
+go run ./cmd/uchinokusa seed
 go run ./cmd/uchinokusa serve
 
 curl -i http://localhost:8080/healthz
@@ -25,7 +26,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/me
 |---|---|
 | `serve` | API サーバーを起動する。SIGINT / SIGTERM を受けると、処理中のリクエストを待ってから停止する |
 | `migrate` | まだ適用していないマイグレーションをすべて適用する（適用済みなら何もしない） |
-| `seed` | 植物マスタの初期データを投入する（タスク 6.1 で実装） |
+| `seed` | 植物マスタの初期データ（`db/seeds/species.yaml`）を検証してから投入する。何度実行しても同じ結果になる |
 
 ## 環境変数
 | 名前 | 必須 | 初期値 | 内容 |

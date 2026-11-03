@@ -1,0 +1,332 @@
+# 植物マスタの初期データ（全ユーザー共通）。`uchinokusa seed` で投入する（docs/decisions/0015）。
+#
+# 決まり（`seed` の前に検証し、守られていなければ投入しない）
+# - 性質（light_level など）・水やり・植え替えの適期は、出典で確かめられた値だけを入れる。わからなければ書かない
+#   （園芸の値を推測で入れない。docs/decisions/0009）
+# - 値を入れた項目は、どれかの出典の fields に挙げる。quote には、値の根拠になった文を書く
+# - slug は投入のキーなので、一度決めたら変えない（変えると別の種類として追加される）
+#
+# 値の決め方（出典の文 → 値）
+# - light_level：「日当たりのよい場所」「日光によく当てる」→ high、「半日陰」「明るい日陰」→ medium、「日陰で育てる」→ low
+# - humidity_level：「多湿を好む」→ high
+# - airflow_need：「風通しのよい場所に置く」→ high
+# - water_tendency：「乾かし気味に管理」→ less、「鉢土の表面が乾いたら」→ moderate、「乾かさない」→ more
+# - outdoor_ok：「春から秋は戸外に置ける」→ true
+# - repotting_suitable_months：適期の月。「5月中旬から」のように月の途中から始まる場合も、その月を含める
+#   避ける時期は出典に書かれていないことが多いため、既定値（真夏・真冬）から適期の月を除いたものを使う
+
+# --- 性質を出典で確かめた種類（出典：みんなの趣味の園芸 植物図鑑、NHK出版） ---
+
+- slug: monstera-deliciosa
+  name_ja: モンステラ
+  scientific_name: Monstera deliciosa
+  aliases: [ホウライショウ, デンシンラン, ペッサム]
+  light_level: high
+  airflow_need: high
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+  repotting_suitable_months: [5, 6, 7, 8, 9]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-79/target_tab-2
+      title: モンステラの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, airflow_need, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        できるだけ日光に当てたほうが、しっかりした株に育ちます。／風通しのよい場所に置き、／
+        年間を通して鉢土の表面が乾いてきたら水を与えれば十分です。／
+        春から秋に戸外やベランダなどに置いた株は、冬は室内に取り込みます。／5月から9月に植え替えます。
+
+- slug: epipremnum-aureum
+  name_ja: ポトス
+  scientific_name: Epipremnum pinnatum 'Aureum'
+  aliases: [オウゴンカズラ, エピプレムナム]
+  light_level: medium
+  humidity_level: high
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+    winter: 乾かし気味に管理する
+  repotting_suitable_months: [5, 6, 7, 8]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-78/target_tab-2
+      title: ポトスの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, humidity_level, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        春から秋までは半日陰に置き、冬は光線によく当てます。／多湿を好むので、年間を通してこまめに葉水を与えます。／
+        鉢土の表面が乾いてきたら水を与えます。冬は乾かし気味に管理します。／
+        春から秋に戸外やベランダなどに置いた株は、冬は室内に取り込みます。／5月中旬から8月に行います。
+
+- slug: sansevieria
+  name_ja: サンセベリア
+  scientific_name: Sansevieria
+  aliases: [サンスベリア, トラノオ, チトセラン]
+  light_level: high
+  airflow_need: high
+  water_tendency: less
+  outdoor_ok: true
+  watering:
+    condition: 鉢土が乾いたら
+    winter: 鉢土を乾燥させ、休眠させる（トリファスキアタの園芸品種）
+  repotting_suitable_months: [5, 6, 7, 8]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-75/target_tab-2
+      title: サンセベリアの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, airflow_need, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        できるだけ日当たりのよい場所に置き、乾かし気味に管理します。／風通しのよい場所に置き、／
+        春から秋は、鉢土が乾いたら水を与えます。／冬は、トリファスキアタの園芸品種は鉢土を乾燥させ、休眠状態にします。／
+        春から秋に戸外やベランダなどに置いた株は、冬は室内に取り込みます。／毎年5月中旬から8月に植え替えます。
+
+- slug: pachira-glabra
+  name_ja: パキラ
+  scientific_name: Pachira glabra
+  aliases: [Pachira aquatica]
+  light_level: high
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+  repotting_suitable_months: [5, 6, 7, 8, 9]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-77/target_tab-2
+      title: パキラの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        できるだけ日光に当てたほうがしっかりした株に育ちます。／
+        年間を通して、鉢土の表面が乾いてきたら水を与えれば十分です。／
+        春から秋に戸外やベランダなどに置いた株は、冬は室内に取り込みます。／5月から9月に、一回り大きな鉢に植え替えます。
+
+- slug: ficus-microcarpa
+  name_ja: ガジュマル
+  scientific_name: Ficus microcarpa
+  light_level: high
+  min_temp_c: 5
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてから
+  repotting_suitable_months: [5, 6, 7, 8, 9]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-1045/target_tab-2
+      title: ガジュマルの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, min_temp_c, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        春から秋は屋外の日当たりのよい場所で育てるのが理想的です。／冬は室内の明るい場所で5℃以上保つようにしてください。／
+        鉢土の表面が乾いてから水やりします。／小鉢は1～2年に1回、大鉢は2～3年に1回、5月から9月に植え替えてください。
+
+- slug: dracaena-fragrans
+  name_ja: ドラセナ・フラグランス
+  scientific_name: Dracaena fragrans
+  aliases: [幸福の木, ニオイセンネンボク, マッサンゲアナ]
+  light_level: high
+  humidity_level: high
+  water_tendency: moderate
+  watering:
+    condition: 鉢土が乾いてきたら
+    winter: 乾かし気味にし、鉢土が乾いてから与える
+  repotting_suitable_months: [5, 6, 7]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-190/target_tab-2
+      title: ドラセナ・フラグランス（幸福の木など）の育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, humidity_level, water_tendency, watering, repotting]
+      quote: >-
+        耐陰性はありますが、年間を通して日光によく当てたほうが形よく育ちます。／
+        多湿を好むので、年間を通してこまめに葉水を与えます。／
+        春から秋は鉢土が乾いてきたら水を与え／冬は乾かし気味とし、鉢土が乾いてから与えます。／5月中旬から7月に植え替えます。
+
+- slug: schefflera
+  name_ja: シェフレラ
+  scientific_name: Schefflera
+  aliases: [カポック, ホンコンカポック, フカノキ]
+  light_level: medium
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+  repotting_suitable_months: [5, 6, 7, 8, 9]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-76/target_tab-2
+      title: シェフレラの育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        半日陰くらいの場所に置き、ときどき直射日光に当てるようにします。／
+        年間を通して、鉢土の表面が乾いてきたら水を与えれば十分です。／
+        春から秋に戸外やベランダに置いた株は、東京以西なら冬でも戸外で冬越しするので、そのまま置いておいても大丈夫です。／
+        植えかえは2年に1回程度でよく、5月から9月に行います。
+
+- slug: ficus-elastica
+  name_ja: インドゴムノキ
+  scientific_name: Ficus elastica
+  aliases: [ゴムノキ, ゴムの木, フィカス・エラスティカ, デコラ]
+  light_level: high
+  water_tendency: moderate
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+    winter: 鉢土が乾いてきたら与える
+  repotting_suitable_months: [5, 6, 7, 8, 9]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-123/target_tab-2
+      title: インドゴムノキ（フィカス・エラスティカ）の育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, water_tendency, watering, repotting]
+      quote: >-
+        日陰でも育ちますが、年間を通してできるだけ日当たりのよい場所に置きます。／
+        春から秋は鉢土の表面が乾いてきたら与え／冬は鉢土が乾いてきたら与えます。／適期は5月から9月です。
+
+- slug: ficus-benjamina
+  name_ja: ベンジャミン
+  scientific_name: Ficus benjamina
+  aliases: [シダレガジュマル, ベンジャミンゴム, フィカス・ベンジャミナ]
+  light_level: high
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いてきたら
+    winter: 乾かし気味にする
+  repotting_suitable_months: [5, 6, 7, 8]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-128/target_tab-2
+      title: ベンジャミンゴムノキ（フィカス・ベンジャミナ）の育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        明るい日陰でも育ちますが、株をしっかり育てるには、できるだけ日当たりのよい場所に置き／
+        春から秋は鉢土の表面が乾いてきたら与え／冬は乾かし気味にします。／
+        春から秋までは戸外でよいですが、冬は室内に置きます。／適期は5月中旬から8月です。
+
+- slug: ficus-lyrata
+  name_ja: カシワバゴムノキ
+  scientific_name: Ficus lyrata
+  aliases: [フィカス・リラータ]
+  light_level: high
+  min_temp_c: 5
+  water_tendency: moderate
+  outdoor_ok: true
+  watering:
+    condition: 鉢土の表面が乾いたら
+    winter: 乾かし気味に管理する
+  repotting_suitable_months: [5, 6, 7]
+  sources:
+    - url: https://www.shuminoengei.jp/m-pc/a-page_p_detail/target_plant_code-1220/target_tab-2
+      title: カシワバゴムノキ（フィカス・リラータ）の育て方・栽培方法｜植物図鑑｜みんなの趣味の園芸（NHK出版）
+      accessed_on: 2026-11-03
+      fields: [light_level, min_temp_c, water_tendency, outdoor_ok, watering, repotting]
+      quote: >-
+        春から秋は戸外の日当たりのよい場所で育てると株姿が引き締まります。／
+        冬は室内の明るい場所で、5℃以上を保って冬越しさせます。／鉢土の表面が乾いたら水やりします。／
+        冬は乾かし気味に管理します。／5月から7月が作業の適期です。
+
+# --- 名前だけの種類（検索の候補に出す。性質は出典を確かめてから足す） ---
+
+- slug: ficus-umbellata
+  name_ja: フィカス・ウンベラータ
+  scientific_name: Ficus umbellata
+  aliases: [ウンベラータ]
+
+- slug: zamioculcas-zamiifolia
+  name_ja: ザミオクルカス
+  scientific_name: Zamioculcas zamiifolia
+  aliases: [ZZプラント]
+
+- slug: spathiphyllum
+  name_ja: スパティフィラム
+  scientific_name: Spathiphyllum
+
+- slug: chlorophytum-comosum
+  name_ja: オリヅルラン
+  scientific_name: Chlorophytum comosum
+  aliases: [オリズルラン]
+
+- slug: alocasia-odora
+  name_ja: クワズイモ
+  scientific_name: Alocasia odora
+
+- slug: hedera-helix
+  name_ja: ヘデラ
+  scientific_name: Hedera helix
+  aliases: [アイビー, セイヨウキヅタ]
+
+- slug: aglaonema
+  name_ja: アグラオネマ
+  scientific_name: Aglaonema
+
+- slug: dieffenbachia
+  name_ja: ディフェンバキア
+  scientific_name: Dieffenbachia
+
+- slug: calathea
+  name_ja: カラテア
+  scientific_name: Calathea
+
+- slug: maranta-leuconeura
+  name_ja: マランタ
+  scientific_name: Maranta leuconeura
+
+- slug: peperomia
+  name_ja: ペペロミア
+  scientific_name: Peperomia
+
+- slug: adiantum
+  name_ja: アジアンタム
+  scientific_name: Adiantum
+
+- slug: nephrolepis
+  name_ja: ネフロレピス
+  scientific_name: Nephrolepis
+  aliases: [ボストンファン]
+
+- slug: asplenium
+  name_ja: アスプレニウム
+  scientific_name: Asplenium
+
+- slug: chamaedorea-elegans
+  name_ja: テーブルヤシ
+  scientific_name: Chamaedorea elegans
+
+- slug: dypsis-lutescens
+  name_ja: アレカヤシ
+  scientific_name: Dypsis lutescens
+
+- slug: rhapis-excelsa
+  name_ja: カンノンチク
+  scientific_name: Rhapis excelsa
+
+- slug: yucca-gigantea
+  name_ja: ユッカ
+  scientific_name: Yucca gigantea
+  aliases: [青年の木, ユッカ・エレファンティペス]
+
+- slug: beaucarnea-recurvata
+  name_ja: トックリラン
+  scientific_name: Beaucarnea recurvata
+  aliases: [ポニーテール]
+
+- slug: syngonium-podophyllum
+  name_ja: シンゴニウム
+  scientific_name: Syngonium podophyllum
+
+- slug: polyscias
+  name_ja: ポリシャス
+  scientific_name: Polyscias
+
+- slug: strelitzia-nicolai
+  name_ja: オーガスタ
+  scientific_name: Strelitzia nicolai
+
+- slug: hoya-carnosa
+  name_ja: ホヤ
+  scientific_name: Hoya carnosa
+  aliases: [サクララン]
+
+- slug: philodendron
+  name_ja: フィロデンドロン
+  scientific_name: Philodendron

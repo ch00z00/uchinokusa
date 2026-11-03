@@ -74,7 +74,7 @@ func TestAttributesColumns(t *testing.T) {
 	hh := f.household()
 	loc := f.location(hh)
 	plant := f.plant(hh, &loc)
-	f.exec(`INSERT INTO species (name_ja) VALUES ('モンステラ')`)
+	f.exec(`INSERT INTO species (slug, name_ja) VALUES ('monstera-deliciosa', 'モンステラ')`)
 
 	for _, table := range []string{"households", "locations", "plants", "species"} {
 		var attrs string
