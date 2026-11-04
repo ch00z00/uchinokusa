@@ -231,3 +231,25 @@ func TestTodayIn(t *testing.T) {
 		t.Errorf("unknown: %v", got)
 	}
 }
+
+func TestResumedNextDueOn(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		next civil.Date
+		want civil.Date
+	}{
+		{"次回予定がまだ先なら、そのまま使う", civil.Date{Year: 2026, Month: 11, Day: 20}, civil.Date{Year: 2026, Month: 11, Day: 20}},
+		{"次回予定が今日なら、そのまま使う", taskToday, taskToday},
+		{"次回予定が過ぎていたら、今日にする", civil.Date{Year: 2026, Month: 10, Day: 1}, taskToday},
+		{"次回予定がなければ、今日にする", civil.Date{}, taskToday},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := domain.ResumedNextDueOn(tt.next, taskToday); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

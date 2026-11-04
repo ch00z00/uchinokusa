@@ -896,6 +896,9 @@ type HouseholdId = openapi_types.UUID
 // PlantId defines model for PlantId.
 type PlantId = openapi_types.UUID
 
+// TaskId defines model for TaskId.
+type TaskId = openapi_types.UUID
+
 // TokenOrCode defines model for TokenOrCode.
 type TokenOrCode = string
 
@@ -1102,10 +1105,16 @@ type ServerInterface interface {
 	SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams)
 	// DeleteCareTask お手入れタスクを削除する（編集者以上）
 	// (DELETE /tasks/{taskId})
-	DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
+	DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
 	// UpdateCareTask お手入れタスクを変更する（編集者以上）
 	// (PATCH /tasks/{taskId})
-	UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
+	UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
+	// PauseCareTask お手入れタスクを一時停止する（編集者以上）
+	// (POST /tasks/{taskId}/pause)
+	PauseCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
+	// ResumeCareTask 一時停止したお手入れタスクを再開する（編集者以上）
+	// (POST /tasks/{taskId}/resume)
+	ResumeCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -2024,7 +2033,7 @@ func (siw *ServerInterfaceWrapper) DeleteCareTask(w http.ResponseWriter, r *http
 	_ = err
 
 	// ------------- Path parameter "taskId" -------------
-	var taskId openapi_types.UUID
+	var taskId TaskId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
@@ -2050,7 +2059,7 @@ func (siw *ServerInterfaceWrapper) UpdateCareTask(w http.ResponseWriter, r *http
 	_ = err
 
 	// ------------- Path parameter "taskId" -------------
-	var taskId openapi_types.UUID
+	var taskId TaskId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
@@ -2060,6 +2069,58 @@ func (siw *ServerInterfaceWrapper) UpdateCareTask(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateCareTask(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PauseCareTask operation middleware
+func (siw *ServerInterfaceWrapper) PauseCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId TaskId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseCareTask(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResumeCareTask operation middleware
+func (siw *ServerInterfaceWrapper) ResumeCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId TaskId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeCareTask(w, r, taskId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2224,6 +2285,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/task-defaults", wrapper.ListCareTaskDefaults)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tasks/{taskId}", wrapper.DeleteCareTask)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/tasks/{taskId}", wrapper.UpdateCareTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/pause", wrapper.PauseCareTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/resume", wrapper.ResumeCareTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -5249,7 +5312,7 @@ func (response SearchSpecies500JSONResponse) VisitSearchSpeciesResponse(w http.R
 }
 
 type DeleteCareTaskRequestObject struct {
-	TaskId openapi_types.UUID `json:"taskId"`
+	TaskId TaskId `json:"taskId"`
 }
 
 type DeleteCareTaskResponseObject interface {
@@ -5335,7 +5398,7 @@ func (response DeleteCareTask500JSONResponse) VisitDeleteCareTaskResponse(w http
 }
 
 type UpdateCareTaskRequestObject struct {
-	TaskId openapi_types.UUID `json:"taskId"`
+	TaskId TaskId `json:"taskId"`
 	Body   *UpdateCareTaskJSONRequestBody
 }
 
@@ -5430,6 +5493,190 @@ func (response UpdateCareTask422JSONResponse) VisitUpdateCareTaskResponse(w http
 type UpdateCareTask500JSONResponse struct{ InternalJSONResponse }
 
 func (response UpdateCareTask500JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTaskRequestObject struct {
+	TaskId TaskId `json:"taskId"`
+}
+
+type PauseCareTaskResponseObject interface {
+	VisitPauseCareTaskResponse(w http.ResponseWriter) error
+}
+
+type PauseCareTask200JSONResponse CareTask
+
+func (response PauseCareTask200JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PauseCareTask400JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response PauseCareTask401JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PauseCareTask403JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PauseCareTask404JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PauseCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response PauseCareTask500JSONResponse) VisitPauseCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTaskRequestObject struct {
+	TaskId TaskId `json:"taskId"`
+}
+
+type ResumeCareTaskResponseObject interface {
+	VisitResumeCareTaskResponse(w http.ResponseWriter) error
+}
+
+type ResumeCareTask200JSONResponse CareTask
+
+func (response ResumeCareTask200JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ResumeCareTask400JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ResumeCareTask401JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ResumeCareTask403JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ResumeCareTask404JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResumeCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response ResumeCareTask500JSONResponse) VisitResumeCareTaskResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -5551,6 +5798,12 @@ type StrictServerInterface interface {
 	// UpdateCareTask お手入れタスクを変更する（編集者以上）
 	// (PATCH /tasks/{taskId})
 	UpdateCareTask(ctx context.Context, request UpdateCareTaskRequestObject) (UpdateCareTaskResponseObject, error)
+	// PauseCareTask お手入れタスクを一時停止する（編集者以上）
+	// (POST /tasks/{taskId}/pause)
+	PauseCareTask(ctx context.Context, request PauseCareTaskRequestObject) (PauseCareTaskResponseObject, error)
+	// ResumeCareTask 一時停止したお手入れタスクを再開する（編集者以上）
+	// (POST /tasks/{taskId}/resume)
+	ResumeCareTask(ctx context.Context, request ResumeCareTaskRequestObject) (ResumeCareTaskResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -6562,7 +6815,7 @@ func (sh *strictHandler) SearchSpecies(w http.ResponseWriter, r *http.Request, p
 }
 
 // DeleteCareTask operation middleware
-func (sh *strictHandler) DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+func (sh *strictHandler) DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
 	var request DeleteCareTaskRequestObject
 
 	request.TaskId = taskId
@@ -6588,7 +6841,7 @@ func (sh *strictHandler) DeleteCareTask(w http.ResponseWriter, r *http.Request, 
 }
 
 // UpdateCareTask operation middleware
-func (sh *strictHandler) UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+func (sh *strictHandler) UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
 	var request UpdateCareTaskRequestObject
 
 	request.TaskId = taskId
@@ -6613,6 +6866,58 @@ func (sh *strictHandler) UpdateCareTask(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateCareTaskResponseObject); ok {
 		if err := validResponse.VisitUpdateCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PauseCareTask operation middleware
+func (sh *strictHandler) PauseCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
+	var request PauseCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PauseCareTask(ctx, request.(PauseCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PauseCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PauseCareTaskResponseObject); ok {
+		if err := validResponse.VisitPauseCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResumeCareTask operation middleware
+func (sh *strictHandler) ResumeCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
+	var request ResumeCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResumeCareTask(ctx, request.(ResumeCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResumeCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResumeCareTaskResponseObject); ok {
+		if err := validResponse.VisitResumeCareTaskResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

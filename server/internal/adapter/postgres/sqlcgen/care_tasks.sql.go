@@ -133,6 +133,17 @@ func (q *Queries) GetCareTaskHouseholdID(ctx context.Context, id uuid.UUID) (uui
 	return household_id, err
 }
 
+const getHouseholdTimeZone = `-- name: GetHouseholdTimeZone :one
+SELECT time_zone FROM households WHERE id = $1
+`
+
+func (q *Queries) GetHouseholdTimeZone(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getHouseholdTimeZone, id)
+	var time_zone string
+	err := row.Scan(&time_zone)
+	return time_zone, err
+}
+
 const getTaskPlant = `-- name: GetTaskPlant :one
 SELECT plants.household_id, households.time_zone, species.recommended_care
 FROM plants
@@ -203,6 +214,52 @@ func (q *Queries) ListCareTasks(ctx context.Context, arg ListCareTasksParams) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCareTaskStatus = `-- name: SetCareTaskStatus :one
+UPDATE care_tasks SET
+  status      = $1,
+  next_due_on = COALESCE($2::date, next_due_on)
+WHERE id = $3 AND household_id = $4 AND deleted_at IS NULL
+RETURNING id, household_id, plant_id, kind, custom_name, interval_value, interval_unit, seasonal_intervals, condition_text, note, next_due_on, due_overridden, cycle_seq, status, deleted_at, created_at, updated_at
+`
+
+type SetCareTaskStatusParams struct {
+	Status      string
+	NextDueOn   pgtype.Date
+	ID          uuid.UUID
+	HouseholdID uuid.UUID
+}
+
+// 一時停止・再開（要件8-9）。next_due_on が NULL なら次回予定は変えない。再開で決めた予定日は、手で変えた印（due_overridden）を立てない
+func (q *Queries) SetCareTaskStatus(ctx context.Context, arg SetCareTaskStatusParams) (CareTask, error) {
+	row := q.db.QueryRow(ctx, setCareTaskStatus,
+		arg.Status,
+		arg.NextDueOn,
+		arg.ID,
+		arg.HouseholdID,
+	)
+	var i CareTask
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.Kind,
+		&i.CustomName,
+		&i.IntervalValue,
+		&i.IntervalUnit,
+		&i.SeasonalIntervals,
+		&i.ConditionText,
+		&i.Note,
+		&i.NextDueOn,
+		&i.DueOverridden,
+		&i.CycleSeq,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateCareTask = `-- name: UpdateCareTask :one

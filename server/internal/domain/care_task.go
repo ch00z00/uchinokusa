@@ -189,6 +189,16 @@ func TodayIn(now time.Time, timeZone string) civil.Date {
 	return civil.DateOf(now.In(loc))
 }
 
+// ResumedNextDueOn は、一時停止したタスクを再開したときの次回予定を返す（要件8-9）。
+// 一時停止中も次回予定はそのまま持っているので、まだ先ならそのまま使い（手で決めた予定日も残る）、
+// 過ぎていたら今日にする。今日の一覧で植物の状態を見て、完了かスキップを選べるようにするため。
+func ResumedNextDueOn(next, today civil.Date) civil.Date {
+	if next.Before(today) {
+		return today
+	}
+	return next
+}
+
 // taskValidator は、タスクの項目を検証し、誤りを項目ごとに集める。
 type taskValidator struct {
 	fields map[string]string

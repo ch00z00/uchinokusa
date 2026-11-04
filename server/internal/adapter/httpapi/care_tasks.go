@@ -11,13 +11,15 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
-// CareTaskService は、お手入れタスクの作成・一覧・変更・削除を行う（実装は app.CareTaskService）。
+// CareTaskService は、お手入れタスクの作成・一覧・変更・削除・一時停止・再開を行う（実装は app.CareTaskService）。
 type CareTaskService interface {
 	List(ctx context.Context, userID, plantID uuid.UUID) ([]domain.CareTask, error)
 	Defaults(ctx context.Context, userID, plantID uuid.UUID) ([]domain.TaskDefault, error)
 	Create(ctx context.Context, userID, plantID uuid.UUID, in domain.CareTaskInput) (domain.CareTask, error)
 	Update(ctx context.Context, userID, taskID uuid.UUID, in domain.CareTaskInput) (domain.CareTask, error)
 	Delete(ctx context.Context, userID, taskID uuid.UUID) error
+	Pause(ctx context.Context, userID, taskID uuid.UUID) (domain.CareTask, error)
+	Resume(ctx context.Context, userID, taskID uuid.UUID) (domain.CareTask, error)
 }
 
 func (s *server) ListCareTasks(ctx context.Context, req oapi.ListCareTasksRequestObject) (oapi.ListCareTasksResponseObject, error) {
@@ -82,6 +84,22 @@ func (s *server) DeleteCareTask(ctx context.Context, req oapi.DeleteCareTaskRequ
 		return nil, err
 	}
 	return oapi.DeleteCareTask204Response{}, nil
+}
+
+func (s *server) PauseCareTask(ctx context.Context, req oapi.PauseCareTaskRequestObject) (oapi.PauseCareTaskResponseObject, error) {
+	t, err := s.tasks.Pause(ctx, currentUser(ctx).ID, req.TaskId)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.PauseCareTask200JSONResponse(toCareTask(t)), nil
+}
+
+func (s *server) ResumeCareTask(ctx context.Context, req oapi.ResumeCareTaskRequestObject) (oapi.ResumeCareTaskResponseObject, error) {
+	t, err := s.tasks.Resume(ctx, currentUser(ctx).ID, req.TaskId)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.ResumeCareTask200JSONResponse(toCareTask(t)), nil
 }
 
 func toIntervalInput(i *oapi.IntervalInput) *domain.IntervalInput {

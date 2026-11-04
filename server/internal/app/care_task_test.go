@@ -15,11 +15,12 @@ import (
 
 // fakeCareTasks は、app.CareTaskRepository の偽物である。植物とタスクをメモリに持ち、呼ばれた操作を記録する。
 type fakeCareTasks struct {
-	plants  map[uuid.UUID]app.TaskPlant
-	byID    map[uuid.UUID]domain.CareTask
-	created []domain.CareTaskDraft
-	patched []domain.CareTaskPatch
-	deleted []uuid.UUID
+	plants   map[uuid.UUID]app.TaskPlant
+	byID     map[uuid.UUID]domain.CareTask
+	created  []domain.CareTaskDraft
+	patched  []domain.CareTaskPatch
+	deleted  []uuid.UUID
+	statuses []domain.TaskStatus // SetStatus で変えた状態
 }
 
 func (f *fakeCareTasks) TaskPlantOf(_ context.Context, plantID uuid.UUID) (app.TaskPlant, error) {
@@ -75,6 +76,29 @@ func (f *fakeCareTasks) Delete(ctx context.Context, householdID, id uuid.UUID) e
 	delete(f.byID, id)
 	f.deleted = append(f.deleted, id)
 	return nil
+}
+
+func (f *fakeCareTasks) TimeZoneOf(_ context.Context, householdID uuid.UUID) (string, error) {
+	for _, p := range f.plants {
+		if p.HouseholdID == householdID {
+			return p.TimeZone, nil
+		}
+	}
+	return "", domain.ErrNotFound
+}
+
+func (f *fakeCareTasks) SetStatus(ctx context.Context, householdID, id uuid.UUID, status domain.TaskStatus, nextDueOn *civil.Date) (domain.CareTask, error) {
+	t, err := f.Get(ctx, householdID, id)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	t.Status = status
+	if nextDueOn != nil {
+		t.NextDueOn = *nextDueOn
+	}
+	f.byID[id] = t
+	f.statuses = append(f.statuses, status)
+	return t, nil
 }
 
 // taskFixture は、householdFixture の世帯とメンバーに、植物（マスタの水やりの目安つき）と、その水やりタスク、「その他」のタスクを加えた状態を用意する。
@@ -280,4 +304,97 @@ func TestCareTaskService_Delete(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCareTaskService_Pause(t *testing.T) {
+	t.Parallel()
+
+	t.Run("編集者は一時停止でき、次回予定はそのまま残る", func(t *testing.T) {
+		t.Parallel()
+		f := newTaskFixture()
+		due := civil.Date{Year: 2026, Month: 11, Day: 10}
+		f.setTask(f.watering, domain.TaskActive, due)
+		got, err := f.svc.Pause(t.Context(), f.editor, f.watering)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != domain.TaskPaused || got.NextDueOn != due {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	for _, tt := range taskWriteDenied {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newTaskFixture()
+			if _, err := f.svc.Pause(t.Context(), tt.user(f), tt.id(f)); !errors.Is(err, tt.wantErr) {
+				t.Errorf("err = %v, want %v", err, tt.wantErr)
+			}
+			if len(f.tasks.statuses) != 0 {
+				t.Errorf("statuses = %v, want none", f.tasks.statuses)
+			}
+		})
+	}
+}
+
+func TestCareTaskService_Resume(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		due  civil.Date
+		want civil.Date
+	}{
+		// taskNow は UTC では 11/3 だが、世帯（東京）の今日の 11/4 にする
+		{"次回予定が過ぎていたら、世帯のタイムゾーンでの今日にする", civil.Date{Year: 2026, Month: 10, Day: 1}, civil.Date{Year: 2026, Month: 11, Day: 4}},
+		{"次回予定がまだ先なら、そのまま使う", civil.Date{Year: 2026, Month: 11, Day: 20}, civil.Date{Year: 2026, Month: 11, Day: 20}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newTaskFixture()
+			f.setTask(f.watering, domain.TaskPaused, tt.due)
+			got, err := f.svc.Resume(t.Context(), f.editor, f.watering)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != domain.TaskActive || got.NextDueOn != tt.want {
+				t.Errorf("got %+v, want next due %v", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("有効なタスクを再開しても、期限切れの予定日は動かさない", func(t *testing.T) {
+		t.Parallel()
+		f := newTaskFixture()
+		due := civil.Date{Year: 2026, Month: 10, Day: 1}
+		f.setTask(f.watering, domain.TaskActive, due)
+		got, err := f.svc.Resume(t.Context(), f.editor, f.watering)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != domain.TaskActive || got.NextDueOn != due || len(f.tasks.statuses) != 0 {
+			t.Errorf("got %+v, statuses = %v", got, f.tasks.statuses)
+		}
+	})
+
+	for _, tt := range taskWriteDenied {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newTaskFixture()
+			f.setTask(f.watering, domain.TaskPaused, civil.Date{Year: 2026, Month: 10, Day: 1})
+			if _, err := f.svc.Resume(t.Context(), tt.user(f), tt.id(f)); !errors.Is(err, tt.wantErr) {
+				t.Errorf("err = %v, want %v", err, tt.wantErr)
+			}
+			if len(f.tasks.statuses) != 0 {
+				t.Errorf("statuses = %v, want none", f.tasks.statuses)
+			}
+		})
+	}
+}
+
+func (f taskFixture) setTask(id uuid.UUID, status domain.TaskStatus, due civil.Date) {
+	t := f.tasks.byID[id]
+	t.Status, t.NextDueOn = status, due
+	f.tasks.byID[id] = t
 }

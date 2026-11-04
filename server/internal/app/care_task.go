@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"cloud.google.com/go/civil"
 	"github.com/google/uuid"
 
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
@@ -31,9 +32,13 @@ type CareTaskRepository interface {
 	Update(ctx context.Context, householdID, id uuid.UUID, p domain.CareTaskPatch) (domain.CareTask, error)
 	// Delete は、世帯のタスクを削除する（論理削除。記録は履歴として残す）。
 	Delete(ctx context.Context, householdID, id uuid.UUID) error
+	// SetStatus は、世帯のタスクの状態を変える。nextDueOn が nil なら、次回予定は変えない。
+	SetStatus(ctx context.Context, householdID, id uuid.UUID, status domain.TaskStatus, nextDueOn *civil.Date) (domain.CareTask, error)
+	// TimeZoneOf は、世帯のタイムゾーンを返す。タスクの ID だけで呼ばれる操作で、世帯の今日を決めるために使う。
+	TimeZoneOf(ctx context.Context, householdID uuid.UUID) (string, error)
 }
 
-// CareTaskService は、お手入れタスクの作成・一覧・変更・削除を扱う（要件8）。
+// CareTaskService は、お手入れタスクの作成・一覧・変更・削除・一時停止・再開を扱う（要件8）。
 type CareTaskService struct {
 	tasks CareTaskRepository
 	authz *Authorizer
@@ -102,6 +107,39 @@ func (s *CareTaskService) Delete(ctx context.Context, userID, taskID uuid.UUID) 
 		return err
 	}
 	return s.tasks.Delete(ctx, householdID, taskID)
+}
+
+// Pause は、タスクを一時停止し、予定・今日やること・リマインダーの対象から外す。編集者以上ができる（要件8-9）。
+// 次回予定はそのまま残す。すでに一時停止中でも、エラーにせず今の状態を返す（家族の2人が同時に押す場合があるため）。
+func (s *CareTaskService) Pause(ctx context.Context, userID, taskID uuid.UUID) (domain.CareTask, error) {
+	householdID, err := s.authorize(ctx, userID, taskID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	return s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskPaused, nil)
+}
+
+// Resume は、一時停止したタスクを再開する。編集者以上ができる（要件8-9）。
+// 次回予定は、世帯のタイムゾーンでの今日以降にする（domain.ResumedNextDueOn）。
+// 一時停止していないタスクは、そのまま返す。期限切れの予定日を今日に動かすと、期限切れの表示が消えてしまうため。
+func (s *CareTaskService) Resume(ctx context.Context, userID, taskID uuid.UUID) (domain.CareTask, error) {
+	householdID, err := s.authorize(ctx, userID, taskID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	current, err := s.tasks.Get(ctx, householdID, taskID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	if current.Status != domain.TaskPaused {
+		return current, nil
+	}
+	timeZone, err := s.tasks.TimeZoneOf(ctx, householdID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	next := domain.ResumedNextDueOn(current.NextDueOn, domain.TodayIn(s.now(), timeZone))
+	return s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskActive, &next)
 }
 
 // plantFor は、植物の世帯を探し、ユーザーがその世帯で action を行えることを確かめる。

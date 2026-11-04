@@ -44,3 +44,14 @@ RETURNING *;
 -- 論理削除にして、記録（care_records.task_id）を履歴として残す（要件8-10）
 UPDATE care_tasks SET deleted_at = now()
 WHERE id = $1 AND household_id = $2 AND deleted_at IS NULL;
+
+-- name: SetCareTaskStatus :one
+-- 一時停止・再開（要件8-9）。next_due_on が NULL なら次回予定は変えない。再開で決めた予定日は、手で変えた印（due_overridden）を立てない
+UPDATE care_tasks SET
+  status      = sqlc.arg(status),
+  next_due_on = COALESCE(sqlc.narg(next_due_on)::date, next_due_on)
+WHERE id = sqlc.arg(id) AND household_id = sqlc.arg(household_id) AND deleted_at IS NULL
+RETURNING *;
+
+-- name: GetHouseholdTimeZone :one
+SELECT time_zone FROM households WHERE id = $1;

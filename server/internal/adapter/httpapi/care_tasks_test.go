@@ -83,6 +83,22 @@ func (f *fakeCareTaskService) Delete(_ context.Context, _, taskID uuid.UUID) err
 	return nil
 }
 
+func (f *fakeCareTaskService) Pause(_ context.Context, _, taskID uuid.UUID) (domain.CareTask, error) {
+	if taskID != testTask.ID {
+		return domain.CareTask{}, domain.ErrNotFound
+	}
+	t := testTask
+	t.Status = domain.TaskPaused
+	return t, nil
+}
+
+func (f *fakeCareTaskService) Resume(_ context.Context, _, taskID uuid.UUID) (domain.CareTask, error) {
+	if taskID != testTask.ID {
+		return domain.CareTask{}, domain.ErrForbidden
+	}
+	return testTask, nil
+}
+
 func newTaskRouter(t *testing.T, tasks *fakeCareTaskService) http.Handler {
 	t.Helper()
 	logger := slog.New(logging.NewHandler(&bytes.Buffer{}, slog.LevelInfo))
@@ -231,4 +247,35 @@ func TestDeleteCareTask(t *testing.T) {
 			t.Errorf("status = %d, want 403", rec.Code)
 		}
 	})
+}
+
+func TestPauseAndResumeCareTask(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, path string
+		id         uuid.UUID
+		wantCode   int
+		wantStatus string
+	}{
+		{"一時停止したタスクを 200 で返す", "/pause", testTask.ID, http.StatusOK, "paused"},
+		{"再開したタスクを 200 で返す", "/resume", testTask.ID, http.StatusOK, "active"},
+		{"一時停止で見つからないタスクは 404", "/pause", uuid.Must(uuid.NewV7()), http.StatusNotFound, ""},
+		{"再開の権限がなければ 403", "/resume", uuid.Must(uuid.NewV7()), http.StatusForbidden, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rec := serve(t, newTaskRouter(t, &fakeCareTaskService{}), http.MethodPost, "/v1/tasks/"+tt.id.String()+tt.path, "Bearer "+validToken, "")
+			if rec.Code != tt.wantCode {
+				t.Fatalf("status = %d, want %d (%s)", rec.Code, tt.wantCode, rec.Body.String())
+			}
+			if tt.wantStatus == "" {
+				return
+			}
+			if got := decode[struct{ ID, Status string }](t, rec); got.ID != testTask.ID.String() || got.Status != tt.wantStatus {
+				t.Errorf("body = %+v", got)
+			}
+		})
+	}
 }

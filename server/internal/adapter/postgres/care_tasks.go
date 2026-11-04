@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"cloud.google.com/go/civil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -153,6 +154,34 @@ func (r *CareTaskRepository) Delete(ctx context.Context, householdID, id uuid.UU
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+// SetStatus は、世帯の削除していないタスクの状態を変える。nextDueOn が nil なら、次回予定は変えない。
+func (r *CareTaskRepository) SetStatus(ctx context.Context, householdID, id uuid.UUID, status domain.TaskStatus, nextDueOn *civil.Date) (domain.CareTask, error) {
+	params := sqlcgen.SetCareTaskStatusParams{ID: id, HouseholdID: householdID, Status: string(status)}
+	if nextDueOn != nil {
+		params.NextDueOn = pgDate(*nextDueOn)
+	}
+	row, err := r.q.SetCareTaskStatus(ctx, params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.CareTask{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return domain.CareTask{}, fmt.Errorf("set care task status: %w", err)
+	}
+	return toDomainCareTask(row)
+}
+
+// TimeZoneOf は、世帯のタイムゾーンを返す。世帯がなければ domain.ErrNotFound を返す。
+func (r *CareTaskRepository) TimeZoneOf(ctx context.Context, householdID uuid.UUID) (string, error) {
+	tz, err := r.q.GetHouseholdTimeZone(ctx, householdID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("get household time zone: %w", err)
+	}
+	return tz, nil
 }
 
 // intervalJSON は、care_tasks.seasonal_intervals（jsonb）の各季節の値の形である（例：{"winter": {"value": 2, "unit": "week"}}）。

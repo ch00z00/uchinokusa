@@ -208,3 +208,66 @@ func TestCareTaskRepository_Delete(t *testing.T) {
 		}
 	})
 }
+
+func TestCareTaskRepository_SetStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("一時停止では次回予定を変えず、再開では渡した次回予定にする", func(t *testing.T) {
+		t.Parallel()
+		f := newTaskFixture(t)
+		task := f.createTask(f.monsteraPlant, wateringDraft)
+
+		paused, err := f.repo.SetStatus(f.ctx, f.home, task.ID, domain.TaskPaused, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if paused.Status != domain.TaskPaused || paused.NextDueOn != task.NextDueOn {
+			t.Errorf("paused = %+v", paused)
+		}
+
+		due := civil.Date{Year: 2026, Month: 11, Day: 10}
+		resumed, err := f.repo.SetStatus(f.ctx, f.home, task.ID, domain.TaskActive, &due)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 再開で決めた予定日は、手で変えた予定日ではないので、手で変えた印は立てない
+		if resumed.Status != domain.TaskActive || resumed.NextDueOn != due || resumed.DueOverridden || resumed.CycleSeq != task.CycleSeq {
+			t.Errorf("resumed = %+v", resumed)
+		}
+	})
+
+	t.Run("ほかの世帯のタスク・削除したタスクは変えられない", func(t *testing.T) {
+		t.Parallel()
+		f := newTaskFixture(t)
+		task := f.createTask(f.monsteraPlant, wateringDraft)
+		if _, err := f.repo.SetStatus(f.ctx, f.other, task.ID, domain.TaskPaused, nil); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("other household: err = %v, want ErrNotFound", err)
+		}
+		if got, _ := f.repo.Get(f.ctx, f.home, task.ID); got.Status != domain.TaskActive {
+			t.Errorf("status = %q, want unchanged", got.Status)
+		}
+
+		if err := f.repo.Delete(f.ctx, f.home, task.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.repo.SetStatus(f.ctx, f.home, task.ID, domain.TaskPaused, nil); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("deleted: err = %v, want ErrNotFound", err)
+		}
+	})
+}
+
+func TestCareTaskRepository_TimeZoneOf(t *testing.T) {
+	t.Parallel()
+	f := newTaskFixture(t)
+	f.exec(`UPDATE households SET time_zone = 'America/Los_Angeles' WHERE id = $1`, f.other)
+
+	if got, err := f.repo.TimeZoneOf(f.ctx, f.home); err != nil || got != "Asia/Tokyo" {
+		t.Errorf("home = %q, %v", got, err)
+	}
+	if got, err := f.repo.TimeZoneOf(f.ctx, f.other); err != nil || got != "America/Los_Angeles" {
+		t.Errorf("other = %q, %v", got, err)
+	}
+	if _, err := f.repo.TimeZoneOf(f.ctx, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("unknown: err = %v, want ErrNotFound", err)
+	}
+}

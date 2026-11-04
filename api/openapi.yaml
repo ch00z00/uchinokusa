@@ -775,13 +775,7 @@ paths:
 
   /tasks/{taskId}:
     parameters:
-      - name: taskId
-        in: path
-        required: true
-        description: タスクの ID。所属していない世帯のタスク・削除したタスクの場合は 404 を返す
-        schema:
-          type: string
-          format: uuid
+      - $ref: "#/components/parameters/TaskId"
     patch:
       operationId: updateCareTask
       summary: お手入れタスクを変更する（編集者以上）
@@ -815,6 +809,50 @@ paths:
       responses:
         "204":
           description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /tasks/{taskId}/pause:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      operationId: pauseCareTask
+      summary: お手入れタスクを一時停止する（編集者以上）
+      description: |
+        再開するまで、予定・今日やること・リマインダーの対象から外す（要件8-9）。次回予定はそのまま残す。
+        すでに一時停止している場合は、エラーにせず今の状態を返す
+      tags: [task]
+      responses:
+        "200":
+          description: 一時停止したタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareTask" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /tasks/{taskId}/resume:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      operationId: resumeCareTask
+      summary: 一時停止したお手入れタスクを再開する（編集者以上）
+      description: |
+        次回予定がまだ先ならそのまま使い、過ぎていたら世帯のタイムゾーンでの今日にする（要件8-9）。
+        一時停止していないタスクは、予定日を変えずにそのまま返す
+      tags: [task]
+      responses:
+        "200":
+          description: 再開したタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareTask" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -855,6 +893,14 @@ paths:
 
 components:
   parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      description: タスクの ID。所属していない世帯のタスク・削除したタスクの場合は 404 を返す
+      schema:
+        type: string
+        format: uuid
     TokenOrCode:
       name: tokenOrCode
       in: path
