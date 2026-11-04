@@ -436,6 +436,99 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/locations:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: listLocations
+      summary: 世帯の置き場所の一覧
+      description: 作成の古い順に返す。閲覧者も見られる
+      tags: [location]
+      responses:
+        "200":
+          description: 世帯の置き場所。1つもなければ空の配列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [locations]
+                properties:
+                  locations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Location" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createLocation
+      summary: 置き場所を作成する（編集者以上）
+      tags: [location]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLocationRequest" }
+      responses:
+        "201":
+          description: 作成した置き場所
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /locations/{locationId}:
+    parameters:
+      - name: locationId
+        in: path
+        required: true
+        description: 置き場所の ID。所属していない世帯の置き場所の場合は 404 を返す（存在を明かさない）
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateLocation
+      summary: 置き場所を変更する（編集者以上）
+      description: 送った項目だけを変更する。環境の項目を未設定に戻すには、空文字を送る。変更は、置き場所に紐づくすべての植物に反映される（要件7-3）
+      tags: [location]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateLocationRequest" }
+      responses:
+        "200":
+          description: 変更後の置き場所
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Location" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteLocation
+      summary: 置き場所を削除する（編集者以上）
+      description: |
+        紐づく植物は削除せず、「置き場所未設定」にする（アーカイブした植物も含む）。
+        アプリは、一覧の `plantCount` を示して確認してから呼ぶ（要件7-4）
+      tags: [location]
+      responses:
+        "204":
+          description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -722,6 +815,83 @@ components:
         outdoorOk:
           description: 春〜秋に屋外に出せるか
           type: boolean
+
+    WindowDirection:
+      description: 窓の向き（8方位）。屋外の場合は、その場所が面している向き。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+      type: string
+      enum: [n, ne, e, se, s, sw, w, nw]
+
+    WindowDistance:
+      description: 窓からの距離の目安（`near`：窓際、`middle`：窓から少し離れた所、`far`：部屋の奥）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+      type: string
+      enum: [near, middle, far]
+
+    Shading:
+      description: 窓の遮光（`none`：遮光なし、`sheer`：レースカーテンなどで光を和らげている）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+      type: string
+      enum: [none, sheer]
+
+    Location:
+      description: 置き場所。環境の項目は、未設定なら項目がない
+      type: object
+      required: [id, name, isIndoor, plantCount, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        isIndoor:
+          type: boolean
+        windowDirection:
+          $ref: "#/components/schemas/WindowDirection"
+        windowDistance:
+          $ref: "#/components/schemas/WindowDistance"
+        shading:
+          $ref: "#/components/schemas/Shading"
+        plantCount:
+          description: この置き場所にある植物の数（アーカイブしたものを除く）。削除の確認で示す
+          type: integer
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreateLocationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          description: 前後の空白を除いて1〜30文字。空の場合は `fields.name = required`、長すぎる場合は `too_long`
+          type: string
+        isIndoor:
+          description: 省くと室内（`true`）
+          type: boolean
+        windowDirection:
+          description: 任意。`WindowDirection` の値。空文字は未設定として扱う。知らない値は `fields.windowDirection = invalid`
+          type: string
+        windowDistance:
+          description: 任意。`WindowDistance` の値。空文字は未設定として扱う。知らない値は `fields.windowDistance = invalid`
+          type: string
+        shading:
+          description: 任意。`Shading` の値。空文字は未設定として扱う。知らない値は `fields.shading = invalid`
+          type: string
+
+    UpdateLocationRequest:
+      description: 送った項目だけを変更する。検証の規則は CreateLocationRequest と同じ
+      type: object
+      properties:
+        name:
+          type: string
+        isIndoor:
+          type: boolean
+        windowDirection:
+          description: 空文字を送ると、未設定に戻す
+          type: string
+        windowDistance:
+          description: 空文字を送ると、未設定に戻す
+          type: string
+        shading:
+          description: 空文字を送ると、未設定に戻す
+          type: string
 
     Platform:
       description: 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する

@@ -141,6 +141,24 @@ func (e Role) Valid() bool {
 	}
 }
 
+// Defines values for Shading.
+const (
+	ShadingNone  Shading = "none"
+	ShadingSheer Shading = "sheer"
+)
+
+// Valid indicates whether the value is a known member of the Shading enum.
+func (e Shading) Valid() bool {
+	switch e {
+	case ShadingNone:
+		return true
+	case ShadingSheer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WaterTendency.
 const (
 	WaterTendencyLess     WaterTendency = "less"
@@ -156,6 +174,63 @@ func (e WaterTendency) Valid() bool {
 	case WaterTendencyModerate:
 		return true
 	case WaterTendencyMore:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WindowDirection.
+const (
+	WindowDirectionE  WindowDirection = "e"
+	WindowDirectionN  WindowDirection = "n"
+	WindowDirectionNe WindowDirection = "ne"
+	WindowDirectionNw WindowDirection = "nw"
+	WindowDirectionS  WindowDirection = "s"
+	WindowDirectionSe WindowDirection = "se"
+	WindowDirectionSw WindowDirection = "sw"
+	WindowDirectionW  WindowDirection = "w"
+)
+
+// Valid indicates whether the value is a known member of the WindowDirection enum.
+func (e WindowDirection) Valid() bool {
+	switch e {
+	case WindowDirectionE:
+		return true
+	case WindowDirectionN:
+		return true
+	case WindowDirectionNe:
+		return true
+	case WindowDirectionNw:
+		return true
+	case WindowDirectionS:
+		return true
+	case WindowDirectionSe:
+		return true
+	case WindowDirectionSw:
+		return true
+	case WindowDirectionW:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WindowDistance.
+const (
+	WindowDistanceFar    WindowDistance = "far"
+	WindowDistanceMiddle WindowDistance = "middle"
+	WindowDistanceNear   WindowDistance = "near"
+)
+
+// Valid indicates whether the value is a known member of the WindowDistance enum.
+func (e WindowDistance) Valid() bool {
+	switch e {
+	case WindowDistanceFar:
+		return true
+	case WindowDistanceMiddle:
+		return true
+	case WindowDistanceNear:
 		return true
 	default:
 		return false
@@ -178,6 +253,24 @@ type CreateHouseholdRequest struct {
 type CreateInvitationRequest struct {
 	// Role `editor` または `viewer`。それ以外（`owner` を含む）は `fields.role = invalid`
 	Role string `json:"role"`
+}
+
+// CreateLocationRequest defines model for CreateLocationRequest.
+type CreateLocationRequest struct {
+	// IsIndoor 省くと室内（`true`）
+	IsIndoor *bool `json:"isIndoor,omitempty"`
+
+	// Name 前後の空白を除いて1〜30文字。空の場合は `fields.name = required`、長すぎる場合は `too_long`
+	Name string `json:"name"`
+
+	// Shading 任意。`Shading` の値。空文字は未設定として扱う。知らない値は `fields.shading = invalid`
+	Shading *string `json:"shading,omitempty"`
+
+	// WindowDirection 任意。`WindowDirection` の値。空文字は未設定として扱う。知らない値は `fields.windowDirection = invalid`
+	WindowDirection *string `json:"windowDirection,omitempty"`
+
+	// WindowDistance 任意。`WindowDistance` の値。空文字は未設定として扱う。知らない値は `fields.windowDistance = invalid`
+	WindowDistance *string `json:"windowDistance,omitempty"`
 }
 
 // CreatedInvitation 作成した招待。`url` を共有機能や QR コードで渡す
@@ -342,6 +435,29 @@ type InvitationPreview struct {
 // Level 程度。値は今後も追加されうるため、アプリは知らない値を「不明」として扱う
 type Level string
 
+// Location 置き場所。環境の項目は、未設定なら項目がない
+type Location struct {
+	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	CreatedAt DateTime           `json:"createdAt"`
+	Id        openapi_types.UUID `json:"id"`
+	IsIndoor  bool               `json:"isIndoor"`
+	Name      string             `json:"name"`
+
+	// PlantCount この置き場所にある植物の数（アーカイブしたものを除く）。削除の確認で示す
+	PlantCount int `json:"plantCount"`
+
+	// Shading 窓の遮光（`none`：遮光なし、`sheer`：レースカーテンなどで光を和らげている）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+	Shading *Shading `json:"shading,omitempty"`
+
+	// WindowDirection 窓の向き（8方位）。屋外の場合は、その場所が面している向き。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+	WindowDirection *WindowDirection `json:"windowDirection,omitempty"`
+
+	// WindowDistance 窓からの距離の目安（`near`：窓際、`middle`：窓から少し離れた所、`far`：部屋の奥）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+	WindowDistance *WindowDistance `json:"windowDistance,omitempty"`
+}
+
 // Me 自分のプロフィール
 type Me struct {
 	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
@@ -402,6 +518,9 @@ type RegisterDeviceRequest struct {
 // Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
 type Role string
 
+// Shading 窓の遮光（`none`：遮光なし、`sheer`：レースカーテンなどで光を和らげている）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+type Shading string
+
 // Species 植物マスタの1種類（全ユーザー共通）。性質の項目は、出典で確かめられたものだけを持つ。
 // 項目がない場合は「わからない」を表す（推測した値は入れない）
 type Species struct {
@@ -445,6 +564,21 @@ type UpdateHouseholdRequest struct {
 	RegionPrefecture *string `json:"regionPrefecture,omitempty"`
 }
 
+// UpdateLocationRequest 送った項目だけを変更する。検証の規則は CreateLocationRequest と同じ
+type UpdateLocationRequest struct {
+	IsIndoor *bool   `json:"isIndoor,omitempty"`
+	Name     *string `json:"name,omitempty"`
+
+	// Shading 空文字を送ると、未設定に戻す
+	Shading *string `json:"shading,omitempty"`
+
+	// WindowDirection 空文字を送ると、未設定に戻す
+	WindowDirection *string `json:"windowDirection,omitempty"`
+
+	// WindowDistance 空文字を送ると、未設定に戻す
+	WindowDistance *string `json:"windowDistance,omitempty"`
+}
+
 // UpdateMeRequest defines model for UpdateMeRequest.
 type UpdateMeRequest struct {
 	// DisplayName 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
@@ -459,6 +593,12 @@ type UpdateMemberRoleRequest struct {
 
 // WaterTendency 水やりの量の傾向（`less`：乾かし気味、`moderate`：鉢土の表面が乾いたら、`more`：乾かさない）
 type WaterTendency string
+
+// WindowDirection 窓の向き（8方位）。屋外の場合は、その場所が面している向き。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+type WindowDirection string
+
+// WindowDistance 窓からの距離の目安（`near`：窓際、`middle`：窓から少し離れた所、`far`：部屋の奥）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
+type WindowDistance string
 
 // HouseholdId defines model for HouseholdId.
 type HouseholdId = openapi_types.UUID
@@ -517,6 +657,9 @@ type UpdateHouseholdJSONRequestBody = UpdateHouseholdRequest
 // CreateInvitationJSONRequestBody defines body for CreateInvitation for application/json ContentType.
 type CreateInvitationJSONRequestBody = CreateInvitationRequest
 
+// CreateLocationJSONRequestBody defines body for CreateLocation for application/json ContentType.
+type CreateLocationJSONRequestBody = CreateLocationRequest
+
 // UpdateNotificationSettingsJSONRequestBody defines body for UpdateNotificationSettings for application/json ContentType.
 type UpdateNotificationSettingsJSONRequestBody = NotificationSettings
 
@@ -525,6 +668,9 @@ type UpdateMemberRoleJSONRequestBody = UpdateMemberRoleRequest
 
 // TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
 type TransferOwnershipJSONRequestBody = TransferOwnershipRequest
+
+// UpdateLocationJSONRequestBody defines body for UpdateLocation for application/json ContentType.
+type UpdateLocationJSONRequestBody = UpdateLocationRequest
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
@@ -555,6 +701,12 @@ type ServerInterface interface {
 	// RevokeInvitation 招待を取り消す（オーナーのみ）
 	// (DELETE /households/{householdId}/invitations/{invitationId})
 	RevokeInvitation(w http.ResponseWriter, r *http.Request, householdId HouseholdId, invitationId openapi_types.UUID)
+	// ListLocations 世帯の置き場所の一覧
+	// (GET /households/{householdId}/locations)
+	ListLocations(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// CreateLocation 置き場所を作成する（編集者以上）
+	// (POST /households/{householdId}/locations)
+	CreateLocation(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
 	// ListMembers 世帯のメンバーの一覧
 	// (GET /households/{householdId}/members)
 	ListMembers(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
@@ -579,6 +731,12 @@ type ServerInterface interface {
 	// AcceptInvitation 招待を受けて、世帯に参加する
 	// (POST /invitations/{tokenOrCode}/accept)
 	AcceptInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode)
+	// DeleteLocation 置き場所を削除する（編集者以上）
+	// (DELETE /locations/{locationId})
+	DeleteLocation(w http.ResponseWriter, r *http.Request, locationId openapi_types.UUID)
+	// UpdateLocation 置き場所を変更する（編集者以上）
+	// (PATCH /locations/{locationId})
+	UpdateLocation(w http.ResponseWriter, r *http.Request, locationId openapi_types.UUID)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -763,6 +921,58 @@ func (siw *ServerInterfaceWrapper) RevokeInvitation(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeInvitation(w, r, householdId, invitationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLocations operation middleware
+func (siw *ServerInterfaceWrapper) ListLocations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLocations(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLocation operation middleware
+func (siw *ServerInterfaceWrapper) CreateLocation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLocation(w, r, householdId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -989,6 +1199,58 @@ func (siw *ServerInterfaceWrapper) AcceptInvitation(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AcceptInvitation(w, r, tokenOrCode)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteLocation operation middleware
+func (siw *ServerInterfaceWrapper) DeleteLocation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "locationId" -------------
+	var locationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "locationId", r.PathValue("locationId"), &locationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "locationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteLocation(w, r, locationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLocation operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLocation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "locationId" -------------
+	var locationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "locationId", r.PathValue("locationId"), &locationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "locationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLocation(w, r, locationId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1238,6 +1500,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/households/{householdId}/invitations/{invitationId}", wrapper.RevokeInvitation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/invitations/{tokenOrCode}", wrapper.GetInvitation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/invitations/{tokenOrCode}/accept", wrapper.AcceptInvitation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/locations", wrapper.ListLocations)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/locations", wrapper.CreateLocation)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/locations/{locationId}", wrapper.DeleteLocation)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/locations/{locationId}", wrapper.UpdateLocation)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -1867,6 +2133,193 @@ func (response RevokeInvitation404JSONResponse) VisitRevokeInvitationResponse(w 
 type RevokeInvitation500JSONResponse struct{ InternalJSONResponse }
 
 func (response RevokeInvitation500JSONResponse) VisitRevokeInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLocationsRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+}
+
+type ListLocationsResponseObject interface {
+	VisitListLocationsResponse(w http.ResponseWriter) error
+}
+
+type ListLocations200JSONResponse struct {
+	Locations []Location `json:"locations"`
+}
+
+func (response ListLocations200JSONResponse) VisitListLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLocations400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListLocations400JSONResponse) VisitListLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLocations401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListLocations401JSONResponse) VisitListLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLocations404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListLocations404JSONResponse) VisitListLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListLocations500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListLocations500JSONResponse) VisitListLocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocationRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Body        *CreateLocationJSONRequestBody
+}
+
+type CreateLocationResponseObject interface {
+	VisitCreateLocationResponse(w http.ResponseWriter) error
+}
+
+type CreateLocation201JSONResponse Location
+
+func (response CreateLocation201JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateLocation400JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CreateLocation401JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateLocation403JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateLocation404JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response CreateLocation422JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLocation500JSONResponse struct{ InternalJSONResponse }
+
+func (response CreateLocation500JSONResponse) VisitCreateLocationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -2629,6 +3082,199 @@ func (response AcceptInvitation500JSONResponse) VisitAcceptInvitationResponse(w 
 	return err
 }
 
+type DeleteLocationRequestObject struct {
+	LocationId openapi_types.UUID `json:"locationId"`
+}
+
+type DeleteLocationResponseObject interface {
+	VisitDeleteLocationResponse(w http.ResponseWriter) error
+}
+
+type DeleteLocation204Response struct {
+}
+
+func (response DeleteLocation204Response) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteLocation400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeleteLocation400JSONResponse) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteLocation401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteLocation401JSONResponse) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteLocation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteLocation403JSONResponse) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteLocation404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteLocation404JSONResponse) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteLocation500JSONResponse struct{ InternalJSONResponse }
+
+func (response DeleteLocation500JSONResponse) VisitDeleteLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocationRequestObject struct {
+	LocationId openapi_types.UUID `json:"locationId"`
+	Body       *UpdateLocationJSONRequestBody
+}
+
+type UpdateLocationResponseObject interface {
+	VisitUpdateLocationResponse(w http.ResponseWriter) error
+}
+
+type UpdateLocation200JSONResponse Location
+
+func (response UpdateLocation200JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateLocation400JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdateLocation401JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateLocation403JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateLocation404JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdateLocation422JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLocation500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateLocation500JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMeRequestObject struct {
 }
 
@@ -2981,6 +3627,12 @@ type StrictServerInterface interface {
 	// RevokeInvitation 招待を取り消す（オーナーのみ）
 	// (DELETE /households/{householdId}/invitations/{invitationId})
 	RevokeInvitation(ctx context.Context, request RevokeInvitationRequestObject) (RevokeInvitationResponseObject, error)
+	// ListLocations 世帯の置き場所の一覧
+	// (GET /households/{householdId}/locations)
+	ListLocations(ctx context.Context, request ListLocationsRequestObject) (ListLocationsResponseObject, error)
+	// CreateLocation 置き場所を作成する（編集者以上）
+	// (POST /households/{householdId}/locations)
+	CreateLocation(ctx context.Context, request CreateLocationRequestObject) (CreateLocationResponseObject, error)
 	// ListMembers 世帯のメンバーの一覧
 	// (GET /households/{householdId}/members)
 	ListMembers(ctx context.Context, request ListMembersRequestObject) (ListMembersResponseObject, error)
@@ -3005,6 +3657,12 @@ type StrictServerInterface interface {
 	// AcceptInvitation 招待を受けて、世帯に参加する
 	// (POST /invitations/{tokenOrCode}/accept)
 	AcceptInvitation(ctx context.Context, request AcceptInvitationRequestObject) (AcceptInvitationResponseObject, error)
+	// DeleteLocation 置き場所を削除する（編集者以上）
+	// (DELETE /locations/{locationId})
+	DeleteLocation(ctx context.Context, request DeleteLocationRequestObject) (DeleteLocationResponseObject, error)
+	// UpdateLocation 置き場所を変更する（編集者以上）
+	// (PATCH /locations/{locationId})
+	UpdateLocation(ctx context.Context, request UpdateLocationRequestObject) (UpdateLocationResponseObject, error)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -3261,6 +3919,65 @@ func (sh *strictHandler) RevokeInvitation(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// ListLocations operation middleware
+func (sh *strictHandler) ListLocations(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request ListLocationsRequestObject
+
+	request.HouseholdId = householdId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListLocations(ctx, request.(ListLocationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListLocations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListLocationsResponseObject); ok {
+		if err := validResponse.VisitListLocationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateLocation operation middleware
+func (sh *strictHandler) CreateLocation(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request CreateLocationRequestObject
+
+	request.HouseholdId = householdId
+
+	var body CreateLocationJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateLocation(ctx, request.(CreateLocationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateLocation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateLocationResponseObject); ok {
+		if err := validResponse.VisitCreateLocationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListMembers operation middleware
 func (sh *strictHandler) ListMembers(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
 	var request ListMembersRequestObject
@@ -3485,6 +4202,65 @@ func (sh *strictHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AcceptInvitationResponseObject); ok {
 		if err := validResponse.VisitAcceptInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteLocation operation middleware
+func (sh *strictHandler) DeleteLocation(w http.ResponseWriter, r *http.Request, locationId openapi_types.UUID) {
+	var request DeleteLocationRequestObject
+
+	request.LocationId = locationId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteLocation(ctx, request.(DeleteLocationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteLocation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteLocationResponseObject); ok {
+		if err := validResponse.VisitDeleteLocationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateLocation operation middleware
+func (sh *strictHandler) UpdateLocation(w http.ResponseWriter, r *http.Request, locationId openapi_types.UUID) {
+	var request UpdateLocationRequestObject
+
+	request.LocationId = locationId
+
+	var body UpdateLocationJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateLocation(ctx, request.(UpdateLocationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateLocation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateLocationResponseObject); ok {
+		if err := validResponse.VisitUpdateLocationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

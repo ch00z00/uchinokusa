@@ -9,7 +9,7 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
-func ptr(s string) *string { return &s }
+func ptr[T any](v T) *T { return &v }
 
 func TestNewHouseholdInput(t *testing.T) {
 	t.Parallel()

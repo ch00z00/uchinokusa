@@ -15,6 +15,7 @@ type server struct {
 	members     MembershipService
 	invitations InvitationService
 	species     SpeciesService
+	locations   LocationService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)

@@ -139,6 +139,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Members:     app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
 		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),
 		Species:     app.NewSpeciesService(postgres.NewSpeciesRepository(pool)),
+		Locations:   app.NewLocationService(postgres.NewLocationRepository(pool), authz),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),
