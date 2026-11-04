@@ -699,6 +699,128 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /plants/{plantId}/tasks:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: listCareTasks
+      summary: 植物のお手入れタスクの一覧
+      description: 削除していないタスク（一時停止中を含む）を、作成の古い順に返す。閲覧者も見られる
+      tags: [task]
+      responses:
+        "200":
+          description: 植物のタスク。1つもなければ空の配列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: "#/components/schemas/CareTask" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createCareTask
+      summary: お手入れタスクを作成する（編集者以上）
+      description: 1つの植物に、種類の異なる複数のタスクを作れる（要件8-2）。同じ種類のタスクを複数作ることもできる
+      tags: [task]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCareTaskRequest" }
+      responses:
+        "201":
+          description: 作成したタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareTask" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /plants/{plantId}/task-defaults:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: listCareTaskDefaults
+      summary: タスクの作成画面の初期値
+      description: |
+        植物が植物マスタと紐づき、マスタにお手入れの目安がある場合、作業の種類ごとの初期値を返す（要件6-4）。
+        今は、出典で確かめた水やりの実行条件だけを返す（推奨周期はまだない）。閲覧者も見られる
+      tags: [task]
+      responses:
+        "200":
+          description: 作業の種類ごとの初期値。なければ空の配列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [defaults]
+                properties:
+                  defaults:
+                    type: array
+                    items: { $ref: "#/components/schemas/CareTaskDefault" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /tasks/{taskId}:
+    parameters:
+      - name: taskId
+        in: path
+        required: true
+        description: タスクの ID。所属していない世帯のタスク・削除したタスクの場合は 404 を返す
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateCareTask
+      summary: お手入れタスクを変更する（編集者以上）
+      description: |
+        送った項目だけを変更する（要件8-8）。作業の種類は変えられない。
+        周期を変えても次回予定日は変えず、新しい周期は次に完了したときから使う。予定日も変えたい場合は `nextDueOn` を送る。
+        `nextDueOn` を送ると、その予定日は季節の切り替えで計算し直す対象から外れる
+      tags: [task]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCareTaskRequest" }
+      responses:
+        "200":
+          description: 変更後のタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareTask" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteCareTask
+      summary: お手入れタスクを削除する（編集者以上）
+      description: タスクの過去の記録は、履歴として残す（要件8-10）
+      tags: [task]
+      responses:
+        "204":
+          description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -1152,6 +1274,157 @@ components:
           type: string
         acquiredOn:
           description: 空文字を送ると、未設定に戻す
+          type: string
+
+    CareKind:
+      description: |
+        お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+        値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+      type: string
+      enum: [watering, fertilizing, repotting, pruning, other]
+
+    IntervalUnit:
+      description: 周期の単位
+      type: string
+      enum: [day, week, month]
+
+    Interval:
+      description: 'お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）'
+      type: object
+      required: [value, unit]
+      properties:
+        value:
+          type: integer
+        unit:
+          $ref: "#/components/schemas/IntervalUnit"
+
+    SeasonalIntervals:
+      description: 季節ごとの周期（要件8-6）。設定のない季節は、基本の周期（`interval`）を使う。季節は北半球で、春 3〜5月、夏 6〜8月、秋 9〜11月、冬 12〜2月
+      type: object
+      properties:
+        spring: { $ref: "#/components/schemas/Interval" }
+        summer: { $ref: "#/components/schemas/Interval" }
+        autumn: { $ref: "#/components/schemas/Interval" }
+        winter: { $ref: "#/components/schemas/Interval" }
+
+    TaskStatus:
+      description: タスクの状態（`active`：有効、`paused`：一時停止中）。値は今後も追加されうるため、アプリは知らない値を「有効」として扱う
+      type: string
+      enum: [active, paused]
+
+    CareTask:
+      description: 植物のお手入れタスク。未設定の項目は、項目がない
+      type: object
+      required: [id, plantId, kind, interval, seasonalIntervals, cycleSeq, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/CareKind"
+        customName:
+          description: 作業名（`kind` が `other` のときだけ）
+          type: string
+        interval:
+          $ref: "#/components/schemas/Interval"
+        seasonalIntervals:
+          $ref: "#/components/schemas/SeasonalIntervals"
+        conditionText:
+          description: 実行条件（例：土の表面が乾いていたら）
+          type: string
+        note:
+          description: メモ（例：底から流れるまでたっぷり）
+          type: string
+        nextDueOn:
+          description: 次回予定日。有効なタスクでは必ずある
+          $ref: "#/components/schemas/Date"
+        cycleSeq:
+          description: 現在の予定の回の番号。完了・スキップのときに送り、同じ回の重複した完了を防ぐ
+          type: integer
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CareTaskDefault:
+      description: タスクの作成画面の初期値（植物マスタのお手入れの目安から作る）
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/CareKind"
+        conditionText:
+          description: 実行条件の初期値
+          type: string
+
+    IntervalInput:
+      description: 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+      type: object
+      required: [value, unit]
+      properties:
+        value:
+          type: integer
+        unit:
+          description: "`IntervalUnit` の値"
+          type: string
+
+    SeasonalIntervalsInput:
+      description: 季節ごとの周期の入力。誤りは `fields` の `seasonalIntervals.<季節>` に入る
+      type: object
+      properties:
+        spring: { $ref: "#/components/schemas/IntervalInput" }
+        summer: { $ref: "#/components/schemas/IntervalInput" }
+        autumn: { $ref: "#/components/schemas/IntervalInput" }
+        winter: { $ref: "#/components/schemas/IntervalInput" }
+
+    CreateCareTaskRequest:
+      type: object
+      required: [kind, interval]
+      properties:
+        kind:
+          description: "`CareKind` の値。知らない値は `fields.kind = invalid`"
+          type: string
+        customName:
+          description: "`kind` が `other` のとき必須（`fields.customName = required`）。前後の空白を除いて20文字まで（`too_long`）。ほかの種類では無視する"
+          type: string
+        interval:
+          description: 基本の周期。範囲外・知らない単位は `fields.interval = invalid`
+          $ref: "#/components/schemas/IntervalInput"
+        seasonalIntervals:
+          $ref: "#/components/schemas/SeasonalIntervalsInput"
+        conditionText:
+          description: 任意。実行条件。100文字まで（`too_long`）
+          type: string
+        note:
+          description: 任意。メモ。200文字まで（`too_long`）
+          type: string
+        nextDueOn:
+          description: 任意。初回の予定日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。形式が違う場合は `fields.nextDueOn = invalid`
+          type: string
+
+    UpdateCareTaskRequest:
+      description: 送った項目だけを変更する。検証の規則は CreateCareTaskRequest と同じ
+      type: object
+      properties:
+        customName:
+          description: "`kind` が `other` のタスクだけで変えられる（ほかの種類では無視する）"
+          type: string
+        interval:
+          $ref: "#/components/schemas/IntervalInput"
+        seasonalIntervals:
+          description: 季節ごとの周期をまるごと置き換える。`{}` を送ると、季節ごとの周期をなくす
+          $ref: "#/components/schemas/SeasonalIntervalsInput"
+        conditionText:
+          description: 空文字を送ると、実行条件をなくす
+          type: string
+        note:
+          description: 空文字を送ると、メモをなくす
+          type: string
+        nextDueOn:
+          description: 次回予定日（`YYYY-MM-DD`）。空にはできない（`fields.nextDueOn = required`）
           type: string
 
     Platform:

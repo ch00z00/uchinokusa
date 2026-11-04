@@ -18,6 +18,33 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for CareKind.
+const (
+	CareKindFertilizing CareKind = "fertilizing"
+	CareKindOther       CareKind = "other"
+	CareKindPruning     CareKind = "pruning"
+	CareKindRepotting   CareKind = "repotting"
+	CareKindWatering    CareKind = "watering"
+)
+
+// Valid indicates whether the value is a known member of the CareKind enum.
+func (e CareKind) Valid() bool {
+	switch e {
+	case CareKindFertilizing:
+		return true
+	case CareKindOther:
+		return true
+	case CareKindPruning:
+		return true
+	case CareKindRepotting:
+		return true
+	case CareKindWatering:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorCode.
 const (
 	ErrorCodeAlreadyMember     ErrorCode = "already_member"
@@ -75,6 +102,27 @@ func (e Hemisphere) Valid() bool {
 	case HemisphereNorth:
 		return true
 	case HemisphereSouth:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for IntervalUnit.
+const (
+	IntervalUnitDay   IntervalUnit = "day"
+	IntervalUnitMonth IntervalUnit = "month"
+	IntervalUnitWeek  IntervalUnit = "week"
+)
+
+// Valid indicates whether the value is a known member of the IntervalUnit enum.
+func (e IntervalUnit) Valid() bool {
+	switch e {
+	case IntervalUnitDay:
+		return true
+	case IntervalUnitMonth:
+		return true
+	case IntervalUnitWeek:
 		return true
 	default:
 		return false
@@ -159,6 +207,24 @@ func (e Shading) Valid() bool {
 	}
 }
 
+// Defines values for TaskStatus.
+const (
+	TaskStatusActive TaskStatus = "active"
+	TaskStatusPaused TaskStatus = "paused"
+)
+
+// Valid indicates whether the value is a known member of the TaskStatus enum.
+func (e TaskStatus) Valid() bool {
+	switch e {
+	case TaskStatusActive:
+		return true
+	case TaskStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for WaterTendency.
 const (
 	WaterTendencyLess     WaterTendency = "less"
@@ -235,6 +301,84 @@ func (e WindowDistance) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// CareKind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+type CareKind string
+
+// CareTask 植物のお手入れタスク。未設定の項目は、項目がない
+type CareTask struct {
+	// ConditionText 実行条件（例：土の表面が乾いていたら）
+	ConditionText *string `json:"conditionText,omitempty"`
+
+	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	CreatedAt DateTime `json:"createdAt"`
+
+	// CustomName 作業名（`kind` が `other` のときだけ）
+	CustomName *string `json:"customName,omitempty"`
+
+	// CycleSeq 現在の予定の回の番号。完了・スキップのときに送り、同じ回の重複した完了を防ぐ
+	CycleSeq int                `json:"cycleSeq"`
+	Id       openapi_types.UUID `json:"id"`
+
+	// Interval お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+	Interval Interval `json:"interval"`
+
+	// Kind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+	// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+	Kind CareKind `json:"kind"`
+
+	// NextDueOn 次回予定日。有効なタスクでは必ずある
+	//
+	// Examples: 2026-10-26
+	NextDueOn *Date `json:"nextDueOn,omitempty"`
+
+	// Note メモ（例：底から流れるまでたっぷり）
+	Note    *string            `json:"note,omitempty"`
+	PlantId openapi_types.UUID `json:"plantId"`
+
+	// SeasonalIntervals 季節ごとの周期（要件8-6）。設定のない季節は、基本の周期（`interval`）を使う。季節は北半球で、春 3〜5月、夏 6〜8月、秋 9〜11月、冬 12〜2月
+	SeasonalIntervals SeasonalIntervals `json:"seasonalIntervals"`
+
+	// Status タスクの状態（`active`：有効、`paused`：一時停止中）。値は今後も追加されうるため、アプリは知らない値を「有効」として扱う
+	Status TaskStatus `json:"status"`
+}
+
+// CareTaskDefault タスクの作成画面の初期値（植物マスタのお手入れの目安から作る）
+type CareTaskDefault struct {
+	// ConditionText 実行条件の初期値
+	ConditionText *string `json:"conditionText,omitempty"`
+
+	// Kind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+	// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+	Kind CareKind `json:"kind"`
+}
+
+// CreateCareTaskRequest defines model for CreateCareTaskRequest.
+type CreateCareTaskRequest struct {
+	// ConditionText 任意。実行条件。100文字まで（`too_long`）
+	ConditionText *string `json:"conditionText,omitempty"`
+
+	// CustomName `kind` が `other` のとき必須（`fields.customName = required`）。前後の空白を除いて20文字まで（`too_long`）。ほかの種類では無視する
+	CustomName *string `json:"customName,omitempty"`
+
+	// Interval 基本の周期。範囲外・知らない単位は `fields.interval = invalid`
+	Interval IntervalInput `json:"interval"`
+
+	// Kind `CareKind` の値。知らない値は `fields.kind = invalid`
+	Kind string `json:"kind"`
+
+	// NextDueOn 任意。初回の予定日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。形式が違う場合は `fields.nextDueOn = invalid`
+	NextDueOn *string `json:"nextDueOn,omitempty"`
+
+	// Note 任意。メモ。200文字まで（`too_long`）
+	Note *string `json:"note,omitempty"`
+
+	// SeasonalIntervals 季節ごとの周期の入力。誤りは `fields` の `seasonalIntervals.<季節>` に入る
+	SeasonalIntervals *SeasonalIntervalsInput `json:"seasonalIntervals,omitempty"`
 }
 
 // CreateHouseholdRequest defines model for CreateHouseholdRequest.
@@ -415,6 +559,23 @@ type Household struct {
 	TimeZone string `json:"timeZone"`
 }
 
+// Interval お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+type Interval struct {
+	// Unit 周期の単位
+	Unit  IntervalUnit `json:"unit"`
+	Value int          `json:"value"`
+}
+
+// IntervalInput 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+type IntervalInput struct {
+	// Unit `IntervalUnit` の値
+	Unit  string `json:"unit"`
+	Value int    `json:"value"`
+}
+
+// IntervalUnit 周期の単位
+type IntervalUnit string
+
 // Invitation 世帯への招待
 type Invitation struct {
 	// Code アプリで手入力する8文字の招待コード（紛らわしい文字 0・O・1・I・L を含まない英大文字と数字）
@@ -576,6 +737,36 @@ type RegisterDeviceRequest struct {
 // Role 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
 type Role string
 
+// SeasonalIntervals 季節ごとの周期（要件8-6）。設定のない季節は、基本の周期（`interval`）を使う。季節は北半球で、春 3〜5月、夏 6〜8月、秋 9〜11月、冬 12〜2月
+type SeasonalIntervals struct {
+	// Autumn お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+	Autumn *Interval `json:"autumn,omitempty"`
+
+	// Spring お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+	Spring *Interval `json:"spring,omitempty"`
+
+	// Summer お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+	Summer *Interval `json:"summer,omitempty"`
+
+	// Winter お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
+	Winter *Interval `json:"winter,omitempty"`
+}
+
+// SeasonalIntervalsInput 季節ごとの周期の入力。誤りは `fields` の `seasonalIntervals.<季節>` に入る
+type SeasonalIntervalsInput struct {
+	// Autumn 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+	Autumn *IntervalInput `json:"autumn,omitempty"`
+
+	// Spring 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+	Spring *IntervalInput `json:"spring,omitempty"`
+
+	// Summer 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+	Summer *IntervalInput `json:"summer,omitempty"`
+
+	// Winter 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+	Winter *IntervalInput `json:"winter,omitempty"`
+}
+
 // Shading 窓の遮光（`none`：遮光なし、`sheer`：レースカーテンなどで光を和らげている）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
 type Shading string
 
@@ -605,10 +796,34 @@ type Species struct {
 	WaterTendency *WaterTendency `json:"waterTendency,omitempty"`
 }
 
+// TaskStatus タスクの状態（`active`：有効、`paused`：一時停止中）。値は今後も追加されうるため、アプリは知らない値を「有効」として扱う
+type TaskStatus string
+
 // TransferOwnershipRequest defines model for TransferOwnershipRequest.
 type TransferOwnershipRequest struct {
 	// UserId 新しいオーナー。自分自身なら `fields.userId = invalid`、世帯のメンバーでなければ `not_member`
 	UserId openapi_types.UUID `json:"userId"`
+}
+
+// UpdateCareTaskRequest 送った項目だけを変更する。検証の規則は CreateCareTaskRequest と同じ
+type UpdateCareTaskRequest struct {
+	// ConditionText 空文字を送ると、実行条件をなくす
+	ConditionText *string `json:"conditionText,omitempty"`
+
+	// CustomName `kind` が `other` のタスクだけで変えられる（ほかの種類では無視する）
+	CustomName *string `json:"customName,omitempty"`
+
+	// Interval 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
+	Interval *IntervalInput `json:"interval,omitempty"`
+
+	// NextDueOn 次回予定日（`YYYY-MM-DD`）。空にはできない（`fields.nextDueOn = required`）
+	NextDueOn *string `json:"nextDueOn,omitempty"`
+
+	// Note 空文字を送ると、メモをなくす
+	Note *string `json:"note,omitempty"`
+
+	// SeasonalIntervals 季節ごとの周期をまるごと置き換える。`{}` を送ると、季節ごとの周期をなくす
+	SeasonalIntervals *SeasonalIntervalsInput `json:"seasonalIntervals,omitempty"`
 }
 
 // UpdateHouseholdRequest 送った項目だけを変更する。検証の規則は CreateHouseholdRequest と同じ
@@ -775,6 +990,12 @@ type RegisterDeviceJSONRequestBody = RegisterDeviceRequest
 // UpdatePlantJSONRequestBody defines body for UpdatePlant for application/json ContentType.
 type UpdatePlantJSONRequestBody = UpdatePlantRequest
 
+// CreateCareTaskJSONRequestBody defines body for CreateCareTask for application/json ContentType.
+type CreateCareTaskJSONRequestBody = CreateCareTaskRequest
+
+// UpdateCareTaskJSONRequestBody defines body for UpdateCareTask for application/json ContentType.
+type UpdateCareTaskJSONRequestBody = UpdateCareTaskRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -864,12 +1085,27 @@ type ServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// ListCareTaskDefaults タスクの作成画面の初期値
+	// (GET /plants/{plantId}/task-defaults)
+	ListCareTaskDefaults(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// ListCareTasks 植物のお手入れタスクの一覧
+	// (GET /plants/{plantId}/tasks)
+	ListCareTasks(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// CreateCareTask お手入れタスクを作成する（編集者以上）
+	// (POST /plants/{plantId}/tasks)
+	CreateCareTask(w http.ResponseWriter, r *http.Request, plantId PlantId)
 	// UnarchivePlant アーカイブを元に戻す（編集者以上）
 	// (POST /plants/{plantId}/unarchive)
 	UnarchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams)
+	// DeleteCareTask お手入れタスクを削除する（編集者以上）
+	// (DELETE /tasks/{taskId})
+	DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
+	// UpdateCareTask お手入れタスクを変更する（編集者以上）
+	// (PATCH /tasks/{taskId})
+	UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -1644,6 +1880,84 @@ func (siw *ServerInterfaceWrapper) ArchivePlant(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListCareTaskDefaults operation middleware
+func (siw *ServerInterfaceWrapper) ListCareTaskDefaults(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCareTaskDefaults(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCareTasks operation middleware
+func (siw *ServerInterfaceWrapper) ListCareTasks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCareTasks(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateCareTask operation middleware
+func (siw *ServerInterfaceWrapper) CreateCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCareTask(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UnarchivePlant operation middleware
 func (siw *ServerInterfaceWrapper) UnarchivePlant(w http.ResponseWriter, r *http.Request) {
 
@@ -1694,6 +2008,58 @@ func (siw *ServerInterfaceWrapper) SearchSpecies(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SearchSpecies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteCareTask operation middleware
+func (siw *ServerInterfaceWrapper) DeleteCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteCareTask(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCareTask operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCareTask(w, r, taskId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1853,6 +2219,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/plants/{plantId}", wrapper.UpdatePlant)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/archive", wrapper.ArchivePlant)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/unarchive", wrapper.UnarchivePlant)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/tasks", wrapper.ListCareTasks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/tasks", wrapper.CreateCareTask)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/task-defaults", wrapper.ListCareTaskDefaults)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/tasks/{taskId}", wrapper.DeleteCareTask)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/tasks/{taskId}", wrapper.UpdateCareTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -4452,6 +4823,273 @@ func (response ArchivePlant500JSONResponse) VisitArchivePlantResponse(w http.Res
 	return err
 }
 
+type ListCareTaskDefaultsRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type ListCareTaskDefaultsResponseObject interface {
+	VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error
+}
+
+type ListCareTaskDefaults200JSONResponse struct {
+	Defaults []CareTaskDefault `json:"defaults"`
+}
+
+func (response ListCareTaskDefaults200JSONResponse) VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTaskDefaults400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListCareTaskDefaults400JSONResponse) VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTaskDefaults401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListCareTaskDefaults401JSONResponse) VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTaskDefaults404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListCareTaskDefaults404JSONResponse) VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTaskDefaults500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListCareTaskDefaults500JSONResponse) VisitListCareTaskDefaultsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTasksRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type ListCareTasksResponseObject interface {
+	VisitListCareTasksResponse(w http.ResponseWriter) error
+}
+
+type ListCareTasks200JSONResponse struct {
+	Tasks []CareTask `json:"tasks"`
+}
+
+func (response ListCareTasks200JSONResponse) VisitListCareTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTasks400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListCareTasks400JSONResponse) VisitListCareTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTasks401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListCareTasks401JSONResponse) VisitListCareTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTasks404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListCareTasks404JSONResponse) VisitListCareTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListCareTasks500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListCareTasks500JSONResponse) VisitListCareTasksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTaskRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+	Body    *CreateCareTaskJSONRequestBody
+}
+
+type CreateCareTaskResponseObject interface {
+	VisitCreateCareTaskResponse(w http.ResponseWriter) error
+}
+
+type CreateCareTask201JSONResponse CareTask
+
+func (response CreateCareTask201JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateCareTask400JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CreateCareTask401JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCareTask403JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateCareTask404JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response CreateCareTask422JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response CreateCareTask500JSONResponse) VisitCreateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UnarchivePlantRequestObject struct {
 	PlantId PlantId `json:"plantId"`
 }
@@ -4610,6 +5248,199 @@ func (response SearchSpecies500JSONResponse) VisitSearchSpeciesResponse(w http.R
 	return err
 }
 
+type DeleteCareTaskRequestObject struct {
+	TaskId openapi_types.UUID `json:"taskId"`
+}
+
+type DeleteCareTaskResponseObject interface {
+	VisitDeleteCareTaskResponse(w http.ResponseWriter) error
+}
+
+type DeleteCareTask204Response struct {
+}
+
+func (response DeleteCareTask204Response) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeleteCareTask400JSONResponse) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteCareTask401JSONResponse) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteCareTask403JSONResponse) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteCareTask404JSONResponse) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response DeleteCareTask500JSONResponse) VisitDeleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTaskRequestObject struct {
+	TaskId openapi_types.UUID `json:"taskId"`
+	Body   *UpdateCareTaskJSONRequestBody
+}
+
+type UpdateCareTaskResponseObject interface {
+	VisitUpdateCareTaskResponse(w http.ResponseWriter) error
+}
+
+type UpdateCareTask200JSONResponse CareTask
+
+func (response UpdateCareTask200JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateCareTask400JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdateCareTask401JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateCareTask403JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateCareTask404JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdateCareTask422JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateCareTask500JSONResponse) VisitUpdateCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -4699,12 +5530,27 @@ type StrictServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(ctx context.Context, request ArchivePlantRequestObject) (ArchivePlantResponseObject, error)
+	// ListCareTaskDefaults タスクの作成画面の初期値
+	// (GET /plants/{plantId}/task-defaults)
+	ListCareTaskDefaults(ctx context.Context, request ListCareTaskDefaultsRequestObject) (ListCareTaskDefaultsResponseObject, error)
+	// ListCareTasks 植物のお手入れタスクの一覧
+	// (GET /plants/{plantId}/tasks)
+	ListCareTasks(ctx context.Context, request ListCareTasksRequestObject) (ListCareTasksResponseObject, error)
+	// CreateCareTask お手入れタスクを作成する（編集者以上）
+	// (POST /plants/{plantId}/tasks)
+	CreateCareTask(ctx context.Context, request CreateCareTaskRequestObject) (CreateCareTaskResponseObject, error)
 	// UnarchivePlant アーカイブを元に戻す（編集者以上）
 	// (POST /plants/{plantId}/unarchive)
 	UnarchivePlant(ctx context.Context, request UnarchivePlantRequestObject) (UnarchivePlantResponseObject, error)
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(ctx context.Context, request SearchSpeciesRequestObject) (SearchSpeciesResponseObject, error)
+	// DeleteCareTask お手入れタスクを削除する（編集者以上）
+	// (DELETE /tasks/{taskId})
+	DeleteCareTask(ctx context.Context, request DeleteCareTaskRequestObject) (DeleteCareTaskResponseObject, error)
+	// UpdateCareTask お手入れタスクを変更する（編集者以上）
+	// (PATCH /tasks/{taskId})
+	UpdateCareTask(ctx context.Context, request UpdateCareTaskRequestObject) (UpdateCareTaskResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -5578,6 +6424,91 @@ func (sh *strictHandler) ArchivePlant(w http.ResponseWriter, r *http.Request, pl
 	}
 }
 
+// ListCareTaskDefaults operation middleware
+func (sh *strictHandler) ListCareTaskDefaults(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request ListCareTaskDefaultsRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCareTaskDefaults(ctx, request.(ListCareTaskDefaultsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCareTaskDefaults")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCareTaskDefaultsResponseObject); ok {
+		if err := validResponse.VisitListCareTaskDefaultsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCareTasks operation middleware
+func (sh *strictHandler) ListCareTasks(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request ListCareTasksRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCareTasks(ctx, request.(ListCareTasksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCareTasks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCareTasksResponseObject); ok {
+		if err := validResponse.VisitListCareTasksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCareTask operation middleware
+func (sh *strictHandler) CreateCareTask(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request CreateCareTaskRequestObject
+
+	request.PlantId = plantId
+
+	var body CreateCareTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCareTask(ctx, request.(CreateCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCareTaskResponseObject); ok {
+		if err := validResponse.VisitCreateCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UnarchivePlant operation middleware
 func (sh *strictHandler) UnarchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
 	var request UnarchivePlantRequestObject
@@ -5623,6 +6554,65 @@ func (sh *strictHandler) SearchSpecies(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchSpeciesResponseObject); ok {
 		if err := validResponse.VisitSearchSpeciesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteCareTask operation middleware
+func (sh *strictHandler) DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+	var request DeleteCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteCareTask(ctx, request.(DeleteCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteCareTaskResponseObject); ok {
+		if err := validResponse.VisitDeleteCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCareTask operation middleware
+func (sh *strictHandler) UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId openapi_types.UUID) {
+	var request UpdateCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	var body UpdateCareTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCareTask(ctx, request.(UpdateCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCareTaskResponseObject); ok {
+		if err := validResponse.VisitUpdateCareTaskResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

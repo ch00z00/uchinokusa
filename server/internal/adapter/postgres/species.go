@@ -98,6 +98,17 @@ type repottingJSON struct {
 	SuitableMonths []int `json:"suitableMonths"`
 }
 
+func (c recommendedCareJSON) toDomain() domain.SpeciesCare {
+	var care domain.SpeciesCare
+	if w := c.Watering; w != nil {
+		care.Watering = &domain.WateringAdvice{Condition: w.Condition, Winter: w.Winter}
+	}
+	if r := c.Repotting; r != nil {
+		care.RepottingSuitableMonths = r.SuitableMonths
+	}
+	return care
+}
+
 // attributesJSON は、species.attributes（jsonb）の形である。MVP の画面で使わない項目もここに入れる（要件19-8）。
 type attributesJSON struct {
 	Sources []sourceJSON `json:"sources,omitempty"`
@@ -177,12 +188,7 @@ func toDomainSpecies(row sqlcgen.Species) (domain.Species, error) {
 		WaterTendency:  domain.WaterTendency(emptyIfNull(row.WaterTendency)),
 		OutdoorOK:      row.OutdoorOk,
 	}
-	if w := care.Watering; w != nil {
-		s.Care.Watering = &domain.WateringAdvice{Condition: w.Condition, Winter: w.Winter}
-	}
-	if r := care.Repotting; r != nil {
-		s.Care.RepottingSuitableMonths = r.SuitableMonths
-	}
+	s.Care = care.toDomain()
 	for _, src := range attrs.Sources {
 		s.Sources = append(s.Sources, domain.SpeciesSource{URL: src.URL, Title: src.Title, AccessedOn: src.AccessedOn, Fields: src.Fields, Quote: src.Quote})
 	}
