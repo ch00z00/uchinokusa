@@ -50,6 +50,7 @@
 - 技術：React Native（Expo）／Go＋PostgreSQL／Firebase Auth＋FCM／WebSocket（詳細は `.kiro/steering/tech.md`）
 
 ## 開発ログ
+- リリース後に回す課題（直近で重要度の高くないもの）は `docs/backlog.md` に追加する。1st スプリントは MVP のリリースを優先する
 - 設計や運用の判断は、背景と理由とあわせて `docs/decisions/` に1件1ファイルで残す（一覧は `docs/decisions/README.md`）
 - 実装中に新しい判断（ライブラリの選定、構成の変更など）をしたら、記録を追加する
 - ユーザーの技術的な質問と答えは、`docs/learning/` に話題ごとにまとめる（一覧は `docs/learning/README.md`）
