@@ -273,6 +273,26 @@ type CreateLocationRequest struct {
 	WindowDistance *string `json:"windowDistance,omitempty"`
 }
 
+// CreatePlantRequest defines model for CreatePlantRequest.
+type CreatePlantRequest struct {
+	// AcquiredOn 任意。購入日・お迎え日（`YYYY-MM-DD`）。空文字は未設定として扱う。形式が違う、存在しない日の場合は `fields.acquiredOn = invalid`
+	AcquiredOn *string `json:"acquiredOn,omitempty"`
+
+	// LocationId 任意。世帯の置き場所の ID。空文字は未設定として扱う。UUID でない、存在しない、ほかの世帯の置き場所の場合は `fields.locationId = invalid`
+	LocationId *string `json:"locationId,omitempty"`
+
+	// Name 前後の空白を除いて1〜40文字。空の場合は `fields.name = required`、長すぎる場合は `too_long`
+	Name string `json:"name"`
+
+	// SpeciesFreeText 任意。植物マスタにない種類の自由入力（要件6-3）。前後の空白を除いて50文字まで（長すぎる場合は `too_long`）。
+	// `speciesId` といっしょに送った場合は `fields.speciesFreeText = exclusive`
+	SpeciesFreeText *string `json:"speciesFreeText,omitempty"`
+
+	// SpeciesId 任意。植物マスタの種類の ID（`GET /species` で探す）。空文字は未設定として扱う。
+	// UUID でない、または存在しない場合は `fields.speciesId = invalid`
+	SpeciesId *string `json:"speciesId,omitempty"`
+}
+
 // CreatedInvitation 作成した招待。`url` を共有機能や QR コードで渡す
 type CreatedInvitation struct {
 	// Code アプリで手入力する8文字の招待コード（紛らわしい文字 0・O・1・I・L を含まない英大文字と数字）
@@ -498,6 +518,44 @@ type NotificationSettings struct {
 	ReminderTime string `json:"reminderTime"`
 }
 
+// Plant 世帯の植物。未設定の項目は、項目がない。
+// 種類は、植物マスタの種類（`speciesId`・`speciesName`）か、自由入力（`speciesFreeText`）のどちらか一方だけを持つ
+type Plant struct {
+	// AcquiredOn 購入日・お迎え日
+	//
+	// Examples: 2026-10-26
+	AcquiredOn *Date `json:"acquiredOn,omitempty"`
+
+	// ArchivedAt アーカイブした日時。アーカイブしていなければ項目がない
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	ArchivedAt *DateTime `json:"archivedAt,omitempty"`
+
+	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	CreatedAt DateTime           `json:"createdAt"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// LocationId 置き場所の ID。置き場所を削除すると未設定になる
+	LocationId *openapi_types.UUID `json:"locationId,omitempty"`
+	Name       string              `json:"name"`
+
+	// NextDueOn 有効なタスク（一時停止・削除したものを除く）のうち、いちばん近い次回予定日（要件5-4）。タスクがなければ項目がない
+	//
+	// Examples: 2026-10-26
+	NextDueOn *Date `json:"nextDueOn,omitempty"`
+
+	// SpeciesFreeText 植物マスタにない種類の自由入力
+	SpeciesFreeText *string `json:"speciesFreeText,omitempty"`
+
+	// SpeciesId 植物マスタの種類の ID
+	SpeciesId *openapi_types.UUID `json:"speciesId,omitempty"`
+
+	// SpeciesName 植物マスタの種類の和名（`speciesId` があるときだけ）
+	SpeciesName *string `json:"speciesName,omitempty"`
+}
+
 // Platform 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
 type Platform string
 
@@ -591,6 +649,23 @@ type UpdateMemberRoleRequest struct {
 	Role string `json:"role"`
 }
 
+// UpdatePlantRequest 送った項目だけを変更する。検証の規則は CreatePlantRequest と同じ。
+// 種類は、`speciesId` か `speciesFreeText` のどちらかを送ると、まるごと置き換える（送らなかった方は消える）
+type UpdatePlantRequest struct {
+	// AcquiredOn 空文字を送ると、未設定に戻す
+	AcquiredOn *string `json:"acquiredOn,omitempty"`
+
+	// LocationId 空文字を送ると、未設定に戻す
+	LocationId *string `json:"locationId,omitempty"`
+	Name       *string `json:"name,omitempty"`
+
+	// SpeciesFreeText 空文字を送ると、種類を未設定に戻す
+	SpeciesFreeText *string `json:"speciesFreeText,omitempty"`
+
+	// SpeciesId 空文字を送ると、種類を未設定に戻す
+	SpeciesId *string `json:"speciesId,omitempty"`
+}
+
 // WaterTendency 水やりの量の傾向（`less`：乾かし気味、`moderate`：鉢土の表面が乾いたら、`more`：乾かさない）
 type WaterTendency string
 
@@ -602,6 +677,9 @@ type WindowDistance string
 
 // HouseholdId defines model for HouseholdId.
 type HouseholdId = openapi_types.UUID
+
+// PlantId defines model for PlantId.
+type PlantId = openapi_types.UUID
 
 // TokenOrCode defines model for TokenOrCode.
 type TokenOrCode = string
@@ -642,6 +720,19 @@ type Unauthenticated = Error
 // エラーの種類によっては、衝突の内容（誰がいつ完了したか、など）の項目が追加される。
 type ValidationFailed = Error
 
+// ListPlantsParams defines parameters for ListPlants.
+type ListPlantsParams struct {
+	// LocationId 置き場所で絞り込む（要件5-5）
+	LocationId *openapi_types.UUID `form:"locationId,omitempty" json:"locationId,omitempty"`
+
+	// Q 名前の部分一致で探す（要件5-5）。植物マスタの検索と同じく、ひらがな・カタカナ、全角・半角、大文字・小文字を区別せず、空白と中黒（・）を無視する。
+	// 100文字まで（長すぎる場合は `fields.q = too_long`）
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Archived `true` なら、アーカイブした植物だけを返す（記録やメモを見返すため）
+	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
+}
+
 // SearchSpeciesParams defines parameters for SearchSpecies.
 type SearchSpeciesParams struct {
 	// Q 検索語。100文字まで（長すぎる場合は `fields.q = too_long`）
@@ -669,6 +760,9 @@ type UpdateMemberRoleJSONRequestBody = UpdateMemberRoleRequest
 // TransferOwnershipJSONRequestBody defines body for TransferOwnership for application/json ContentType.
 type TransferOwnershipJSONRequestBody = TransferOwnershipRequest
 
+// CreatePlantJSONRequestBody defines body for CreatePlant for application/json ContentType.
+type CreatePlantJSONRequestBody = CreatePlantRequest
+
 // UpdateLocationJSONRequestBody defines body for UpdateLocation for application/json ContentType.
 type UpdateLocationJSONRequestBody = UpdateLocationRequest
 
@@ -677,6 +771,9 @@ type UpdateMeJSONRequestBody = UpdateMeRequest
 
 // RegisterDeviceJSONRequestBody defines body for RegisterDevice for application/json ContentType.
 type RegisterDeviceJSONRequestBody = RegisterDeviceRequest
+
+// UpdatePlantJSONRequestBody defines body for UpdatePlant for application/json ContentType.
+type UpdatePlantJSONRequestBody = UpdatePlantRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -725,6 +822,12 @@ type ServerInterface interface {
 	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
 	// (POST /households/{householdId}/ownership-transfer)
 	TransferOwnership(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// ListPlants 世帯の植物の一覧
+	// (GET /households/{householdId}/plants)
+	ListPlants(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params ListPlantsParams)
+	// CreatePlant 植物を登録する（編集者以上）
+	// (POST /households/{householdId}/plants)
+	CreatePlant(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
 	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
 	// (GET /invitations/{tokenOrCode})
 	GetInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode)
@@ -749,6 +852,21 @@ type ServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(w http.ResponseWriter, r *http.Request, deviceId openapi_types.UUID)
+	// DeletePlant 植物を削除する（編集者以上）
+	// (DELETE /plants/{plantId})
+	DeletePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// GetPlant 植物の詳細
+	// (GET /plants/{plantId})
+	GetPlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// UpdatePlant 植物の情報を変更する（編集者以上）
+	// (PATCH /plants/{plantId})
+	UpdatePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
+	// (POST /plants/{plantId}/archive)
+	ArchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// UnarchivePlant アーカイブを元に戻す（編集者以上）
+	// (POST /plants/{plantId}/unarchive)
+	UnarchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams)
@@ -1156,6 +1274,100 @@ func (siw *ServerInterfaceWrapper) TransferOwnership(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListPlants operation middleware
+func (siw *ServerInterfaceWrapper) ListPlants(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPlantsParams
+
+	// ------------- Optional query parameter "locationId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "locationId", r.URL.Query(), &params.LocationId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "locationId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "locationId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "archived" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "archived", r.URL.Query(), &params.Archived, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "archived"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "archived", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlants(w, r, householdId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePlant operation middleware
+func (siw *ServerInterfaceWrapper) CreatePlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePlant(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetInvitation operation middleware
 func (siw *ServerInterfaceWrapper) GetInvitation(w http.ResponseWriter, r *http.Request) {
 
@@ -1319,6 +1531,136 @@ func (siw *ServerInterfaceWrapper) UnregisterDevice(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UnregisterDevice(w, r, deviceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePlant operation middleware
+func (siw *ServerInterfaceWrapper) DeletePlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePlant(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlant operation middleware
+func (siw *ServerInterfaceWrapper) GetPlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlant(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePlant operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePlant(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchivePlant operation middleware
+func (siw *ServerInterfaceWrapper) ArchivePlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchivePlant(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnarchivePlant operation middleware
+func (siw *ServerInterfaceWrapper) UnarchivePlant(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnarchivePlant(w, r, plantId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1504,6 +1846,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/locations", wrapper.CreateLocation)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/locations/{locationId}", wrapper.DeleteLocation)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/locations/{locationId}", wrapper.UpdateLocation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/plants", wrapper.ListPlants)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/plants", wrapper.CreatePlant)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/plants/{plantId}", wrapper.DeletePlant)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}", wrapper.GetPlant)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/plants/{plantId}", wrapper.UpdatePlant)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/archive", wrapper.ArchivePlant)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/unarchive", wrapper.UnarchivePlant)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -2906,6 +3255,208 @@ func (response TransferOwnership500JSONResponse) VisitTransferOwnershipResponse(
 	return err
 }
 
+type ListPlantsRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Params      ListPlantsParams
+}
+
+type ListPlantsResponseObject interface {
+	VisitListPlantsResponse(w http.ResponseWriter) error
+}
+
+type ListPlants200JSONResponse struct {
+	Plants []Plant `json:"plants"`
+}
+
+func (response ListPlants200JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlants400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListPlants400JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlants401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListPlants401JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlants404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListPlants404JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlants422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response ListPlants422JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlants500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListPlants500JSONResponse) VisitListPlantsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlantRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Body        *CreatePlantJSONRequestBody
+}
+
+type CreatePlantResponseObject interface {
+	VisitCreatePlantResponse(w http.ResponseWriter) error
+}
+
+type CreatePlant201JSONResponse Plant
+
+func (response CreatePlant201JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreatePlant400JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CreatePlant401JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreatePlant403JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreatePlant404JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response CreatePlant422JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response CreatePlant500JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetInvitationRequestObject struct {
 	TokenOrCode TokenOrCode `json:"tokenOrCode"`
 }
@@ -3538,6 +4089,461 @@ func (response UnregisterDevice500JSONResponse) VisitUnregisterDeviceResponse(w 
 	return err
 }
 
+type DeletePlantRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type DeletePlantResponseObject interface {
+	VisitDeletePlantResponse(w http.ResponseWriter) error
+}
+
+type DeletePlant204Response struct {
+}
+
+func (response DeletePlant204Response) VisitDeletePlantResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeletePlant400JSONResponse) VisitDeletePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeletePlant401JSONResponse) VisitDeletePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeletePlant403JSONResponse) VisitDeletePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeletePlant404JSONResponse) VisitDeletePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response DeletePlant500JSONResponse) VisitDeletePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type GetPlantResponseObject interface {
+	VisitGetPlantResponse(w http.ResponseWriter) error
+}
+
+type GetPlant200JSONResponse Plant
+
+func (response GetPlant200JSONResponse) VisitGetPlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetPlant400JSONResponse) VisitGetPlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetPlant401JSONResponse) VisitGetPlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetPlant404JSONResponse) VisitGetPlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetPlant500JSONResponse) VisitGetPlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlantRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+	Body    *UpdatePlantJSONRequestBody
+}
+
+type UpdatePlantResponseObject interface {
+	VisitUpdatePlantResponse(w http.ResponseWriter) error
+}
+
+type UpdatePlant200JSONResponse Plant
+
+func (response UpdatePlant200JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdatePlant400JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdatePlant401JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdatePlant403JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdatePlant404JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdatePlant422JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdatePlant500JSONResponse) VisitUpdatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlantRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type ArchivePlantResponseObject interface {
+	VisitArchivePlantResponse(w http.ResponseWriter) error
+}
+
+type ArchivePlant200JSONResponse Plant
+
+func (response ArchivePlant200JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ArchivePlant400JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ArchivePlant401JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ArchivePlant403JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ArchivePlant404JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchivePlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response ArchivePlant500JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlantRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+}
+
+type UnarchivePlantResponseObject interface {
+	VisitUnarchivePlantResponse(w http.ResponseWriter) error
+}
+
+type UnarchivePlant200JSONResponse Plant
+
+func (response UnarchivePlant200JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlant400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UnarchivePlant400JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlant401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UnarchivePlant401JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlant403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UnarchivePlant403JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlant404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UnarchivePlant404JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchivePlant500JSONResponse struct{ InternalJSONResponse }
+
+func (response UnarchivePlant500JSONResponse) VisitUnarchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type SearchSpeciesRequestObject struct {
 	Params SearchSpeciesParams
 }
@@ -3651,6 +4657,12 @@ type StrictServerInterface interface {
 	// TransferOwnership オーナー権限を別のメンバーに移す（オーナーのみ）
 	// (POST /households/{householdId}/ownership-transfer)
 	TransferOwnership(ctx context.Context, request TransferOwnershipRequestObject) (TransferOwnershipResponseObject, error)
+	// ListPlants 世帯の植物の一覧
+	// (GET /households/{householdId}/plants)
+	ListPlants(ctx context.Context, request ListPlantsRequestObject) (ListPlantsResponseObject, error)
+	// CreatePlant 植物を登録する（編集者以上）
+	// (POST /households/{householdId}/plants)
+	CreatePlant(ctx context.Context, request CreatePlantRequestObject) (CreatePlantResponseObject, error)
 	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
 	// (GET /invitations/{tokenOrCode})
 	GetInvitation(ctx context.Context, request GetInvitationRequestObject) (GetInvitationResponseObject, error)
@@ -3675,6 +4687,21 @@ type StrictServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(ctx context.Context, request UnregisterDeviceRequestObject) (UnregisterDeviceResponseObject, error)
+	// DeletePlant 植物を削除する（編集者以上）
+	// (DELETE /plants/{plantId})
+	DeletePlant(ctx context.Context, request DeletePlantRequestObject) (DeletePlantResponseObject, error)
+	// GetPlant 植物の詳細
+	// (GET /plants/{plantId})
+	GetPlant(ctx context.Context, request GetPlantRequestObject) (GetPlantResponseObject, error)
+	// UpdatePlant 植物の情報を変更する（編集者以上）
+	// (PATCH /plants/{plantId})
+	UpdatePlant(ctx context.Context, request UpdatePlantRequestObject) (UpdatePlantResponseObject, error)
+	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
+	// (POST /plants/{plantId}/archive)
+	ArchivePlant(ctx context.Context, request ArchivePlantRequestObject) (ArchivePlantResponseObject, error)
+	// UnarchivePlant アーカイブを元に戻す（編集者以上）
+	// (POST /plants/{plantId}/unarchive)
+	UnarchivePlant(ctx context.Context, request UnarchivePlantRequestObject) (UnarchivePlantResponseObject, error)
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(ctx context.Context, request SearchSpeciesRequestObject) (SearchSpeciesResponseObject, error)
@@ -4157,6 +5184,66 @@ func (sh *strictHandler) TransferOwnership(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+// ListPlants operation middleware
+func (sh *strictHandler) ListPlants(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params ListPlantsParams) {
+	var request ListPlantsRequestObject
+
+	request.HouseholdId = householdId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlants(ctx, request.(ListPlantsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlants")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlantsResponseObject); ok {
+		if err := validResponse.VisitListPlantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePlant operation middleware
+func (sh *strictHandler) CreatePlant(w http.ResponseWriter, r *http.Request, householdId HouseholdId) {
+	var request CreatePlantRequestObject
+
+	request.HouseholdId = householdId
+
+	var body CreatePlantJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePlant(ctx, request.(CreatePlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePlantResponseObject); ok {
+		if err := validResponse.VisitCreatePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetInvitation operation middleware
 func (sh *strictHandler) GetInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode) {
 	var request GetInvitationRequestObject
@@ -4373,6 +5460,143 @@ func (sh *strictHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UnregisterDeviceResponseObject); ok {
 		if err := validResponse.VisitUnregisterDeviceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePlant operation middleware
+func (sh *strictHandler) DeletePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request DeletePlantRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePlant(ctx, request.(DeletePlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePlantResponseObject); ok {
+		if err := validResponse.VisitDeletePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlant operation middleware
+func (sh *strictHandler) GetPlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request GetPlantRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlant(ctx, request.(GetPlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlantResponseObject); ok {
+		if err := validResponse.VisitGetPlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePlant operation middleware
+func (sh *strictHandler) UpdatePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request UpdatePlantRequestObject
+
+	request.PlantId = plantId
+
+	var body UpdatePlantJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePlant(ctx, request.(UpdatePlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdatePlantResponseObject); ok {
+		if err := validResponse.VisitUpdatePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchivePlant operation middleware
+func (sh *strictHandler) ArchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request ArchivePlantRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchivePlant(ctx, request.(ArchivePlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchivePlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchivePlantResponseObject); ok {
+		if err := validResponse.VisitArchivePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnarchivePlant operation middleware
+func (sh *strictHandler) UnarchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request UnarchivePlantRequestObject
+
+	request.PlantId = plantId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnarchivePlant(ctx, request.(UnarchivePlantRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnarchivePlant")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnarchivePlantResponseObject); ok {
+		if err := validResponse.VisitUnarchivePlantResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

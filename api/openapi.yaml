@@ -529,6 +529,176 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/plants:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: listPlants
+      summary: 世帯の植物の一覧
+      description: |
+        登録の古い順に返す。閲覧者も見られる。株数に上限はない（要件5-3）。
+        既定では、アーカイブした植物を含めない（要件5-8）
+      tags: [plant]
+      parameters:
+        - name: locationId
+          in: query
+          required: false
+          description: 置き場所で絞り込む（要件5-5）
+          schema:
+            type: string
+            format: uuid
+        - name: q
+          in: query
+          required: false
+          description: |
+            名前の部分一致で探す（要件5-5）。植物マスタの検索と同じく、ひらがな・カタカナ、全角・半角、大文字・小文字を区別せず、空白と中黒（・）を無視する。
+            100文字まで（長すぎる場合は `fields.q = too_long`）
+          schema:
+            type: string
+        - name: archived
+          in: query
+          required: false
+          description: "`true` なら、アーカイブした植物だけを返す（記録やメモを見返すため）"
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: 条件に合う植物。1つもなければ空の配列
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plants]
+                properties:
+                  plants:
+                    type: array
+                    items: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createPlant
+      summary: 植物を登録する（編集者以上）
+      tags: [plant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePlantRequest" }
+      responses:
+        "201":
+          description: 登録した植物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /plants/{plantId}:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: getPlant
+      summary: 植物の詳細
+      description: 閲覧者も見られる。アーカイブした植物も見られる（記録とメモを閲覧するため。要件5-8）
+      tags: [plant]
+      responses:
+        "200":
+          description: 植物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+    patch:
+      operationId: updatePlant
+      summary: 植物の情報を変更する（編集者以上）
+      description: 送った項目だけを変更する。種類・置き場所・購入日を未設定に戻すには、空文字を送る（要件5-6）
+      tags: [plant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePlantRequest" }
+      responses:
+        "200":
+          description: 変更後の植物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deletePlant
+      summary: 植物を削除する（編集者以上）
+      description: |
+        植物のタスク・記録・メモもいっしょに削除し、元に戻せない。
+        アプリは、関連データも消えることを示して確認してから呼ぶ（要件5-7）。残したい場合はアーカイブを使う
+      tags: [plant]
+      responses:
+        "204":
+          description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /plants/{plantId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    post:
+      operationId: archivePlant
+      summary: 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
+      description: |
+        通常の一覧とリマインダーの対象から外し、記録とメモは閲覧できるように残す（要件5-8）。
+        すでにアーカイブしている場合は、最初にアーカイブした日時のまま返す
+      tags: [plant]
+      responses:
+        "200":
+          description: アーカイブした植物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /plants/{plantId}/unarchive:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    post:
+      operationId: unarchivePlant
+      summary: アーカイブを元に戻す（編集者以上）
+      description: 誤ってアーカイブしたときのためにある。アーカイブしていない場合は、そのまま返す
+      tags: [plant]
+      responses:
+        "200":
+          description: 元に戻した植物
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -575,6 +745,14 @@ components:
       in: path
       required: true
       description: 世帯の ID。所属していない世帯の場合は 404 を返す（存在を明かさない）
+      schema:
+        type: string
+        format: uuid
+    PlantId:
+      name: plantId
+      in: path
+      required: true
+      description: 植物の ID。所属していない世帯の植物の場合は 404 を返す（存在を明かさない）
       schema:
         type: string
         format: uuid
@@ -890,6 +1068,89 @@ components:
           description: 空文字を送ると、未設定に戻す
           type: string
         shading:
+          description: 空文字を送ると、未設定に戻す
+          type: string
+
+    Plant:
+      description: |
+        世帯の植物。未設定の項目は、項目がない。
+        種類は、植物マスタの種類（`speciesId`・`speciesName`）か、自由入力（`speciesFreeText`）のどちらか一方だけを持つ
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        speciesId:
+          description: 植物マスタの種類の ID
+          type: string
+          format: uuid
+        speciesName:
+          description: 植物マスタの種類の和名（`speciesId` があるときだけ）
+          type: string
+        speciesFreeText:
+          description: 植物マスタにない種類の自由入力
+          type: string
+        locationId:
+          description: 置き場所の ID。置き場所を削除すると未設定になる
+          type: string
+          format: uuid
+        acquiredOn:
+          description: 購入日・お迎え日
+          $ref: "#/components/schemas/Date"
+        nextDueOn:
+          description: 有効なタスク（一時停止・削除したものを除く）のうち、いちばん近い次回予定日（要件5-4）。タスクがなければ項目がない
+          $ref: "#/components/schemas/Date"
+        archivedAt:
+          description: アーカイブした日時。アーカイブしていなければ項目がない
+          $ref: "#/components/schemas/DateTime"
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CreatePlantRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          description: 前後の空白を除いて1〜40文字。空の場合は `fields.name = required`、長すぎる場合は `too_long`
+          type: string
+        speciesId:
+          description: |
+            任意。植物マスタの種類の ID（`GET /species` で探す）。空文字は未設定として扱う。
+            UUID でない、または存在しない場合は `fields.speciesId = invalid`
+          type: string
+        speciesFreeText:
+          description: |
+            任意。植物マスタにない種類の自由入力（要件6-3）。前後の空白を除いて50文字まで（長すぎる場合は `too_long`）。
+            `speciesId` といっしょに送った場合は `fields.speciesFreeText = exclusive`
+          type: string
+        locationId:
+          description: 任意。世帯の置き場所の ID。空文字は未設定として扱う。UUID でない、存在しない、ほかの世帯の置き場所の場合は `fields.locationId = invalid`
+          type: string
+        acquiredOn:
+          description: 任意。購入日・お迎え日（`YYYY-MM-DD`）。空文字は未設定として扱う。形式が違う、存在しない日の場合は `fields.acquiredOn = invalid`
+          type: string
+
+    UpdatePlantRequest:
+      description: |
+        送った項目だけを変更する。検証の規則は CreatePlantRequest と同じ。
+        種類は、`speciesId` か `speciesFreeText` のどちらかを送ると、まるごと置き換える（送らなかった方は消える）
+      type: object
+      properties:
+        name:
+          type: string
+        speciesId:
+          description: 空文字を送ると、種類を未設定に戻す
+          type: string
+        speciesFreeText:
+          description: 空文字を送ると、種類を未設定に戻す
+          type: string
+        locationId:
+          description: 空文字を送ると、未設定に戻す
+          type: string
+        acquiredOn:
           description: 空文字を送ると、未設定に戻す
           type: string
 

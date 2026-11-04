@@ -140,6 +140,7 @@ type Plant struct {
 	Attributes      []byte
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	NameSearch      string
 }
 
 type ReminderDispatch struct {
