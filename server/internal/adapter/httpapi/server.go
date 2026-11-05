@@ -21,6 +21,7 @@ type server struct {
 	plants      PlantService
 	tasks       CareTaskService
 	records     CareRecordService
+	today       TodayService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)

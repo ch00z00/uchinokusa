@@ -279,6 +279,48 @@ func (e SkipReason) Valid() bool {
 	}
 }
 
+// Defines values for SuggestionAction.
+const (
+	SuggestionActionCreateTask SuggestionAction = "create_task"
+	SuggestionActionInfo       SuggestionAction = "info"
+	SuggestionActionSkipToday  SuggestionAction = "skip_today"
+)
+
+// Valid indicates whether the value is a known member of the SuggestionAction enum.
+func (e SuggestionAction) Valid() bool {
+	switch e {
+	case SuggestionActionCreateTask:
+		return true
+	case SuggestionActionInfo:
+		return true
+	case SuggestionActionSkipToday:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SuggestionKind.
+const (
+	SuggestionKindAvoid       SuggestionKind = "avoid"
+	SuggestionKindConditional SuggestionKind = "conditional"
+	SuggestionKindDo          SuggestionKind = "do"
+)
+
+// Valid indicates whether the value is a known member of the SuggestionKind enum.
+func (e SuggestionKind) Valid() bool {
+	switch e {
+	case SuggestionKindAvoid:
+		return true
+	case SuggestionKindConditional:
+		return true
+	case SuggestionKindDo:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskStatus.
 const (
 	TaskStatusActive TaskStatus = "active"
@@ -1109,8 +1151,81 @@ type Species struct {
 	WaterTendency *WaterTendency `json:"waterTendency,omitempty"`
 }
 
+// Suggestion 助言プロバイダの提案。本文と理由は i18n のキーとパラメーターで、文言はアプリが引く
+type Suggestion struct {
+	// Action 提案に対してアプリが取れる行動（`create_task`：タスクを作る、`skip_today`：今日はスキップする、`info`：知らせるだけ）。値は今後も追加されうる
+	Action SuggestionAction `json:"action"`
+
+	// ConditionText 条件つきの提案の「もし〜なら」
+	ConditionText *string            `json:"conditionText,omitempty"`
+	Id            openapi_types.UUID `json:"id"`
+
+	// Kind 提案の種類（`do`：実施をすすめる、`avoid`：やらない方がよい、`conditional`：条件つき）。値は今後も追加されうる
+	Kind          SuggestionKind         `json:"kind"`
+	MessageKey    string                 `json:"messageKey"`
+	MessageParams map[string]interface{} `json:"messageParams"`
+
+	// ProviderId 提案元（例：`repotting.v1`）
+	ProviderId   string                 `json:"providerId"`
+	ReasonKey    string                 `json:"reasonKey"`
+	ReasonParams map[string]interface{} `json:"reasonParams"`
+
+	// ValidFrom 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
+	//
+	// Examples: 2026-10-26
+	ValidFrom Date `json:"validFrom"`
+
+	// ValidUntil 有効期間の最後の日。期限がなければ、項目がない
+	//
+	// Examples: 2026-10-26
+	ValidUntil *Date `json:"validUntil,omitempty"`
+}
+
+// SuggestionAction 提案に対してアプリが取れる行動（`create_task`：タスクを作る、`skip_today`：今日はスキップする、`info`：知らせるだけ）。値は今後も追加されうる
+type SuggestionAction string
+
+// SuggestionKind 提案の種類（`do`：実施をすすめる、`avoid`：やらない方がよい、`conditional`：条件つき）。値は今後も追加されうる
+type SuggestionKind string
+
 // TaskStatus タスクの状態（`active`：有効、`paused`：一時停止中）。値は今後も追加されうるため、アプリは知らない値を「有効」として扱う
 type TaskStatus string
+
+// TodayItem defines model for TodayItem.
+type TodayItem struct {
+	// OverdueDays 予定日を過ぎた日数。今日が予定日（または、まだ先の `next`）なら 0
+	OverdueDays int `json:"overdueDays"`
+
+	// Plant 一覧に表示する植物と置き場所
+	Plant TodayPlant `json:"plant"`
+
+	// Suggestions タスクへの、今日の時点で有効な「やらない方がよい」「条件つき」の提案
+	Suggestions []Suggestion `json:"suggestions"`
+
+	// Task 植物のお手入れタスク。未設定の項目は、項目がない
+	Task CareTask `json:"task"`
+}
+
+// TodayList defines model for TodayList.
+type TodayList struct {
+	// Date 一覧の「今日」
+	//
+	// Examples: 2026-10-26
+	Date  Date        `json:"date"`
+	Items []TodayItem `json:"items"`
+
+	// Next `items` が空のときの、直近の次の予定。予定がなければ、項目がない
+	Next *TodayItem `json:"next,omitempty"`
+}
+
+// TodayPlant 一覧に表示する植物と置き場所
+type TodayPlant struct {
+	Id openapi_types.UUID `json:"id"`
+
+	// LocationId 置き場所が未設定なら、項目がない
+	LocationId   *openapi_types.UUID `json:"locationId,omitempty"`
+	LocationName *string             `json:"locationName,omitempty"`
+	Name         string              `json:"name"`
+}
 
 // TransferOwnershipRequest defines model for TransferOwnershipRequest.
 type TransferOwnershipRequest struct {
@@ -1273,6 +1388,12 @@ type ListPlantsParams struct {
 	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
 }
 
+// GetTodayParams defines parameters for GetToday.
+type GetTodayParams struct {
+	// Date 任意。端末での今日の日付（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。形式の誤りは `fields.date = invalid`
+	Date *string `form:"date,omitempty" json:"date,omitempty"`
+}
+
 // ListPlantRecordsParams defines parameters for ListPlantRecords.
 type ListPlantRecordsParams struct {
 	// Kind 任意。作業の種類（`CareKind` の値）。ほかの値は `fields.kind = invalid`
@@ -1401,6 +1522,9 @@ type ServerInterface interface {
 	// CreatePlant 植物を登録する（編集者以上）
 	// (POST /households/{householdId}/plants)
 	CreatePlant(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// GetToday 世帯の今日やること一覧（閲覧者も）
+	// (GET /households/{householdId}/today)
+	GetToday(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params GetTodayParams)
 	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
 	// (GET /invitations/{tokenOrCode})
 	GetInvitation(w http.ResponseWriter, r *http.Request, tokenOrCode TokenOrCode)
@@ -1997,6 +2121,48 @@ func (siw *ServerInterfaceWrapper) CreatePlant(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreatePlant(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetToday operation middleware
+func (siw *ServerInterfaceWrapper) GetToday(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTodayParams
+
+	// ------------- Optional query parameter "date" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date", r.URL.Query(), &params.Date, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetToday(w, r, householdId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2864,6 +3030,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/locations", wrapper.CreateLocation)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/locations/{locationId}", wrapper.DeleteLocation)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/locations/{locationId}", wrapper.UpdateLocation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/today", wrapper.GetToday)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/plants", wrapper.ListPlants)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/plants", wrapper.CreatePlant)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/plants/{plantId}", wrapper.DeletePlant)
@@ -4585,6 +4752,99 @@ func (response CreatePlant422JSONResponse) VisitCreatePlantResponse(w http.Respo
 type CreatePlant500JSONResponse struct{ InternalJSONResponse }
 
 func (response CreatePlant500JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTodayRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Params      GetTodayParams
+}
+
+type GetTodayResponseObject interface {
+	VisitGetTodayResponse(w http.ResponseWriter) error
+}
+
+type GetToday200JSONResponse TodayList
+
+func (response GetToday200JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetToday400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetToday400JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetToday401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetToday401JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetToday404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetToday404JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetToday422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response GetToday422JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetToday500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetToday500JSONResponse) VisitGetTodayResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7089,6 +7349,9 @@ type StrictServerInterface interface {
 	// CreatePlant 植物を登録する（編集者以上）
 	// (POST /households/{householdId}/plants)
 	CreatePlant(ctx context.Context, request CreatePlantRequestObject) (CreatePlantResponseObject, error)
+	// GetToday 世帯の今日やること一覧（閲覧者も）
+	// (GET /households/{householdId}/today)
+	GetToday(ctx context.Context, request GetTodayRequestObject) (GetTodayResponseObject, error)
 	// GetInvitation 招待の内容（世帯名と付与されるロール）を取得する
 	// (GET /invitations/{tokenOrCode})
 	GetInvitation(ctx context.Context, request GetInvitationRequestObject) (GetInvitationResponseObject, error)
@@ -7735,6 +7998,33 @@ func (sh *strictHandler) CreatePlant(w http.ResponseWriter, r *http.Request, hou
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreatePlantResponseObject); ok {
 		if err := validResponse.VisitCreatePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetToday operation middleware
+func (sh *strictHandler) GetToday(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params GetTodayParams) {
+	var request GetTodayRequestObject
+
+	request.HouseholdId = householdId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetToday(ctx, request.(GetTodayRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetToday")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTodayResponseObject); ok {
+		if err := validResponse.VisitGetTodayResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

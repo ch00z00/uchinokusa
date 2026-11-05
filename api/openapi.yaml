@@ -529,6 +529,38 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/today:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: getToday
+      summary: 世帯の今日やること一覧（閲覧者も）
+      description: |
+        予定日が今日以前の、未完了のタスクを、予定日の古い順に返す（要件9-1）。
+        対象は、有効なタスク（一時停止・削除を除く）で、アーカイブしていない植物のもの。
+        各項目には、植物名・置き場所・タスク（作業の種類・予定日・実行条件・完了に使う `cycleSeq`）・期限切れの日数を入れる（要件9-2・9-3）。
+        タスクに有効な「やらない方がよい」「条件つき」の提案があれば、`suggestions` に入れる（要件9-4）。
+        今日やることがなければ、`items` は空で、直近の次の予定を `next` に入れる（要件9-6。予定がなければ、項目がない）。
+        置き場所ごと・作業の種類ごとのまとめ表示（要件9-5）は、アプリが行う
+      tags: [today]
+      parameters:
+        - name: date
+          in: query
+          description: 任意。端末での今日の日付（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。形式の誤りは `fields.date = invalid`
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 今日やること一覧
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TodayList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /households/{householdId}/plants:
     parameters:
       - $ref: "#/components/parameters/HouseholdId"
@@ -1815,6 +1847,99 @@ components:
           description: 作業名（`kind` が `other` のときだけ）
           type: string
         performedOn:
+          $ref: "#/components/schemas/Date"
+
+    TodayList:
+      type: object
+      required: [date, items]
+      properties:
+        date:
+          description: 一覧の「今日」
+          $ref: "#/components/schemas/Date"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TodayItem"
+        next:
+          description: "`items` が空のときの、直近の次の予定。予定がなければ、項目がない"
+          $ref: "#/components/schemas/TodayItem"
+
+    TodayItem:
+      type: object
+      required: [task, plant, overdueDays, suggestions]
+      properties:
+        task:
+          $ref: "#/components/schemas/CareTask"
+        plant:
+          $ref: "#/components/schemas/TodayPlant"
+        overdueDays:
+          description: 予定日を過ぎた日数。今日が予定日（または、まだ先の `next`）なら 0
+          type: integer
+        suggestions:
+          description: タスクへの、今日の時点で有効な「やらない方がよい」「条件つき」の提案
+          type: array
+          items:
+            $ref: "#/components/schemas/Suggestion"
+
+    TodayPlant:
+      description: 一覧に表示する植物と置き場所
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        locationId:
+          description: 置き場所が未設定なら、項目がない
+          type: string
+          format: uuid
+        locationName:
+          type: string
+
+    SuggestionKind:
+      description: 提案の種類（`do`：実施をすすめる、`avoid`：やらない方がよい、`conditional`：条件つき）。値は今後も追加されうる
+      type: string
+      enum: [do, avoid, conditional]
+
+    SuggestionAction:
+      description: 提案に対してアプリが取れる行動（`create_task`：タスクを作る、`skip_today`：今日はスキップする、`info`：知らせるだけ）。値は今後も追加されうる
+      type: string
+      enum: [create_task, skip_today, info]
+
+    Suggestion:
+      description: 助言プロバイダの提案。本文と理由は i18n のキーとパラメーターで、文言はアプリが引く
+      type: object
+      required: [id, providerId, kind, action, messageKey, messageParams, reasonKey, reasonParams, validFrom]
+      properties:
+        id:
+          type: string
+          format: uuid
+        providerId:
+          description: 提案元（例：`repotting.v1`）
+          type: string
+        kind:
+          $ref: "#/components/schemas/SuggestionKind"
+        action:
+          $ref: "#/components/schemas/SuggestionAction"
+        conditionText:
+          description: 条件つきの提案の「もし〜なら」
+          type: string
+        messageKey:
+          type: string
+        messageParams:
+          type: object
+          additionalProperties: true
+        reasonKey:
+          type: string
+        reasonParams:
+          type: object
+          additionalProperties: true
+        validFrom:
+          $ref: "#/components/schemas/Date"
+        validUntil:
+          description: 有効期間の最後の日。期限がなければ、項目がない
           $ref: "#/components/schemas/Date"
 
     SkipReason:
