@@ -15,6 +15,8 @@ const (
 	ConflictAlreadyCompleted = "already_completed"
 	// ConflictStaleCycle は、送られた予定の回が、タスクの今の回と合わないことを表す（アプリの表示が古い）。
 	ConflictStaleCycle = "stale_cycle"
+	// ConflictUndoExpired は、記録を取り消せる時間が過ぎたか、あとに記録があって取り消せないことを表す。
+	ConflictUndoExpired = "undo_expired"
 )
 
 // CareOutcome は、お手入れの記録の結果である。
@@ -209,6 +211,23 @@ func NewSkip(in SkipInput, today civil.Date) (Skip, error) {
 func CheckSkip(t CareTask, s Skip) error {
 	if s.CycleSeq != t.CycleSeq {
 		return &ConflictError{Code: ConflictStaleCycle}
+	}
+	return nil
+}
+
+// UndoWindow は、記録を取り消せる、記録してからの時間である（要件10-4「直後」）。
+const UndoWindow = 10 * time.Minute
+
+// CheckUndo は、記録を取り消せるかを確かめる（設計の「取り消しの条件」）。latestID は、そのタスクの最新の記録の ID である。
+//   - 記録した本人でなければ ErrForbidden
+//   - 記録してから UndoWindow を過ぎた、または最新の記録でなければ undo_expired。
+//     あとの記録は、この記録のあとの予定日・回を戻す先にしているので、間の記録を消すと戻す先が食い違うため
+func CheckUndo(r CareRecord, latestID, userID uuid.UUID, now time.Time) error {
+	if r.ActorUserID != userID {
+		return ErrForbidden
+	}
+	if now.Sub(r.CreatedAt) > UndoWindow || r.ID != latestID {
+		return &ConflictError{Code: ConflictUndoExpired}
 	}
 	return nil
 }

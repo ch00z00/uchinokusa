@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/civil"
 	"github.com/google/uuid"
@@ -280,4 +281,186 @@ func TestCareRecordRepository_Skip(t *testing.T) {
 			t.Errorf("err = %v, want ErrNotFound", err)
 		}
 	})
+}
+
+func TestCareRecordRepository_Undo(t *testing.T) {
+	t.Parallel()
+	skip := domain.Skip{CycleSeq: 1, PerformedOn: performedOn, RecheckOn: civil.Date{Year: 2026, Month: 11, Day: 5}}
+
+	t.Run("完了を取り消すと、記録を消し、記録する前の予定日・回・手で変えた印に戻し、完了通知を送らない", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		due := civil.Date{Year: 2026, Month: 11, Day: 6}
+		before, err := f.repo.Update(f.ctx, f.home, f.task.ID, domain.CareTaskPatch{NextDueOn: &due})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec, _, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		task, err := f.records.Undo(f.ctx, f.home, rec.ID, f.sakura, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.NextDueOn != before.NextDueOn || task.CycleSeq != 1 || !task.DueOverridden {
+			t.Errorf("task = %+v, want restored to %+v", task, before)
+		}
+		if n := f.count(`SELECT count(*) FROM care_records WHERE task_id = $1`, f.task.ID); n != 0 {
+			t.Errorf("records = %d, want 0", n)
+		}
+		if n := f.count(`SELECT count(*) FROM notification_outbox WHERE status = 'canceled'`); n != 1 {
+			t.Errorf("canceled outbox = %d, want 1", n)
+		}
+		// 取り消した回に、もう一度完了できる
+		if err := f.complete(1); err != nil {
+			t.Errorf("complete again: %v", err)
+		}
+	})
+
+	t.Run("スキップを取り消すと、記録する前の予定日と、手で変えていない状態に戻す", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		rec, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, skip)
+		if err != nil {
+			t.Fatal(err)
+		}
+		task, err := f.records.Undo(f.ctx, f.home, rec.ID, f.sakura, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.NextDueOn != f.task.NextDueOn || task.CycleSeq != 1 || task.DueOverridden {
+			t.Errorf("task = %+v, want restored to %+v", task, f.task)
+		}
+	})
+
+	t.Run("追加の記録を取り消しても、タスクの予定は変えない", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		_, advanced, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		extra, _, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn, AllowExtra: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		task, err := f.records.Undo(f.ctx, f.home, extra.ID, f.sakura, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.NextDueOn != advanced.NextDueOn || task.CycleSeq != advanced.CycleSeq {
+			t.Errorf("task = %+v, want %+v", task, advanced)
+		}
+		if n := f.count(`SELECT count(*) FROM care_records WHERE task_id = $1`, f.task.ID); n != 1 {
+			t.Errorf("records = %d, want 1 (the first completion)", n)
+		}
+	})
+
+	t.Run("送った完了通知は、取り消しても送った状態のまま", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		rec, _, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.exec(`UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE record_id = $1`, rec.ID)
+		if _, err := f.records.Undo(f.ctx, f.home, rec.ID, f.sakura, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if n := f.count(`SELECT count(*) FROM notification_outbox WHERE status = 'sent'`); n != 1 {
+			t.Errorf("sent outbox = %d, want 1", n)
+		}
+	})
+
+	t.Run("取り消せない記録は、記録もタスクも変えない", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		rec, completed, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		kaede := uuid.MustParse(f.id(`INSERT INTO users (firebase_uid, display_name, auth_provider) VALUES ('kaede', 'かえで', 'google.com')`))
+
+		_, err = f.records.Undo(f.ctx, f.home, rec.ID, f.sakura, time.Now().Add(domain.UndoWindow+time.Minute))
+		assertConflict(t, err, domain.ConflictUndoExpired)
+		if _, err := f.records.Undo(f.ctx, f.home, rec.ID, kaede, time.Now()); !errors.Is(err, domain.ErrForbidden) {
+			t.Errorf("other member: err = %v, want ErrForbidden", err)
+		}
+		// あとにスキップがあれば、完了は最新の記録ではない
+		if _, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, domain.Skip{CycleSeq: 2, PerformedOn: performedOn, RecheckOn: civil.Date{Year: 2026, Month: 11, Day: 12}}); err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.records.Undo(f.ctx, f.home, rec.ID, f.sakura, time.Now())
+		assertConflict(t, err, domain.ConflictUndoExpired)
+
+		if n := f.count(`SELECT count(*) FROM care_records WHERE task_id = $1`, f.task.ID); n != 2 {
+			t.Errorf("records = %d, want 2", n)
+		}
+		if task, err := f.repo.Get(f.ctx, f.home, f.task.ID); err != nil || task.CycleSeq != completed.CycleSeq {
+			t.Errorf("task = %+v, %v", task, err)
+		}
+	})
+
+	t.Run("ほかの世帯の記録・ない記録は 404", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		rec, _, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.records.Undo(f.ctx, f.other, rec.ID, f.sakura, time.Now()); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("other household: err = %v, want ErrNotFound", err)
+		}
+		if _, err := f.records.HouseholdOf(f.ctx, uuid.Must(uuid.NewV7())); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("unknown: err = %v, want ErrNotFound", err)
+		}
+		if got, err := f.records.HouseholdOf(f.ctx, rec.ID); err != nil || got != f.home {
+			t.Errorf("HouseholdOf = %v, %v", got, err)
+		}
+	})
+}
+
+func TestCareRecordRepository_UndoWaitsForTaskLock(t *testing.T) {
+	t.Parallel()
+	// 取り消しは、完了と同じタスクの行ロックを取ってから「最新の記録か」を確かめる。
+	// ロックの前に確かめると、同時の完了（ここでは手で入れる後の記録）を見落として、消した記録の戻す先で上書きしてしまう
+	f := newRecordFixture(t)
+	first, _, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := f.pool.Begin(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(f.ctx) }() // コミットしたあとは何もしない
+	if _, err := tx.Exec(f.ctx, `SELECT 1 FROM care_tasks WHERE id = $1 FOR UPDATE`, f.task.ID); err != nil {
+		t.Fatal(err)
+	}
+	undone := make(chan error, 1)
+	go func() {
+		_, err := f.records.Undo(f.ctx, f.home, first.ID, f.sakura, time.Now())
+		undone <- err
+	}()
+	time.Sleep(300 * time.Millisecond) // 取り消しが、ロックを待つところまで進むのを待つ
+
+	// ロックを持っている間に、次の回の完了を記録する
+	if _, err := tx.Exec(f.ctx, `INSERT INTO care_records (household_id, plant_id, task_id, task_kind, outcome, performed_on, actor_display_name, cycle_seq)
+		VALUES ($1, $2, $3, 'watering', 'completed', '2026-11-05', 'さくら', 2)`, f.home, f.monsteraPlant, f.task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(f.ctx, `UPDATE care_tasks SET cycle_seq = 3 WHERE id = $1`, f.task.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	assertConflict(t, <-undone, domain.ConflictUndoExpired)
+	if task, err := f.repo.Get(f.ctx, f.home, f.task.ID); err != nil || task.CycleSeq != 3 {
+		t.Errorf("task = %+v, %v; want cycle 3 kept", task, err)
+	}
 }

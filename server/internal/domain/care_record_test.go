@@ -5,8 +5,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/civil"
+	"github.com/google/uuid"
 
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
@@ -222,5 +224,45 @@ func TestCheckSkip(t *testing.T) {
 		if err := domain.CheckSkip(task, domain.Skip{CycleSeq: seq}); !errors.As(err, &c) || c.Code != domain.ConflictStaleCycle {
 			t.Errorf("cycle %d: err = %v, want stale_cycle", seq, err)
 		}
+	}
+}
+
+func TestCheckUndo(t *testing.T) {
+	t.Parallel()
+	sakura, kaede := uuid.MustParse("01920000-0000-7000-8000-0000000000a1"), uuid.MustParse("01920000-0000-7000-8000-0000000000a2")
+	createdAt := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
+	rec := domain.CareRecord{ID: uuid.MustParse("01920000-0000-7000-8000-0000000000f1"), ActorUserID: sakura, CreatedAt: createdAt}
+
+	t.Run("本人が、10分以内に、最新の記録を取り消せる", func(t *testing.T) {
+		t.Parallel()
+		if err := domain.CheckUndo(rec, rec.ID, sakura, createdAt.Add(domain.UndoWindow)); err != nil {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("ほかのメンバーの記録は取り消せない", func(t *testing.T) {
+		t.Parallel()
+		if err := domain.CheckUndo(rec, rec.ID, kaede, createdAt); !errors.Is(err, domain.ErrForbidden) {
+			t.Errorf("err = %v, want ErrForbidden", err)
+		}
+	})
+
+	conflicts := []struct {
+		name   string
+		latest uuid.UUID
+		now    time.Time
+	}{
+		{"10分を過ぎると取り消せない", rec.ID, createdAt.Add(domain.UndoWindow + time.Second)},
+		// あとの記録が戻す先にしている予定日・回が、食い違ってしまうため
+		{"あとに記録があれば取り消せない", uuid.MustParse("01920000-0000-7000-8000-0000000000f2"), createdAt},
+	}
+	for _, tt := range conflicts {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var c *domain.ConflictError
+			if err := domain.CheckUndo(rec, tt.latest, sakura, tt.now); !errors.As(err, &c) || c.Code != domain.ConflictUndoExpired {
+				t.Errorf("err = %v, want undo_expired", err)
+			}
+		})
 	}
 }

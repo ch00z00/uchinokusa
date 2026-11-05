@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"cloud.google.com/go/civil"
@@ -10,13 +11,16 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi/oapi"
+	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
-// CareRecordService は、お手入れの記録（完了・スキップ）を行う（実装は app.CareRecordService）。
+// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了）を行う（実装は app.CareRecordService）。
 type CareRecordService interface {
 	Complete(ctx context.Context, userID, taskID uuid.UUID, in domain.CompletionInput) (domain.CareRecord, domain.CareTask, error)
 	Skip(ctx context.Context, userID, taskID uuid.UUID, in domain.SkipInput) (domain.CareRecord, domain.CareTask, error)
+	Undo(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error)
+	CompleteBatch(ctx context.Context, userID, householdID uuid.UUID, items []app.BatchCompletionItem) ([]app.BatchCompletionResult, error)
 }
 
 func (s *server) CompleteCareTask(ctx context.Context, req oapi.CompleteCareTaskRequestObject) (oapi.CompleteCareTaskResponseObject, error) {
@@ -30,22 +34,63 @@ func (s *server) CompleteCareTask(ctx context.Context, req oapi.CompleteCareTask
 	var dup *domain.AlreadyCompletedError
 	if errors.As(err, &dup) {
 		t := toCareTask(dup.Task)
-		return oapi.CompleteCareTask409JSONResponse{
-			Code:    oapi.ErrorCodeAlreadyCompleted,
-			Message: dup.Error(),
-			Existing: &oapi.CompletedBy{
-				RecordId:         dup.Existing.ID,
-				ActorDisplayName: dup.Existing.ActorDisplayName,
-				PerformedOn:      toDate(dup.Existing.PerformedOn),
-				PerformedAt:      dup.Existing.PerformedAt.UTC(),
-			},
-			Task: &t,
-		}, nil
+		existing := toCompletedBy(dup.Existing)
+		return oapi.CompleteCareTask409JSONResponse{Code: oapi.ErrorCodeAlreadyCompleted, Message: dup.Error(), Existing: &existing, Task: &t}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	return oapi.CompleteCareTask201JSONResponse{Record: toCareRecord(rec), Task: toCareTask(task)}, nil
+}
+
+func (s *server) CompleteCareTasks(ctx context.Context, req oapi.CompleteCareTasksRequestObject) (oapi.CompleteCareTasksResponseObject, error) {
+	items := make([]app.BatchCompletionItem, len(req.Body.Items))
+	for i, it := range req.Body.Items {
+		items[i] = app.BatchCompletionItem{TaskID: it.TaskId, Input: domain.CompletionInput{
+			CycleSeq:    &it.CycleSeq,
+			PerformedOn: it.PerformedOn,
+			AllowExtra:  it.AllowExtra != nil && *it.AllowExtra,
+		}}
+	}
+	results, err := s.records.CompleteBatch(ctx, currentUser(ctx).ID, req.HouseholdId, items)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]oapi.CompleteCareTasksItemResult, len(results))
+	for i, r := range results {
+		out[i] = s.toBatchResult(ctx, r)
+	}
+	return oapi.CompleteCareTasks200JSONResponse{Results: out}, nil
+}
+
+// toBatchResult は、まとめて完了の1件の結果を、単独の完了と同じ内容（重複なら誰がいつ、失敗ならエラーのコード）にする。
+func (s *server) toBatchResult(ctx context.Context, r app.BatchCompletionResult) oapi.CompleteCareTasksItemResult {
+	out := oapi.CompleteCareTasksItemResult{TaskId: r.TaskID}
+	var dup *domain.AlreadyCompletedError
+	switch {
+	case r.Err == nil:
+		rec, t := toCareRecord(r.Record), toCareTask(r.Task)
+		out.Status, out.Record, out.Task = oapi.CompleteCareTasksItemResultStatusCompleted, &rec, &t
+	case errors.As(r.Err, &dup):
+		existing, t := toCompletedBy(dup.Existing), toCareTask(dup.Task)
+		out.Status, out.Existing, out.Task = oapi.CompleteCareTasksItemResultStatusAlreadyCompleted, &existing, &t
+	default:
+		status, body := errorResponse(r.Err)
+		if status == http.StatusInternalServerError {
+			logInternal(ctx, s.logger, r.Err)
+		}
+		out.Status, out.Error = oapi.CompleteCareTasksItemResultStatusFailed, &body
+	}
+	return out
+}
+
+func (s *server) UndoCareRecord(ctx context.Context, req oapi.UndoCareRecordRequestObject) (oapi.UndoCareRecordResponseObject, error) {
+	task, err := s.records.Undo(ctx, currentUser(ctx).ID, req.RecordId)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.UndoCareRecord200JSONResponse(toCareTask(task)), nil
 }
 
 func (s *server) SkipCareTask(ctx context.Context, req oapi.SkipCareTaskRequestObject) (oapi.SkipCareTaskResponseObject, error) {
@@ -60,6 +105,15 @@ func (s *server) SkipCareTask(ctx context.Context, req oapi.SkipCareTaskRequestO
 		return nil, err
 	}
 	return oapi.SkipCareTask201JSONResponse{Record: toCareRecord(rec), Task: toCareTask(task)}, nil
+}
+
+func toCompletedBy(r domain.CareRecord) oapi.CompletedBy {
+	return oapi.CompletedBy{
+		RecordId:         r.ID,
+		ActorDisplayName: r.ActorDisplayName,
+		PerformedOn:      toDate(r.PerformedOn),
+		PerformedAt:      r.PerformedAt.UTC(),
+	}
 }
 
 // toCareRecord は、未設定の項目（削除したタスク、削除したアカウントなど）を、項目ごと省いた形にする。

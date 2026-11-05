@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
+	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
@@ -38,6 +40,31 @@ var testRecord = domain.CareRecord{
 type fakeCareRecordService struct {
 	inputs []domain.CompletionInput
 	skips  []domain.SkipInput
+}
+
+// Undo は、testRecord なら成功、それ以外は取り消せない。
+func (f *fakeCareRecordService) Undo(_ context.Context, _, recordID uuid.UUID) (domain.CareTask, error) {
+	if recordID != testRecord.ID {
+		return domain.CareTask{}, &domain.ConflictError{Code: domain.ConflictUndoExpired}
+	}
+	return testTask, nil
+}
+
+// CompleteBatch は、項目ごとに Complete と同じ振る舞いをする。ほかの世帯は権限なし。
+func (f *fakeCareRecordService) CompleteBatch(ctx context.Context, userID, householdID uuid.UUID, items []app.BatchCompletionItem) ([]app.BatchCompletionResult, error) {
+	if householdID != testHousehold.ID {
+		return nil, domain.ErrForbidden
+	}
+	results := make([]app.BatchCompletionResult, len(items))
+	for i, item := range items {
+		results[i].TaskID = item.TaskID
+		if item.TaskID == testTask.ID && *item.Input.CycleSeq == 99 {
+			results[i].Err = errors.New("db is down")
+			continue
+		}
+		results[i].Record, results[i].Task, results[i].Err = f.Complete(ctx, userID, item.TaskID, item.Input)
+	}
+	return results, nil
 }
 
 // Skip は、cycleSeq が 3 なら成功、それ以外は予定の回が合わない。
@@ -205,6 +232,93 @@ func TestSkipCareTask(t *testing.T) {
 	t.Run("権限がなければ 403", func(t *testing.T) {
 		t.Parallel()
 		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/tasks/"+uuid.Must(uuid.NewV7()).String()+"/skips", "Bearer "+validToken, `{"cycleSeq": 3}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+}
+
+func TestUndoCareRecord(t *testing.T) {
+	t.Parallel()
+
+	t.Run("戻したあとのタスクを 200 で返す", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/records/"+testRecord.ID.String()+"/undo", "Bearer "+validToken, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		if got := decode[struct{ Id uuid.UUID }](t, rec); got.Id != testTask.ID {
+			t.Errorf("body = %s", rec.Body.String())
+		}
+	})
+
+	t.Run("取り消せなければ 409 undo_expired", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/records/"+uuid.Must(uuid.NewV7()).String()+"/undo", "Bearer "+validToken, "")
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		if got := decode[errorBody](t, rec); got.Code != "undo_expired" {
+			t.Errorf("code = %q", got.Code)
+		}
+	})
+}
+
+func TestCompleteCareTasks(t *testing.T) {
+	t.Parallel()
+	path := "/v1/households/" + testHousehold.ID.String() + "/completions:batch"
+
+	t.Run("タスクごとの結果を、送った順に 200 で返す", func(t *testing.T) {
+		t.Parallel()
+		records := &fakeCareRecordService{}
+		other := uuid.Must(uuid.NewV7())
+		body := `{"items": [
+			{"taskId": "` + testTask.ID.String() + `", "cycleSeq": 3, "performedOn": "2026-11-04", "allowExtra": true},
+			{"taskId": "` + testTask.ID.String() + `", "cycleSeq": 2},
+			{"taskId": "` + testTask.ID.String() + `", "cycleSeq": 9},
+			{"taskId": "` + other.String() + `", "cycleSeq": 3},
+			{"taskId": "` + testTask.ID.String() + `", "cycleSeq": 99}
+		]}`
+		rec := serve(t, newRecordRouter(t, records), http.MethodPost, path, "Bearer "+validToken, body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		type result struct {
+			TaskId   uuid.UUID
+			Status   string
+			Record   *struct{ Id uuid.UUID }
+			Task     *struct{ CycleSeq int }
+			Existing *struct{ ActorDisplayName string }
+			Error    *errorBody
+		}
+		got := decode[struct{ Results []result }](t, rec).Results
+		if len(got) != 5 {
+			t.Fatalf("results = %s", rec.Body.String())
+		}
+		if r := got[0]; r.TaskId != testTask.ID || r.Status != "completed" || r.Record == nil || r.Record.Id != testRecord.ID || r.Task == nil || r.Task.CycleSeq != 4 || r.Error != nil {
+			t.Errorf("results[0] = %+v", r)
+		}
+		if r := got[1]; r.Status != "already_completed" || r.Existing == nil || r.Existing.ActorDisplayName != "さくら" || r.Task == nil || r.Record != nil {
+			t.Errorf("results[1] = %+v", r)
+		}
+		if r := got[2]; r.Status != "failed" || r.Error == nil || r.Error.Code != "stale_cycle" || r.Task != nil {
+			t.Errorf("results[2] = %+v", r)
+		}
+		if r := got[3]; r.TaskId != other || r.Status != "failed" || r.Error == nil || r.Error.Code != "forbidden" {
+			t.Errorf("results[3] = %+v", r)
+		}
+		// 内部のエラーは、原因を返さない
+		if r := got[4]; r.Status != "failed" || r.Error == nil || r.Error.Code != "internal" || strings.Contains(rec.Body.String(), "db is down") {
+			t.Errorf("results[4] = %+v", r)
+		}
+		if in := records.inputs[0]; *in.CycleSeq != 3 || in.PerformedOn == nil || *in.PerformedOn != "2026-11-04" || !in.AllowExtra {
+			t.Errorf("input = %+v", in)
+		}
+	})
+
+	t.Run("世帯の権限がなければ 403", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/households/"+uuid.Must(uuid.NewV7()).String()+"/completions:batch", "Bearer "+validToken, `{"items": []}`)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
 		}

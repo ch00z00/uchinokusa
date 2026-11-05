@@ -12,26 +12,27 @@ import (
 )
 
 type CareRecord struct {
-	ID               uuid.UUID
-	HouseholdID      uuid.UUID
-	PlantID          uuid.UUID
-	TaskID           uuid.NullUUID
-	TaskKind         string
-	TaskCustomName   *string
-	Outcome          string
-	PerformedOn      pgtype.Date
-	PerformedAt      time.Time
-	ActorUserID      uuid.NullUUID
-	ActorDisplayName string
-	SkipReasonCode   *string
-	SkipReasonText   *string
-	RecheckOn        pgtype.Date
-	CycleSeq         int32
-	IsExtra          bool
-	PrevNextDueOn    pgtype.Date
-	PrevCycleSeq     pgtype.Int4
-	EditedAt         *time.Time
-	CreatedAt        time.Time
+	ID                uuid.UUID
+	HouseholdID       uuid.UUID
+	PlantID           uuid.UUID
+	TaskID            uuid.NullUUID
+	TaskKind          string
+	TaskCustomName    *string
+	Outcome           string
+	PerformedOn       pgtype.Date
+	PerformedAt       time.Time
+	ActorUserID       uuid.NullUUID
+	ActorDisplayName  string
+	SkipReasonCode    *string
+	SkipReasonText    *string
+	RecheckOn         pgtype.Date
+	CycleSeq          int32
+	IsExtra           bool
+	PrevNextDueOn     pgtype.Date
+	PrevCycleSeq      pgtype.Int4
+	EditedAt          *time.Time
+	CreatedAt         time.Time
+	PrevDueOverridden *bool
 }
 
 type CareTask struct {

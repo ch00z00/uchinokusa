@@ -50,30 +50,42 @@ func (q *Queries) AdvanceCareTask(ctx context.Context, arg AdvanceCareTaskParams
 	return i, err
 }
 
+const cancelCompletionNotice = `-- name: CancelCompletionNotice :exec
+UPDATE notification_outbox SET status = 'canceled'
+WHERE record_id = $1 AND status = 'pending'
+`
+
+// 取り消した記録の、まだ送っていない完了通知を送らないようにする（要件16-6）
+func (q *Queries) CancelCompletionNotice(ctx context.Context, recordID uuid.NullUUID) error {
+	_, err := q.db.Exec(ctx, cancelCompletionNotice, recordID)
+	return err
+}
+
 const createCompletionRecord = `-- name: CreateCompletionRecord :one
 INSERT INTO care_records (
   household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on,
-  actor_user_id, actor_display_name, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq
+  actor_user_id, actor_display_name, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, prev_due_overridden
 )
 SELECT $1, $2, $3, $4, $5, 'completed', $6,
-  users.id, users.display_name, $7, $8, $9, $10
+  users.id, users.display_name, $7, $8, $9, $10, $11
 FROM users
-WHERE users.id = $11
-RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at
+WHERE users.id = $12
+RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden
 `
 
 type CreateCompletionRecordParams struct {
-	HouseholdID    uuid.UUID
-	PlantID        uuid.UUID
-	TaskID         uuid.NullUUID
-	TaskKind       string
-	TaskCustomName *string
-	PerformedOn    pgtype.Date
-	CycleSeq       int32
-	IsExtra        bool
-	PrevNextDueOn  pgtype.Date
-	PrevCycleSeq   pgtype.Int4
-	ActorUserID    uuid.UUID
+	HouseholdID       uuid.UUID
+	PlantID           uuid.UUID
+	TaskID            uuid.NullUUID
+	TaskKind          string
+	TaskCustomName    *string
+	PerformedOn       pgtype.Date
+	CycleSeq          int32
+	IsExtra           bool
+	PrevNextDueOn     pgtype.Date
+	PrevCycleSeq      pgtype.Int4
+	PrevDueOverridden *bool
+	ActorUserID       uuid.UUID
 }
 
 // 作業の種類と作業した人の名前は、記録の時点の値を写して持つ（タスクの削除・メンバーの退出のあとも表示するため）
@@ -90,6 +102,7 @@ func (q *Queries) CreateCompletionRecord(ctx context.Context, arg CreateCompleti
 		arg.IsExtra,
 		arg.PrevNextDueOn,
 		arg.PrevCycleSeq,
+		arg.PrevDueOverridden,
 		arg.ActorUserID,
 	)
 	var i CareRecord
@@ -114,6 +127,7 @@ func (q *Queries) CreateCompletionRecord(ctx context.Context, arg CreateCompleti
 		&i.PrevCycleSeq,
 		&i.EditedAt,
 		&i.CreatedAt,
+		&i.PrevDueOverridden,
 	)
 	return i, err
 }
@@ -121,30 +135,31 @@ func (q *Queries) CreateCompletionRecord(ctx context.Context, arg CreateCompleti
 const createSkipRecord = `-- name: CreateSkipRecord :one
 INSERT INTO care_records (
   household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on,
-  actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, prev_next_due_on, prev_cycle_seq
+  actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, prev_next_due_on, prev_cycle_seq, prev_due_overridden
 )
 SELECT $1, $2, $3, $4, $5, 'skipped', $6,
   users.id, users.display_name, $7, $8, $9, $10,
-  $11, $12
+  $11, $12, $13
 FROM users
-WHERE users.id = $13
-RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at
+WHERE users.id = $14
+RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden
 `
 
 type CreateSkipRecordParams struct {
-	HouseholdID    uuid.UUID
-	PlantID        uuid.UUID
-	TaskID         uuid.NullUUID
-	TaskKind       string
-	TaskCustomName *string
-	PerformedOn    pgtype.Date
-	SkipReasonCode *string
-	SkipReasonText *string
-	RecheckOn      pgtype.Date
-	CycleSeq       int32
-	PrevNextDueOn  pgtype.Date
-	PrevCycleSeq   pgtype.Int4
-	ActorUserID    uuid.UUID
+	HouseholdID       uuid.UUID
+	PlantID           uuid.UUID
+	TaskID            uuid.NullUUID
+	TaskKind          string
+	TaskCustomName    *string
+	PerformedOn       pgtype.Date
+	SkipReasonCode    *string
+	SkipReasonText    *string
+	RecheckOn         pgtype.Date
+	CycleSeq          int32
+	PrevNextDueOn     pgtype.Date
+	PrevCycleSeq      pgtype.Int4
+	PrevDueOverridden *bool
+	ActorUserID       uuid.UUID
 }
 
 // スキップは作業をしたことにしない（outcome = skipped）。理由は、助言の改善に使えるよう、決まった値と自由入力に分けて持つ（要件19-7）
@@ -163,6 +178,7 @@ func (q *Queries) CreateSkipRecord(ctx context.Context, arg CreateSkipRecordPara
 		arg.CycleSeq,
 		arg.PrevNextDueOn,
 		arg.PrevCycleSeq,
+		arg.PrevDueOverridden,
 		arg.ActorUserID,
 	)
 	var i CareRecord
@@ -187,6 +203,7 @@ func (q *Queries) CreateSkipRecord(ctx context.Context, arg CreateSkipRecordPara
 		&i.PrevCycleSeq,
 		&i.EditedAt,
 		&i.CreatedAt,
+		&i.PrevDueOverridden,
 	)
 	return i, err
 }
@@ -229,6 +246,15 @@ func (q *Queries) DeferCareTask(ctx context.Context, arg DeferCareTaskParams) (C
 	return i, err
 }
 
+const deleteCareRecord = `-- name: DeleteCareRecord :exec
+DELETE FROM care_records WHERE id = $1
+`
+
+func (q *Queries) DeleteCareRecord(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteCareRecord, id)
+	return err
+}
+
 const enqueueCompletion = `-- name: EnqueueCompletion :exec
 INSERT INTO notification_outbox (household_id, kind, actor_user_id, record_id)
 VALUES ($1, 'completion', $2, $3)
@@ -246,8 +272,58 @@ func (q *Queries) EnqueueCompletion(ctx context.Context, arg EnqueueCompletionPa
 	return err
 }
 
+const getCareRecord = `-- name: GetCareRecord :one
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records WHERE id = $1 AND household_id = $2
+`
+
+type GetCareRecordParams struct {
+	ID          uuid.UUID
+	HouseholdID uuid.UUID
+}
+
+func (q *Queries) GetCareRecord(ctx context.Context, arg GetCareRecordParams) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, getCareRecord, arg.ID, arg.HouseholdID)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+		&i.PrevDueOverridden,
+	)
+	return i, err
+}
+
+const getCareRecordHouseholdID = `-- name: GetCareRecordHouseholdID :one
+SELECT household_id FROM care_records WHERE id = $1
+`
+
+// 権限を確かめるため、記録が属する世帯を探す
+func (q *Queries) GetCareRecordHouseholdID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getCareRecordHouseholdID, id)
+	var household_id uuid.UUID
+	err := row.Scan(&household_id)
+	return household_id, err
+}
+
 const getCycleCompletion = `-- name: GetCycleCompletion :one
-SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at FROM care_records
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
 WHERE task_id = $1 AND cycle_seq = $2 AND outcome = 'completed' AND NOT is_extra
 `
 
@@ -281,6 +357,44 @@ func (q *Queries) GetCycleCompletion(ctx context.Context, arg GetCycleCompletion
 		&i.PrevCycleSeq,
 		&i.EditedAt,
 		&i.CreatedAt,
+		&i.PrevDueOverridden,
+	)
+	return i, err
+}
+
+const getLatestTaskRecord = `-- name: GetLatestTaskRecord :one
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
+WHERE task_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// タスクの最新の記録（完了・スキップ・追加の記録のどれでも）。取り消せるのは、これだけ
+func (q *Queries) GetLatestTaskRecord(ctx context.Context, taskID uuid.NullUUID) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, getLatestTaskRecord, taskID)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+		&i.PrevDueOverridden,
 	)
 	return i, err
 }
@@ -327,6 +441,50 @@ func (q *Queries) LockCareTask(ctx context.Context, arg LockCareTaskParams) (Loc
 		&i.CareTask.CreatedAt,
 		&i.CareTask.UpdatedAt,
 		&i.Hemisphere,
+	)
+	return i, err
+}
+
+const restoreCareTask = `-- name: RestoreCareTask :one
+UPDATE care_tasks SET next_due_on = $2, cycle_seq = $3, due_overridden = $4
+WHERE id = $1
+RETURNING id, household_id, plant_id, kind, custom_name, interval_value, interval_unit, seasonal_intervals, condition_text, note, next_due_on, due_overridden, cycle_seq, status, deleted_at, created_at, updated_at
+`
+
+type RestoreCareTaskParams struct {
+	ID            uuid.UUID
+	NextDueOn     pgtype.Date
+	CycleSeq      int32
+	DueOverridden bool
+}
+
+// 取り消しで、記録する前の予定日・回・手で変えた印に戻す
+func (q *Queries) RestoreCareTask(ctx context.Context, arg RestoreCareTaskParams) (CareTask, error) {
+	row := q.db.QueryRow(ctx, restoreCareTask,
+		arg.ID,
+		arg.NextDueOn,
+		arg.CycleSeq,
+		arg.DueOverridden,
+	)
+	var i CareTask
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.Kind,
+		&i.CustomName,
+		&i.IntervalValue,
+		&i.IntervalUnit,
+		&i.SeasonalIntervals,
+		&i.ConditionText,
+		&i.Note,
+		&i.NextDueOn,
+		&i.DueOverridden,
+		&i.CycleSeq,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

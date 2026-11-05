@@ -927,6 +927,60 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /records/{recordId}/undo:
+    parameters:
+      - $ref: "#/components/parameters/RecordId"
+    post:
+      operationId: undoCareRecord
+      summary: 記録した直後の完了・スキップを取り消す（編集者以上、記録した本人）
+      description: |
+        記録を消し、タスクを記録する前の次回予定・予定の回・予定日を手で変えた印に戻す（要件10-4）。
+        追加の記録は、タスクを変えていないので、記録を消すだけにする。まだ送っていない完了通知は送らない（要件16-6）。
+        取り消せるのは、記録した本人が、記録してから10分以内に、そのタスクの最新の記録に限る。
+        ほかのメンバーの記録は `403`。10分を過ぎた、またはあとに記録がある場合は `409 undo_expired`
+      tags: [record]
+      responses:
+        "200":
+          description: 戻したあとのタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareTask" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /households/{householdId}/completions:batch:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    post:
+      operationId: completeCareTasks
+      summary: 世帯の複数のタスクを、まとめて完了する（編集者以上）
+      description: |
+        タスクごとに `POST /tasks/{taskId}/completions` と同じ規則で完了し、送った順に結果を返す（要件10-9）。
+        1件ずつ別に記録するので、重複・入力の誤り・ほかの世帯のタスクがあっても、ほかのタスクの完了は止めない。
+        項目ごとの失敗は `200` のなかの `status` で返す。`items` は1〜50件（空なら `fields.items = required`、超えると `fields.items = too_many`）
+      tags: [record]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteCareTasksRequest" }
+      responses:
+        "200":
+          description: タスクごとの結果（送った順）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompleteCareTasksResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -981,6 +1035,14 @@ components:
       in: path
       required: true
       description: 世帯の ID。所属していない世帯の場合は 404 を返す（存在を明かさない）
+      schema:
+        type: string
+        format: uuid
+    RecordId:
+      name: recordId
+      in: path
+      required: true
+      description: 記録の ID。所属していない世帯の記録の場合は 404 を返す（存在を明かさない）
       schema:
         type: string
         format: uuid
@@ -1556,6 +1618,66 @@ components:
           description: 任意。true なら、完了済みの回でも追加の記録として保存する（重複の表示を見たうえで、それでも記録する場合）
           type: boolean
 
+    CompleteCareTasksRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompleteCareTasksItem"
+
+    CompleteCareTasksItem:
+      description: まとめて完了の1件。`taskId` のほかは `CompleteCareTaskRequest` と同じ
+      type: object
+      required: [taskId, cycleSeq]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        cycleSeq:
+          type: integer
+        performedOn:
+          type: string
+        allowExtra:
+          type: boolean
+
+    CompleteCareTasksResult:
+      type: object
+      required: [results]
+      properties:
+        results:
+          description: 送った `items` と同じ順の結果
+          type: array
+          items:
+            $ref: "#/components/schemas/CompleteCareTasksItemResult"
+
+    CompleteCareTasksItemResult:
+      description: |
+        まとめて完了の1件の結果。
+        | `status` | 入る項目 |
+        |---|---|
+        | `completed` | `record`（作った記録）、`task`（更新後のタスク） |
+        | `already_completed` | `existing`（先に完了した記録の、誰が・いつ）、`task`（最新のタスク） |
+        | `failed` | `error`（`stale_cycle`・`not_found`・`validation_failed` など。単独の完了と同じコード） |
+      type: object
+      required: [taskId, status]
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [completed, already_completed, failed]
+        record:
+          $ref: "#/components/schemas/CareRecord"
+        task:
+          $ref: "#/components/schemas/CareTask"
+        existing:
+          $ref: "#/components/schemas/CompletedBy"
+        error:
+          $ref: "#/components/schemas/Error"
+
     SkipReason:
       description: |
         スキップの理由。値は今後も追加されうる
@@ -1749,6 +1871,7 @@ components:
         | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
         | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
         | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
+        | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
         | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
         | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
         | `internal` | 500 | サーバーの障害 |
@@ -1764,6 +1887,7 @@ components:
         - already_member
         - already_completed
         - stale_cycle
+        - undo_expired
         - invitation_invalid
         - rate_limited
         - internal

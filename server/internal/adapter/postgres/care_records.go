@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,6 +69,7 @@ func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID
 			// 取り消し（8.3）で戻す先。追加の記録はタスクを変えないので、戻す先を持たない
 			params.PrevNextDueOn = locked.CareTask.NextDueOn
 			params.PrevCycleSeq = pgtype.Int4{Int32: locked.CareTask.CycleSeq, Valid: true}
+			params.PrevDueOverridden = &locked.CareTask.DueOverridden
 		}
 		row, err := q.CreateCompletionRecord(ctx, params)
 		var pgErr *pgconn.PgError
@@ -128,9 +130,10 @@ func (r *CareRecordRepository) Skip(ctx context.Context, householdID, taskID, ac
 			RecheckOn:      pgDate(s.RecheckOn),
 			CycleSeq:       int32(s.CycleSeq),
 			// 取り消し（8.3）で戻す先
-			PrevNextDueOn: locked.CareTask.NextDueOn,
-			PrevCycleSeq:  pgtype.Int4{Int32: locked.CareTask.CycleSeq, Valid: true},
-			ActorUserID:   actorID,
+			PrevNextDueOn:     locked.CareTask.NextDueOn,
+			PrevCycleSeq:      pgtype.Int4{Int32: locked.CareTask.CycleSeq, Valid: true},
+			PrevDueOverridden: &locked.CareTask.DueOverridden,
+			ActorUserID:       actorID,
 		})
 		if err != nil {
 			return fmt.Errorf("create skip record: %w", err)
@@ -145,6 +148,74 @@ func (r *CareRecordRepository) Skip(ctx context.Context, householdID, taskID, ac
 		return err
 	})
 	return record, task, err
+}
+
+// HouseholdOf は、記録が属する世帯の ID を返す。記録がなければ domain.ErrNotFound を返す。
+func (r *CareRecordRepository) HouseholdOf(ctx context.Context, recordID uuid.UUID) (uuid.UUID, error) {
+	householdID, err := r.q.GetCareRecordHouseholdID(ctx, recordID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("get care record household: %w", err)
+	}
+	return householdID, nil
+}
+
+// Undo は、記録を取り消す。タスクの行ロック → 取り消せるかの確認（domain.CheckUndo） → 記録する前の予定日・回・手で変えた印に戻す →
+// まだ送っていない完了通知を取り消し済みにする → 記録を消す、を1つのトランザクションで行う（設計の「取り消しの条件」）。
+// 追加の記録は、タスクを変えていないので、記録を消すだけにする。
+func (r *CareRecordRepository) Undo(ctx context.Context, householdID, recordID, actorID uuid.UUID, now time.Time) (domain.CareTask, error) {
+	var task domain.CareTask
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		row, err := q.GetCareRecord(ctx, sqlcgen.GetCareRecordParams{ID: recordID, HouseholdID: householdID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("get care record: %w", err)
+		}
+		// タスクを削除していれば、戻す先がない
+		if !row.TaskID.Valid {
+			return domain.ErrNotFound
+		}
+		// 完了・スキップと同じ行ロックを取り、そのあとで最新の記録を確かめる（ロックの前に確かめると、同時の完了を見落とす）
+		_, task, err = lockCareTask(ctx, q, householdID, row.TaskID.UUID)
+		if err != nil {
+			return err
+		}
+		latest, err := q.GetLatestTaskRecord(ctx, row.TaskID)
+		if err != nil {
+			return fmt.Errorf("get latest task record: %w", err)
+		}
+		if err := domain.CheckUndo(toDomainCareRecord(row), latest.ID, actorID, now); err != nil {
+			return err
+		}
+
+		if row.PrevCycleSeq.Valid {
+			restored, err := q.RestoreCareTask(ctx, sqlcgen.RestoreCareTaskParams{
+				ID:            row.TaskID.UUID,
+				NextDueOn:     row.PrevNextDueOn,
+				CycleSeq:      row.PrevCycleSeq.Int32,
+				DueOverridden: row.PrevDueOverridden != nil && *row.PrevDueOverridden,
+			})
+			if err != nil {
+				return fmt.Errorf("restore care task: %w", err)
+			}
+			if task, err = toDomainCareTask(restored); err != nil {
+				return err
+			}
+		}
+		if err := q.CancelCompletionNotice(ctx, nullUUID(recordID)); err != nil {
+			return fmt.Errorf("cancel completion notice: %w", err)
+		}
+		if err := q.DeleteCareRecord(ctx, recordID); err != nil {
+			return fmt.Errorf("delete care record: %w", err)
+		}
+		return nil
+	})
+	return task, err
 }
 
 // lockCareTask は、完了・スキップの前に、世帯のタスクの行をロックする。同じタスクへの記録は、先のコミットを待って順に処理される。

@@ -18,6 +18,28 @@ type CareRecordRepository interface {
 	// Skip は、タスクの行ロックを取って domain.CheckSkip で予定の回を確かめ、記録の作成と、次回予定を確認日にする更新を
 	// 1つのトランザクションで行う。完了通知は予約しない（要件16-7）。
 	Skip(ctx context.Context, householdID, taskID, actorID uuid.UUID, s domain.Skip) (domain.CareRecord, domain.CareTask, error)
+	// HouseholdOf は、記録が属する世帯の ID を返す。なければ domain.ErrNotFound を返す。
+	HouseholdOf(ctx context.Context, recordID uuid.UUID) (uuid.UUID, error)
+	// Undo は、タスクの行ロックを取って domain.CheckUndo で取り消せるかを確かめ、記録する前の予定日・回に戻して記録を消す。
+	// まだ送っていない完了通知は、取り消し済みにする（要件16-6）。
+	Undo(ctx context.Context, householdID, recordID, actorID uuid.UUID, now time.Time) (domain.CareTask, error)
+}
+
+// MaxBatchCompletions は、まとめて完了できるタスクの数の上限である。
+const MaxBatchCompletions = 50
+
+// BatchCompletionItem は、まとめて完了の1件の入力である。
+type BatchCompletionItem struct {
+	TaskID uuid.UUID
+	Input  domain.CompletionInput
+}
+
+// BatchCompletionResult は、まとめて完了の1件の結果である。Err が nil なら、Record と Task に完了の結果が入る。
+type BatchCompletionResult struct {
+	TaskID uuid.UUID
+	Record domain.CareRecord
+	Task   domain.CareTask
+	Err    error
 }
 
 // TaskLocator は、タスクの ID から、権限を確かめる世帯と、今日を決めるタイムゾーンを探す（実装は CareTaskRepository）。
@@ -26,7 +48,7 @@ type TaskLocator interface {
 	TimeZoneOf(ctx context.Context, householdID uuid.UUID) (string, error)
 }
 
-// CareRecordService は、お手入れの記録（完了・スキップ）を扱う（要件10・11-2〜11-4）。
+// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了）を扱う（要件10・11-2〜11-4）。
 type CareRecordService struct {
 	records CareRecordRepository
 	tasks   TaskLocator
@@ -65,6 +87,51 @@ func (s *CareRecordService) Skip(ctx context.Context, userID, taskID uuid.UUID, 
 		return domain.CareRecord{}, domain.CareTask{}, err
 	}
 	return s.records.Skip(ctx, householdID, taskID, userID, sk)
+}
+
+// Undo は、記録を取り消し、タスクを記録する前の予定日と予定の回に戻す（要件10-4）。
+// 編集者以上で、記録した本人が、記録してから domain.UndoWindow のうちに、そのタスクの最新の記録に限ってできる。
+func (s *CareRecordService) Undo(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error) {
+	householdID, err := s.records.HouseholdOf(ctx, recordID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	if _, err := s.authz.Require(ctx, userID, householdID, domain.ActionRecordWrite); err != nil {
+		return domain.CareTask{}, err
+	}
+	return s.records.Undo(ctx, householdID, recordID, userID, s.now())
+}
+
+// CompleteBatch は、世帯の複数のタスクを完了し、送った順にタスクごとの結果を返す（要件10-9）。
+// 1件ずつ別のトランザクションで完了するので、重複や入力の誤りがあっても、ほかのタスクの完了は止めない。
+// ほかの世帯のタスクは、その項目だけ domain.ErrNotFound になる。
+func (s *CareRecordService) CompleteBatch(ctx context.Context, userID, householdID uuid.UUID, items []BatchCompletionItem) ([]BatchCompletionResult, error) {
+	if _, err := s.authz.Require(ctx, userID, householdID, domain.ActionRecordWrite); err != nil {
+		return nil, err
+	}
+	switch {
+	case len(items) == 0:
+		return nil, &domain.ValidationError{Fields: map[string]string{"items": "required"}}
+	case len(items) > MaxBatchCompletions:
+		return nil, &domain.ValidationError{Fields: map[string]string{"items": "too_many"}}
+	}
+	timeZone, err := s.tasks.TimeZoneOf(ctx, householdID)
+	if err != nil {
+		return nil, err
+	}
+	today := domain.TodayIn(s.now(), timeZone)
+
+	results := make([]BatchCompletionResult, len(items))
+	for i, item := range items {
+		results[i].TaskID = item.TaskID
+		c, err := domain.NewCompletion(item.Input, today)
+		if err != nil {
+			results[i].Err = err
+			continue
+		}
+		results[i].Record, results[i].Task, results[i].Err = s.records.Complete(ctx, householdID, item.TaskID, userID, c)
+	}
+	return results, nil
 }
 
 // authorize は、タスクの世帯で記録の権限を確かめ、世帯のタイムゾーンでの今日を返す。入力の検証より先に行う。

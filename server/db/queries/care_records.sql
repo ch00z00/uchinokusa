@@ -12,10 +12,10 @@ FOR UPDATE OF care_tasks;
 -- prev_* は、取り消し（8.3）で戻す先。追加の記録はタスクを変えないので NULL にする
 INSERT INTO care_records (
   household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on,
-  actor_user_id, actor_display_name, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq
+  actor_user_id, actor_display_name, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, prev_due_overridden
 )
 SELECT sqlc.arg(household_id), sqlc.arg(plant_id), sqlc.arg(task_id), sqlc.arg(task_kind), sqlc.narg(task_custom_name), 'completed', sqlc.arg(performed_on),
-  users.id, users.display_name, sqlc.arg(cycle_seq), sqlc.arg(is_extra), sqlc.narg(prev_next_due_on), sqlc.narg(prev_cycle_seq)
+  users.id, users.display_name, sqlc.arg(cycle_seq), sqlc.arg(is_extra), sqlc.narg(prev_next_due_on), sqlc.narg(prev_cycle_seq), sqlc.narg(prev_due_overridden)
 FROM users
 WHERE users.id = sqlc.arg(actor_user_id)
 RETURNING *;
@@ -41,11 +41,11 @@ VALUES ($1, 'completion', $2, $3);
 -- prev_* は、取り消し（8.3）で戻す先
 INSERT INTO care_records (
   household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on,
-  actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, prev_next_due_on, prev_cycle_seq
+  actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, prev_next_due_on, prev_cycle_seq, prev_due_overridden
 )
 SELECT sqlc.arg(household_id), sqlc.arg(plant_id), sqlc.arg(task_id), sqlc.arg(task_kind), sqlc.narg(task_custom_name), 'skipped', sqlc.arg(performed_on),
   users.id, users.display_name, sqlc.narg(skip_reason_code), sqlc.narg(skip_reason_text), sqlc.arg(recheck_on), sqlc.arg(cycle_seq),
-  sqlc.arg(prev_next_due_on), sqlc.arg(prev_cycle_seq)
+  sqlc.arg(prev_next_due_on), sqlc.arg(prev_cycle_seq), sqlc.arg(prev_due_overridden)
 FROM users
 WHERE users.id = sqlc.arg(actor_user_id)
 RETURNING *;
@@ -56,3 +56,31 @@ RETURNING *;
 UPDATE care_tasks SET next_due_on = $2, due_overridden = true
 WHERE id = $1
 RETURNING *;
+
+-- name: GetCareRecordHouseholdID :one
+-- 権限を確かめるため、記録が属する世帯を探す
+SELECT household_id FROM care_records WHERE id = $1;
+
+-- name: GetCareRecord :one
+SELECT * FROM care_records WHERE id = $1 AND household_id = $2;
+
+-- name: GetLatestTaskRecord :one
+-- タスクの最新の記録（完了・スキップ・追加の記録のどれでも）。取り消せるのは、これだけ
+SELECT * FROM care_records
+WHERE task_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: RestoreCareTask :one
+-- 取り消しで、記録する前の予定日・回・手で変えた印に戻す
+UPDATE care_tasks SET next_due_on = $2, cycle_seq = $3, due_overridden = $4
+WHERE id = $1
+RETURNING *;
+
+-- name: CancelCompletionNotice :exec
+-- 取り消した記録の、まだ送っていない完了通知を送らないようにする（要件16-6）
+UPDATE notification_outbox SET status = 'canceled'
+WHERE record_id = $1 AND status = 'pending';
+
+-- name: DeleteCareRecord :exec
+DELETE FROM care_records WHERE id = $1;
