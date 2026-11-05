@@ -1100,6 +1100,102 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /plants/{plantId}/notes:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: listPlantNotes
+      summary: 植物のメモの一覧（閲覧者も）
+      description: |
+        メモを、作成日時の新しい順に返す（要件13-2）。編集しても並びは変わらない。
+        世帯を抜けたメンバーのメモも、作成の時点の名前で返す。次のページは、レスポンスの `nextCursor` を `cursor` に送る
+      tags: [note]
+      parameters:
+        - name: cursor
+          in: query
+          description: 任意。前のページの `nextCursor`。読めない値は `fields.cursor = invalid`
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 任意。1ページの件数（1〜100、既定は30）。範囲の外は `fields.limit = invalid`
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: メモの1ページ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    post:
+      operationId: createNote
+      summary: 植物にメモを書く（編集者以上）
+      description: |
+        リクエストした人を作成者にし、作成日時とともに保存する（要件13-1）。アーカイブした植物にも書ける
+      tags: [note]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoteBodyRequest" }
+      responses:
+        "201":
+          description: 作ったメモ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /notes/{noteId}:
+    parameters:
+      - $ref: "#/components/parameters/NoteId"
+    patch:
+      operationId: updateNote
+      summary: メモの本文を変える（作成者本人かオーナー）
+      description: |
+        本文が変わったときだけ `editedAt` を付ける（要件13-3）。ほかのメンバーのメモは、編集者には `403`
+      tags: [note]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NoteBodyRequest" }
+      responses:
+        "200":
+          description: 変えたメモ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Note" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteNote
+      summary: メモを消す（作成者本人かオーナー）
+      description: ほかのメンバーのメモは、編集者には `403`（要件13-3）
+      tags: [note]
+      responses:
+        "204":
+          description: 消した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -1170,6 +1266,14 @@ components:
       in: path
       required: true
       description: 植物の ID。所属していない世帯の植物の場合は 404 を返す（存在を明かさない）
+      schema:
+        type: string
+        format: uuid
+    NoteId:
+      name: noteId
+      in: path
+      required: true
+      description: メモの ID。所属していない世帯のメモの場合は 404 を返す（存在を明かさない）
       schema:
         type: string
         format: uuid
@@ -1941,6 +2045,53 @@ components:
         validUntil:
           description: 有効期間の最後の日。期限がなければ、項目がない
           $ref: "#/components/schemas/Date"
+
+    Note:
+      description: 植物のメモ。作成者の名前は、作成の時点の値
+      type: object
+      required: [id, plantId, body, authorDisplayName, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        authorUserId:
+          description: 作成者。アカウントを削除していれば、項目がない
+          type: string
+          format: uuid
+        authorDisplayName:
+          description: 作成者の表示名（作成の時点）
+          type: string
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+        editedAt:
+          description: 最後に本文を変えた日時。編集していなければ、項目がない（要件13-3）
+          $ref: "#/components/schemas/DateTime"
+
+    NotePage:
+      type: object
+      required: [notes]
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Note"
+        nextCursor:
+          description: 次のページの `cursor`。次のページがなければ、項目がない
+          type: string
+
+    NoteBodyRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          description: |
+            本文。前後の空白は除いて保存する。空は `fields.body = required`、2000文字を超えると `fields.body = too_long`（要件13-4）
+          type: string
 
     SkipReason:
       description: |

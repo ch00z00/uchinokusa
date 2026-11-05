@@ -996,6 +996,41 @@ type Member struct {
 	UserId openapi_types.UUID `json:"userId"`
 }
 
+// Note 植物のメモ。作成者の名前は、作成の時点の値
+type Note struct {
+	// AuthorDisplayName 作成者の表示名（作成の時点）
+	AuthorDisplayName string `json:"authorDisplayName"`
+
+	// AuthorUserId 作成者。アカウントを削除していれば、項目がない
+	AuthorUserId *openapi_types.UUID `json:"authorUserId,omitempty"`
+	Body         string              `json:"body"`
+
+	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	CreatedAt DateTime `json:"createdAt"`
+
+	// EditedAt 最後に本文を変えた日時。編集していなければ、項目がない（要件13-3）
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	EditedAt *DateTime          `json:"editedAt,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+	PlantId  openapi_types.UUID `json:"plantId"`
+}
+
+// NoteBodyRequest defines model for NoteBodyRequest.
+type NoteBodyRequest struct {
+	// Body 本文。前後の空白は除いて保存する。空は `fields.body = required`、2000文字を超えると `fields.body = too_long`（要件13-4）
+	Body string `json:"body"`
+}
+
+// NotePage defines model for NotePage.
+type NotePage struct {
+	// NextCursor 次のページの `cursor`。次のページがなければ、項目がない
+	NextCursor *string `json:"nextCursor,omitempty"`
+	Notes      []Note  `json:"notes"`
+}
+
 // NotificationSettings 世帯ごとの、自分の通知設定（要件15-3・16-3）
 type NotificationSettings struct {
 	// CompletionNotifyEnabled ほかのメンバーの完了通知を受け取るか（初期値 true）
@@ -1327,6 +1362,9 @@ type WindowDistance string
 // HouseholdId defines model for HouseholdId.
 type HouseholdId = openapi_types.UUID
 
+// NoteId defines model for NoteId.
+type NoteId = openapi_types.UUID
+
 // PlantId defines model for PlantId.
 type PlantId = openapi_types.UUID
 
@@ -1394,6 +1432,15 @@ type GetTodayParams struct {
 	Date *string `form:"date,omitempty" json:"date,omitempty"`
 }
 
+// ListPlantNotesParams defines parameters for ListPlantNotes.
+type ListPlantNotesParams struct {
+	// Cursor 任意。前のページの `nextCursor`。読めない値は `fields.cursor = invalid`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit 任意。1ページの件数（1〜100、既定は30）。範囲の外は `fields.limit = invalid`
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ListPlantRecordsParams defines parameters for ListPlantRecords.
 type ListPlantRecordsParams struct {
 	// Kind 任意。作業の種類（`CareKind` の値）。ほかの値は `fields.kind = invalid`
@@ -1448,8 +1495,14 @@ type UpdateMeJSONRequestBody = UpdateMeRequest
 // RegisterDeviceJSONRequestBody defines body for RegisterDevice for application/json ContentType.
 type RegisterDeviceJSONRequestBody = RegisterDeviceRequest
 
+// UpdateNoteJSONRequestBody defines body for UpdateNote for application/json ContentType.
+type UpdateNoteJSONRequestBody = NoteBodyRequest
+
 // UpdatePlantJSONRequestBody defines body for UpdatePlant for application/json ContentType.
 type UpdatePlantJSONRequestBody = UpdatePlantRequest
+
+// CreateNoteJSONRequestBody defines body for CreateNote for application/json ContentType.
+type CreateNoteJSONRequestBody = NoteBodyRequest
 
 // CreateCareTaskJSONRequestBody defines body for CreateCareTask for application/json ContentType.
 type CreateCareTaskJSONRequestBody = CreateCareTaskRequest
@@ -1549,6 +1602,12 @@ type ServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(w http.ResponseWriter, r *http.Request, deviceId openapi_types.UUID)
+	// DeleteNote メモを消す（作成者本人かオーナー）
+	// (DELETE /notes/{noteId})
+	DeleteNote(w http.ResponseWriter, r *http.Request, noteId NoteId)
+	// UpdateNote メモの本文を変える（作成者本人かオーナー）
+	// (PATCH /notes/{noteId})
+	UpdateNote(w http.ResponseWriter, r *http.Request, noteId NoteId)
 	// DeletePlant 植物を削除する（編集者以上）
 	// (DELETE /plants/{plantId})
 	DeletePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
@@ -1561,6 +1620,12 @@ type ServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// ListPlantNotes 植物のメモの一覧（閲覧者も）
+	// (GET /plants/{plantId}/notes)
+	ListPlantNotes(w http.ResponseWriter, r *http.Request, plantId PlantId, params ListPlantNotesParams)
+	// CreateNote 植物にメモを書く（編集者以上）
+	// (POST /plants/{plantId}/notes)
+	CreateNote(w http.ResponseWriter, r *http.Request, plantId PlantId)
 	// ListPlantRecords 植物のお手入れの履歴（閲覧者も）
 	// (GET /plants/{plantId}/records)
 	ListPlantRecords(w http.ResponseWriter, r *http.Request, plantId PlantId, params ListPlantRecordsParams)
@@ -2344,6 +2409,58 @@ func (siw *ServerInterfaceWrapper) UnregisterDevice(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteNote operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "noteId" -------------
+	var noteId NoteId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "noteId", r.PathValue("noteId"), &noteId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "noteId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNote(w, r, noteId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNote operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "noteId" -------------
+	var noteId NoteId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "noteId", r.PathValue("noteId"), &noteId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "noteId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNote(w, r, noteId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeletePlant operation middleware
 func (siw *ServerInterfaceWrapper) DeletePlant(w http.ResponseWriter, r *http.Request) {
 
@@ -2439,6 +2556,87 @@ func (siw *ServerInterfaceWrapper) ArchivePlant(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ArchivePlant(w, r, plantId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPlantNotes operation middleware
+func (siw *ServerInterfaceWrapper) ListPlantNotes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPlantNotesParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlantNotes(w, r, plantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNote operation middleware
+func (siw *ServerInterfaceWrapper) CreateNote(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNote(w, r, plantId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3052,6 +3250,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/records", wrapper.ListPlantRecords)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/records/{recordId}/undo", wrapper.UndoCareRecord)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/households/{householdId}/completions:batch", wrapper.CompleteCareTasks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/notes", wrapper.ListPlantNotes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/notes", wrapper.CreateNote)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/notes/{noteId}", wrapper.DeleteNote)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/notes/{noteId}", wrapper.UpdateNote)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -5488,6 +5690,199 @@ func (response UnregisterDevice500JSONResponse) VisitUnregisterDeviceResponse(w 
 	return err
 }
 
+type DeleteNoteRequestObject struct {
+	NoteId NoteId `json:"noteId"`
+}
+
+type DeleteNoteResponseObject interface {
+	VisitDeleteNoteResponse(w http.ResponseWriter) error
+}
+
+type DeleteNote204Response struct {
+}
+
+func (response DeleteNote204Response) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNote400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeleteNote400JSONResponse) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNote401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteNote401JSONResponse) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNote403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteNote403JSONResponse) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNote404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteNote404JSONResponse) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteNote500JSONResponse struct{ InternalJSONResponse }
+
+func (response DeleteNote500JSONResponse) VisitDeleteNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNoteRequestObject struct {
+	NoteId NoteId `json:"noteId"`
+	Body   *UpdateNoteJSONRequestBody
+}
+
+type UpdateNoteResponseObject interface {
+	VisitUpdateNoteResponse(w http.ResponseWriter) error
+}
+
+type UpdateNote200JSONResponse Note
+
+func (response UpdateNote200JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateNote400JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response UpdateNote401JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateNote403JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UpdateNote404JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response UpdateNote422JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateNote500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateNote500JSONResponse) VisitUpdateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeletePlantRequestObject struct {
 	PlantId PlantId `json:"plantId"`
 }
@@ -5840,6 +6235,206 @@ func (response ArchivePlant404JSONResponse) VisitArchivePlantResponse(w http.Res
 type ArchivePlant500JSONResponse struct{ InternalJSONResponse }
 
 func (response ArchivePlant500JSONResponse) VisitArchivePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotesRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+	Params  ListPlantNotesParams
+}
+
+type ListPlantNotesResponseObject interface {
+	VisitListPlantNotesResponse(w http.ResponseWriter) error
+}
+
+type ListPlantNotes200JSONResponse NotePage
+
+func (response ListPlantNotes200JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotes400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListPlantNotes400JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotes401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListPlantNotes401JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotes404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListPlantNotes404JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotes422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response ListPlantNotes422JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPlantNotes500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListPlantNotes500JSONResponse) VisitListPlantNotesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNoteRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+	Body    *CreateNoteJSONRequestBody
+}
+
+type CreateNoteResponseObject interface {
+	VisitCreateNoteResponse(w http.ResponseWriter) error
+}
+
+type CreateNote201JSONResponse Note
+
+func (response CreateNote201JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CreateNote400JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CreateNote401JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateNote403JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CreateNote404JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response CreateNote422JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateNote500JSONResponse struct{ InternalJSONResponse }
+
+func (response CreateNote500JSONResponse) VisitCreateNoteResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7376,6 +7971,12 @@ type StrictServerInterface interface {
 	// UnregisterDevice 端末をプッシュ通知の送信先から外す
 	// (DELETE /me/devices/{deviceId})
 	UnregisterDevice(ctx context.Context, request UnregisterDeviceRequestObject) (UnregisterDeviceResponseObject, error)
+	// DeleteNote メモを消す（作成者本人かオーナー）
+	// (DELETE /notes/{noteId})
+	DeleteNote(ctx context.Context, request DeleteNoteRequestObject) (DeleteNoteResponseObject, error)
+	// UpdateNote メモの本文を変える（作成者本人かオーナー）
+	// (PATCH /notes/{noteId})
+	UpdateNote(ctx context.Context, request UpdateNoteRequestObject) (UpdateNoteResponseObject, error)
 	// DeletePlant 植物を削除する（編集者以上）
 	// (DELETE /plants/{plantId})
 	DeletePlant(ctx context.Context, request DeletePlantRequestObject) (DeletePlantResponseObject, error)
@@ -7388,6 +7989,12 @@ type StrictServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(ctx context.Context, request ArchivePlantRequestObject) (ArchivePlantResponseObject, error)
+	// ListPlantNotes 植物のメモの一覧（閲覧者も）
+	// (GET /plants/{plantId}/notes)
+	ListPlantNotes(ctx context.Context, request ListPlantNotesRequestObject) (ListPlantNotesResponseObject, error)
+	// CreateNote 植物にメモを書く（編集者以上）
+	// (POST /plants/{plantId}/notes)
+	CreateNote(ctx context.Context, request CreateNoteRequestObject) (CreateNoteResponseObject, error)
 	// ListPlantRecords 植物のお手入れの履歴（閲覧者も）
 	// (GET /plants/{plantId}/records)
 	ListPlantRecords(ctx context.Context, request ListPlantRecordsRequestObject) (ListPlantRecordsResponseObject, error)
@@ -8255,6 +8862,65 @@ func (sh *strictHandler) UnregisterDevice(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// DeleteNote operation middleware
+func (sh *strictHandler) DeleteNote(w http.ResponseWriter, r *http.Request, noteId NoteId) {
+	var request DeleteNoteRequestObject
+
+	request.NoteId = noteId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNote(ctx, request.(DeleteNoteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNote")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNoteResponseObject); ok {
+		if err := validResponse.VisitDeleteNoteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNote operation middleware
+func (sh *strictHandler) UpdateNote(w http.ResponseWriter, r *http.Request, noteId NoteId) {
+	var request UpdateNoteRequestObject
+
+	request.NoteId = noteId
+
+	var body UpdateNoteJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNote(ctx, request.(UpdateNoteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNote")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNoteResponseObject); ok {
+		if err := validResponse.VisitUpdateNoteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // DeletePlant operation middleware
 func (sh *strictHandler) DeletePlant(w http.ResponseWriter, r *http.Request, plantId PlantId) {
 	var request DeletePlantRequestObject
@@ -8359,6 +9025,66 @@ func (sh *strictHandler) ArchivePlant(w http.ResponseWriter, r *http.Request, pl
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ArchivePlantResponseObject); ok {
 		if err := validResponse.VisitArchivePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPlantNotes operation middleware
+func (sh *strictHandler) ListPlantNotes(w http.ResponseWriter, r *http.Request, plantId PlantId, params ListPlantNotesParams) {
+	var request ListPlantNotesRequestObject
+
+	request.PlantId = plantId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlantNotes(ctx, request.(ListPlantNotesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlantNotes")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlantNotesResponseObject); ok {
+		if err := validResponse.VisitListPlantNotesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNote operation middleware
+func (sh *strictHandler) CreateNote(w http.ResponseWriter, r *http.Request, plantId PlantId) {
+	var request CreateNoteRequestObject
+
+	request.PlantId = plantId
+
+	var body CreateNoteJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNote(ctx, request.(CreateNoteRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNote")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNoteResponseObject); ok {
+		if err := validResponse.VisitCreateNoteResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

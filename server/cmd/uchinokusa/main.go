@@ -132,6 +132,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	taskRepo := postgres.NewCareTaskRepository(pool)
+	plantRepo := postgres.NewPlantRepository(pool)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,
@@ -141,10 +142,11 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),
 		Species:     app.NewSpeciesService(postgres.NewSpeciesRepository(pool)),
 		Locations:   app.NewLocationService(postgres.NewLocationRepository(pool), authz),
-		Plants:      app.NewPlantService(postgres.NewPlantRepository(pool), authz),
+		Plants:      app.NewPlantService(plantRepo, authz),
 		Tasks:       app.NewCareTaskService(taskRepo, authz, time.Now),
 		Records:     app.NewCareRecordService(postgres.NewCareRecordRepository(pool), taskRepo, authz, time.Now),
 		Today:       app.NewTodayService(postgres.NewTodayRepository(pool), authz, time.Now),
+		Notes:       app.NewNoteService(postgres.NewNoteRepository(pool), plantRepo, authz),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),
