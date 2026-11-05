@@ -38,8 +38,43 @@ var testRecord = domain.CareRecord{
 // fakeCareRecordService は、app.CareRecordService の偽物である。受け取った入力を記録する。
 // 送られた cycleSeq で振る舞いを変える：3 は成功、2 は完了済み、それ以外は予定の回が合わない。ほかのタスクは権限なし。
 type fakeCareRecordService struct {
-	inputs []domain.CompletionInput
-	skips  []domain.SkipInput
+	inputs  []domain.CompletionInput
+	skips   []domain.SkipInput
+	patches []domain.RecordPatchInput
+	queries []domain.RecordQueryInput
+}
+
+// Update は、testRecord なら、実施日を変えた記録とタスクを返す。それ以外は、タスクを削除した記録とする（タスクを返さない）。
+func (f *fakeCareRecordService) Update(_ context.Context, _, recordID uuid.UUID, in domain.RecordPatchInput) (domain.CareRecord, domain.CareTask, error) {
+	f.patches = append(f.patches, in)
+	rec := testRecord
+	rec.PerformedOn = civil.Date{Year: 2026, Month: 11, Day: 2}
+	if recordID != testRecord.ID {
+		return rec, domain.CareTask{}, nil
+	}
+	return rec, testTask, nil
+}
+
+func (f *fakeCareRecordService) Delete(_ context.Context, _, recordID uuid.UUID) (domain.CareTask, error) {
+	if recordID != testRecord.ID {
+		return domain.CareTask{}, nil
+	}
+	return testTask, nil
+}
+
+func (f *fakeCareRecordService) History(_ context.Context, _, plantID uuid.UUID, in domain.RecordQueryInput) (domain.RecordPage, error) {
+	f.queries = append(f.queries, in)
+	if plantID != testPlant.ID {
+		return domain.RecordPage{}, domain.ErrNotFound
+	}
+	return domain.RecordPage{
+		Records:    []domain.CareRecord{testRecord},
+		NextCursor: "next",
+		LastPerformed: []domain.LastPerformed{
+			{Kind: domain.CareOther, CustomName: "葉水", PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 3}},
+			{Kind: domain.CareWatering, PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 4}},
+		},
+	}, nil
 }
 
 // Undo は、testRecord なら成功、それ以外は取り消せない。
@@ -321,6 +356,85 @@ func TestCompleteCareTasks(t *testing.T) {
 		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/households/"+uuid.Must(uuid.NewV7()).String()+"/completions:batch", "Bearer "+validToken, `{"items": []}`)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+}
+
+func TestUpdateCareRecord(t *testing.T) {
+	t.Parallel()
+
+	t.Run("変えた記録とタスクを 200 で返す", func(t *testing.T) {
+		t.Parallel()
+		records := &fakeCareRecordService{}
+		rec := serve(t, newRecordRouter(t, records), http.MethodPatch, "/v1/records/"+testRecord.ID.String(), "Bearer "+validToken, `{"performedOn": "2026-11-02"}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		got := decode[struct {
+			Record struct{ PerformedOn string }
+			Task   *struct{ Id uuid.UUID }
+		}](t, rec)
+		if got.Record.PerformedOn != "2026-11-02" || got.Task == nil || got.Task.Id != testTask.ID {
+			t.Errorf("body = %s", rec.Body.String())
+		}
+		if in := records.patches[0]; in.PerformedOn == nil || *in.PerformedOn != "2026-11-02" {
+			t.Errorf("input = %+v", in)
+		}
+	})
+
+	t.Run("タスクを削除していれば、task の項目がない", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPatch, "/v1/records/"+uuid.Must(uuid.NewV7()).String(), "Bearer "+validToken, `{"performedOn": "2026-11-02"}`)
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"task"`) {
+			t.Errorf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+func TestDeleteCareRecord(t *testing.T) {
+	t.Parallel()
+	rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodDelete, "/v1/records/"+testRecord.ID.String(), "Bearer "+validToken, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+	}
+	if got := decode[struct{ Task *struct{ Id uuid.UUID } }](t, rec); got.Task == nil || got.Task.Id != testTask.ID {
+		t.Errorf("body = %s", rec.Body.String())
+	}
+	rec = serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodDelete, "/v1/records/"+uuid.Must(uuid.NewV7()).String(), "Bearer "+validToken, "")
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "{}" {
+		t.Errorf("without task: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListPlantRecords(t *testing.T) {
+	t.Parallel()
+
+	t.Run("記録・次のページの cursor・種類ごとの最終実施日を返す", func(t *testing.T) {
+		t.Parallel()
+		records := &fakeCareRecordService{}
+		rec := serve(t, newRecordRouter(t, records), http.MethodGet, "/v1/plants/"+testPlant.ID.String()+"/records?kind=watering&cursor=abc&limit=10", "Bearer "+validToken, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		got := decode[struct {
+			Records       []struct{ Id uuid.UUID }
+			NextCursor    string
+			LastPerformed json.RawMessage
+		}](t, rec)
+		const wantLast = `[{"customName":"葉水","kind":"other","performedOn":"2026-11-03"},{"kind":"watering","performedOn":"2026-11-04"}]`
+		if len(got.Records) != 1 || got.Records[0].Id != testRecord.ID || got.NextCursor != "next" || string(got.LastPerformed) != wantLast {
+			t.Errorf("body = %s", rec.Body.String())
+		}
+		if in := records.queries[0]; in.Kind == nil || *in.Kind != "watering" || in.Cursor == nil || *in.Cursor != "abc" || in.Limit == nil || *in.Limit != 10 {
+			t.Errorf("input = %+v", in)
+		}
+	})
+
+	t.Run("ほかの世帯の植物は 404", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodGet, "/v1/plants/"+uuid.Must(uuid.NewV7()).String()+"/records", "Bearer "+validToken, "")
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 404", rec.Code)
 		}
 	})
 }

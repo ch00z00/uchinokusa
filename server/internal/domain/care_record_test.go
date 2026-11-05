@@ -266,3 +266,125 @@ func TestCheckUndo(t *testing.T) {
 		})
 	}
 }
+
+func TestNewRecordPatch(t *testing.T) {
+	t.Parallel()
+	got, err := domain.NewRecordPatch(domain.RecordPatchInput{PerformedOn: ptr("2026-10-30")}, taskToday)
+	if err != nil || got.PerformedOn != (civil.Date{Year: 2026, Month: 10, Day: 30}) {
+		t.Errorf("got %+v, %v", got, err)
+	}
+	tests := []struct {
+		name string
+		in   domain.RecordPatchInput
+		want map[string]string
+	}{
+		{"実施日は必須", domain.RecordPatchInput{}, map[string]string{"performedOn": "required"}},
+		{"形式の誤り", domain.RecordPatchInput{PerformedOn: ptr("10/30")}, map[string]string{"performedOn": "invalid"}},
+		{"未来の実施日は受け付けない", domain.RecordPatchInput{PerformedOn: ptr("2026-11-05")}, map[string]string{"performedOn": "invalid"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := domain.NewRecordPatch(tt.in, taskToday)
+			var v *domain.ValidationError
+			if !errors.As(err, &v) || !reflect.DeepEqual(v.Fields, tt.want) {
+				t.Errorf("err = %v, want fields %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestRescheduleAfterChange(t *testing.T) {
+	t.Parallel()
+	// 週1回（冬は2週に1回）の水やり
+	task := domain.CareTask{CareTaskProfile: domain.CareTaskProfile{Schedule: domain.Schedule{
+		Base:     domain.Interval{Value: 1, Unit: domain.IntervalWeek},
+		Seasonal: domain.SeasonalIntervals{domain.SeasonWinter: {Value: 2, Unit: domain.IntervalWeek}},
+	}}}
+	record := func(id byte, outcome domain.CareOutcome, day int) domain.CareRecord {
+		return domain.CareRecord{ID: uuid.UUID{15: id}, Outcome: outcome, PerformedOn: civil.Date{Year: 2026, Month: 11, Day: day}}
+	}
+	latest := record(1, domain.OutcomeCompleted, 4)
+	older := record(2, domain.OutcomeCompleted, 1)
+	edited := record(1, domain.OutcomeCompleted, 2) // latest の実施日を 11/2 にした
+	skip := record(3, domain.OutcomeSkipped, 4)
+
+	tests := []struct {
+		name   string
+		change domain.RecordChange
+		want   civil.Date
+		ok     bool
+	}{
+		{"最新の完了の実施日を変えたら、変えた日から計算し直す",
+			domain.RecordChange{Target: latest, ScheduleOwner: latest, LatestBefore: latest, LatestAfter: &edited},
+			civil.Date{Year: 2026, Month: 11, Day: 9}, true},
+		{"最新の完了を消したら、残った最新の完了から計算し直す",
+			domain.RecordChange{Target: latest, ScheduleOwner: latest, LatestBefore: latest, LatestAfter: &older},
+			civil.Date{Year: 2026, Month: 11, Day: 8}, true},
+		{"古い完了を、最新より後の実施日に変えたら、計算し直す",
+			domain.RecordChange{Target: older, ScheduleOwner: latest, LatestBefore: latest, LatestAfter: &domain.CareRecord{ID: older.ID, Outcome: domain.OutcomeCompleted, PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 4}}},
+			civil.Date{Year: 2026, Month: 11, Day: 11}, true},
+		{"古い完了の変更は、予定を変えない",
+			domain.RecordChange{Target: older, ScheduleOwner: latest, LatestBefore: latest, LatestAfter: &latest}, civil.Date{}, false},
+		{"あとのスキップが予定を決めていれば、確認日を変えない",
+			domain.RecordChange{Target: latest, ScheduleOwner: skip, LatestBefore: latest, LatestAfter: &edited}, civil.Date{}, false},
+		{"スキップの変更は、予定を変えない",
+			domain.RecordChange{Target: skip, ScheduleOwner: skip, LatestBefore: latest, LatestAfter: &latest}, civil.Date{}, false},
+		{"完了が残らなければ、予定を変えない",
+			domain.RecordChange{Target: latest, ScheduleOwner: latest, LatestBefore: latest}, civil.Date{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := domain.RescheduleAfterChange(task, tt.change, domain.HemisphereNorth)
+			if got != tt.want || ok != tt.ok {
+				t.Errorf("got %v, %v; want %v, %v", got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
+func TestNewRecordQuery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("既定は30件で、種類と cursor を省ける", func(t *testing.T) {
+		t.Parallel()
+		got, err := domain.NewRecordQuery(domain.RecordQueryInput{})
+		if err != nil || got != (domain.RecordQuery{Limit: domain.DefaultRecordPageSize}) {
+			t.Errorf("got %+v, %v", got, err)
+		}
+	})
+
+	t.Run("cursor は、記録の並びの位置を往復できる", func(t *testing.T) {
+		t.Parallel()
+		at := domain.RecordCursor{PerformedOn: taskToday, CreatedAt: time.Date(2026, 11, 4, 9, 30, 0, 123456000, time.UTC), ID: uuid.UUID{15: 1}}
+		got, err := domain.NewRecordQuery(domain.RecordQueryInput{Kind: ptr("watering"), Cursor: ptr(at.Encode()), Limit: ptr(5)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Kind != domain.CareWatering || got.Limit != 5 || got.After == nil || *got.After != at {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	tests := []struct {
+		name string
+		in   domain.RecordQueryInput
+		want map[string]string
+	}{
+		{"決められていない種類", domain.RecordQueryInput{Kind: ptr("misting")}, map[string]string{"kind": "invalid"}},
+		{"読めない cursor", domain.RecordQueryInput{Cursor: ptr("xyz")}, map[string]string{"cursor": "invalid"}},
+		{"件数は1以上", domain.RecordQueryInput{Limit: ptr(0)}, map[string]string{"limit": "invalid"}},
+		{"件数は100まで", domain.RecordQueryInput{Limit: ptr(101)}, map[string]string{"limit": "invalid"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := domain.NewRecordQuery(tt.in)
+			var v *domain.ValidationError
+			if !errors.As(err, &v) || !reflect.DeepEqual(v.Fields, tt.want) {
+				t.Errorf("err = %v, want fields %v", err, tt.want)
+			}
+		})
+	}
+}

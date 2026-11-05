@@ -927,6 +927,93 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /records/{recordId}:
+    parameters:
+      - $ref: "#/components/parameters/RecordId"
+    patch:
+      operationId: updateCareRecord
+      summary: 記録の実施日を変える（編集者以上）
+      description: |
+        記録した本人でなくても変えられる（要件12-4）。未来の日付は `fields.performedOn = invalid`。
+        変えた記録が、変更の前か後でタスクの最新の完了なら、最新の完了の実施日から次回予定を計算し直し、手で変えた印を外す。
+        ただし、あとのスキップが予定を決めていれば（確認日）、予定は変えない。予定の回は変えない
+      tags: [record]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCareRecordRequest" }
+      responses:
+        "200":
+          description: 変えた記録と、タスク（タスクを削除していれば、項目がない）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareRecordUpdateResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteCareRecord
+      summary: 記録を消す（編集者以上）
+      description: |
+        記録した本人でなくても消せる（要件12-4）。まだ送っていない完了通知は送らない。
+        消した記録がタスクの最新の完了なら、残った最新の完了の実施日から次回予定を計算し直す（編集と同じ規則）。
+        完了が残らなければ、次回予定は変えない。予定の回は戻さない
+      tags: [record]
+      responses:
+        "200":
+          description: 消したあとのタスク（タスクを削除していれば、項目がない）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareRecordDeleteResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /plants/{plantId}/records:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: listPlantRecords
+      summary: 植物のお手入れの履歴（閲覧者も）
+      description: |
+        記録（完了・スキップ）を、実施日の新しい順に返す（要件12-1）。世帯を抜けたメンバーの記録も、記録の時点の名前で返す（要件12-5）。
+        `kind` で絞り込める（要件12-2）。次のページは、レスポンスの `nextCursor` を `cursor` に送る。
+        `lastPerformed` は、作業の種類（`other` は作業名）ごとの最終実施日で、`kind` の絞り込みにかかわらず、すべての種類を返す（要件12-3）。スキップは実施に数えない
+      tags: [record]
+      parameters:
+        - name: kind
+          in: query
+          description: 任意。作業の種類（`CareKind` の値）。ほかの値は `fields.kind = invalid`
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: 任意。前のページの `nextCursor`。読めない値は `fields.cursor = invalid`
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 任意。1ページの件数（1〜100、既定は30）。範囲の外は `fields.limit = invalid`
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 履歴の1ページ
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareRecordPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /records/{recordId}/undo:
     parameters:
       - $ref: "#/components/parameters/RecordId"
@@ -1677,6 +1764,58 @@ components:
           $ref: "#/components/schemas/CompletedBy"
         error:
           $ref: "#/components/schemas/Error"
+
+    UpdateCareRecordRequest:
+      type: object
+      required: [performedOn]
+      properties:
+        performedOn:
+          description: 実施日（`YYYY-MM-DD`）。形式の誤りと未来の日付は `fields.performedOn = invalid`
+          type: string
+
+    CareRecordUpdateResult:
+      type: object
+      required: [record]
+      properties:
+        record:
+          $ref: "#/components/schemas/CareRecord"
+        task:
+          $ref: "#/components/schemas/CareTask"
+
+    CareRecordDeleteResult:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/CareTask"
+
+    CareRecordPage:
+      type: object
+      required: [records, lastPerformed]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/CareRecord"
+        nextCursor:
+          description: 次のページの `cursor`。次のページがなければ、項目がない
+          type: string
+        lastPerformed:
+          type: array
+          items:
+            $ref: "#/components/schemas/LastPerformed"
+
+    LastPerformed:
+      description: 作業の種類ごとの最終実施日
+      type: object
+      required: [kind, performedOn]
+      properties:
+        kind:
+          $ref: "#/components/schemas/CareKind"
+        customName:
+          description: 作業名（`kind` が `other` のときだけ）
+          type: string
+        performedOn:
+          $ref: "#/components/schemas/Date"
 
     SkipReason:
       description: |

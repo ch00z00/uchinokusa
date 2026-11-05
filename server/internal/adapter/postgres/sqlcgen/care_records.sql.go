@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -362,6 +363,43 @@ func (q *Queries) GetCycleCompletion(ctx context.Context, arg GetCycleCompletion
 	return i, err
 }
 
+const getLatestCompletion = `-- name: GetLatestCompletion :one
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
+WHERE task_id = $1 AND outcome = 'completed'
+ORDER BY performed_on DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+// タスクの最新の完了（実施日の新しい順）。次回予定を計算し直す起点にする
+func (q *Queries) GetLatestCompletion(ctx context.Context, taskID uuid.NullUUID) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, getLatestCompletion, taskID)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+		&i.PrevDueOverridden,
+	)
+	return i, err
+}
+
 const getLatestTaskRecord = `-- name: GetLatestTaskRecord :one
 SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
 WHERE task_id = $1
@@ -397,6 +435,155 @@ func (q *Queries) GetLatestTaskRecord(ctx context.Context, taskID uuid.NullUUID)
 		&i.PrevDueOverridden,
 	)
 	return i, err
+}
+
+const getScheduleOwner = `-- name: GetScheduleOwner :one
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
+WHERE task_id = $1 AND NOT is_extra
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+// タスクの予定を最後に決めた記録。追加の記録は予定を変えないので除く（記録の編集・削除で、計算し直すかを決める）
+func (q *Queries) GetScheduleOwner(ctx context.Context, taskID uuid.NullUUID) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, getScheduleOwner, taskID)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+		&i.PrevDueOverridden,
+	)
+	return i, err
+}
+
+const listLastPerformed = `-- name: ListLastPerformed :many
+SELECT task_kind, task_custom_name, max(performed_on)::date AS performed_on
+FROM care_records
+WHERE household_id = $1 AND plant_id = $2 AND outcome = 'completed'
+GROUP BY task_kind, task_custom_name
+ORDER BY task_kind, task_custom_name
+`
+
+type ListLastPerformedParams struct {
+	HouseholdID uuid.UUID
+	PlantID     uuid.UUID
+}
+
+type ListLastPerformedRow struct {
+	TaskKind       string
+	TaskCustomName *string
+	PerformedOn    pgtype.Date
+}
+
+// 植物の、作業の種類（other は作業名）ごとの最終実施日（要件12-3）。スキップは実施していないので除く
+func (q *Queries) ListLastPerformed(ctx context.Context, arg ListLastPerformedParams) ([]ListLastPerformedRow, error) {
+	rows, err := q.db.Query(ctx, listLastPerformed, arg.HouseholdID, arg.PlantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLastPerformedRow{}
+	for rows.Next() {
+		var i ListLastPerformedRow
+		if err := rows.Scan(&i.TaskKind, &i.TaskCustomName, &i.PerformedOn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlantRecords = `-- name: ListPlantRecords :many
+SELECT id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden FROM care_records
+WHERE household_id = $1 AND plant_id = $2
+  AND ($3::text IS NULL OR task_kind = $3)
+  AND ($4::date IS NULL
+    OR (performed_on, created_at, id) < ($4, $5::timestamptz, $6::uuid))
+ORDER BY performed_on DESC, created_at DESC, id DESC
+LIMIT $7
+`
+
+type ListPlantRecordsParams struct {
+	HouseholdID      uuid.UUID
+	PlantID          uuid.UUID
+	Kind             *string
+	AfterPerformedOn pgtype.Date
+	AfterCreatedAt   *time.Time
+	AfterID          uuid.NullUUID
+	RowLimit         int32
+}
+
+// 植物の履歴を、実施日・記録した日時・ID の新しい順に返す（要件12-1）。種類で絞り込める（要件12-2）
+// 次のページは、前のページの最後の記録の位置（cursor）より後から始める
+func (q *Queries) ListPlantRecords(ctx context.Context, arg ListPlantRecordsParams) ([]CareRecord, error) {
+	rows, err := q.db.Query(ctx, listPlantRecords,
+		arg.HouseholdID,
+		arg.PlantID,
+		arg.Kind,
+		arg.AfterPerformedOn,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CareRecord{}
+	for rows.Next() {
+		var i CareRecord
+		if err := rows.Scan(
+			&i.ID,
+			&i.HouseholdID,
+			&i.PlantID,
+			&i.TaskID,
+			&i.TaskKind,
+			&i.TaskCustomName,
+			&i.Outcome,
+			&i.PerformedOn,
+			&i.PerformedAt,
+			&i.ActorUserID,
+			&i.ActorDisplayName,
+			&i.SkipReasonCode,
+			&i.SkipReasonText,
+			&i.RecheckOn,
+			&i.CycleSeq,
+			&i.IsExtra,
+			&i.PrevNextDueOn,
+			&i.PrevCycleSeq,
+			&i.EditedAt,
+			&i.CreatedAt,
+			&i.PrevDueOverridden,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockCareTask = `-- name: LockCareTask :one
@@ -445,6 +632,43 @@ func (q *Queries) LockCareTask(ctx context.Context, arg LockCareTaskParams) (Loc
 	return i, err
 }
 
+const rescheduleCareTask = `-- name: RescheduleCareTask :one
+UPDATE care_tasks SET next_due_on = $2, due_overridden = false
+WHERE id = $1
+RETURNING id, household_id, plant_id, kind, custom_name, interval_value, interval_unit, seasonal_intervals, condition_text, note, next_due_on, due_overridden, cycle_seq, status, deleted_at, created_at, updated_at
+`
+
+type RescheduleCareTaskParams struct {
+	ID        uuid.UUID
+	NextDueOn pgtype.Date
+}
+
+// 記録の編集・削除で、次回予定を最新の完了から計算し直す。周期からの計算なので、手で変えた印を外す
+func (q *Queries) RescheduleCareTask(ctx context.Context, arg RescheduleCareTaskParams) (CareTask, error) {
+	row := q.db.QueryRow(ctx, rescheduleCareTask, arg.ID, arg.NextDueOn)
+	var i CareTask
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.Kind,
+		&i.CustomName,
+		&i.IntervalValue,
+		&i.IntervalUnit,
+		&i.SeasonalIntervals,
+		&i.ConditionText,
+		&i.Note,
+		&i.NextDueOn,
+		&i.DueOverridden,
+		&i.CycleSeq,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const restoreCareTask = `-- name: RestoreCareTask :one
 UPDATE care_tasks SET next_due_on = $2, cycle_seq = $3, due_overridden = $4
 WHERE id = $1
@@ -485,6 +709,46 @@ func (q *Queries) RestoreCareTask(ctx context.Context, arg RestoreCareTaskParams
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCareRecordPerformedOn = `-- name: UpdateCareRecordPerformedOn :one
+UPDATE care_records SET performed_on = $2, edited_at = now()
+WHERE id = $1
+RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at, prev_due_overridden
+`
+
+type UpdateCareRecordPerformedOnParams struct {
+	ID          uuid.UUID
+	PerformedOn pgtype.Date
+}
+
+func (q *Queries) UpdateCareRecordPerformedOn(ctx context.Context, arg UpdateCareRecordPerformedOnParams) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, updateCareRecordPerformedOn, arg.ID, arg.PerformedOn)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+		&i.PrevDueOverridden,
 	)
 	return i, err
 }

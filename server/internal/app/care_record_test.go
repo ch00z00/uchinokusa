@@ -20,6 +20,36 @@ type fakeCareRecords struct {
 	undos       []undoCall
 	households  map[uuid.UUID]uuid.UUID // 記録の ID → 世帯
 	fail        map[uuid.UUID]error     // タスクの ID → 完了で返すエラー
+	patches     []patchCall
+	deleted     []uuid.UUID
+	queries     []domain.RecordQuery
+	page        []domain.CareRecord
+	more        bool
+}
+
+type patchCall struct {
+	householdID, recordID uuid.UUID
+	p                     domain.RecordPatch
+}
+
+func (f *fakeCareRecords) UpdatePerformedOn(_ context.Context, householdID, recordID uuid.UUID, p domain.RecordPatch) (domain.CareRecord, domain.CareTask, error) {
+	f.patches = append(f.patches, patchCall{householdID, recordID, p})
+	return domain.CareRecord{ID: recordID, PerformedOn: p.PerformedOn}, domain.CareTask{}, nil
+}
+
+func (f *fakeCareRecords) Delete(_ context.Context, householdID, recordID uuid.UUID) (domain.CareTask, error) {
+	f.deleted = append(f.deleted, recordID)
+	return domain.CareTask{}, nil
+}
+
+// ListByPlant は、page の記録を返し、more が true なら次のページがあるとする。
+func (f *fakeCareRecords) ListByPlant(_ context.Context, householdID, plantID uuid.UUID, q domain.RecordQuery) ([]domain.CareRecord, bool, error) {
+	f.queries = append(f.queries, q)
+	return f.page, f.more, nil
+}
+
+func (f *fakeCareRecords) LastPerformed(context.Context, uuid.UUID, uuid.UUID) ([]domain.LastPerformed, error) {
+	return []domain.LastPerformed{{Kind: domain.CareWatering, PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 4}}}, nil
 }
 
 type undoCall struct {
@@ -176,17 +206,7 @@ func TestCareRecordService_Undo(t *testing.T) {
 		}
 	})
 
-	denied := []struct {
-		name    string
-		user    func(recordFixture) uuid.UUID
-		record  func(recordFixture) uuid.UUID
-		wantErr error
-	}{
-		{"閲覧者はできない", func(f recordFixture) uuid.UUID { return f.viewer }, func(f recordFixture) uuid.UUID { return f.record }, domain.ErrForbidden},
-		{"ほかの世帯の記録は 404", func(f recordFixture) uuid.UUID { return f.stranger }, func(f recordFixture) uuid.UUID { return f.record }, domain.ErrNotFound},
-		{"存在しない記録は 404", func(f recordFixture) uuid.UUID { return f.owner }, func(recordFixture) uuid.UUID { return uuid.Must(uuid.NewV7()) }, domain.ErrNotFound},
-	}
-	for _, tt := range denied {
+	for _, tt := range recordWriteDenied {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			f := newRecordFixture()
@@ -262,6 +282,105 @@ func TestCareRecordService_CompleteBatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCareRecordService_Update(t *testing.T) {
+	t.Parallel()
+
+	t.Run("編集者は実施日を変えられる。本人の記録でなくてもよい", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture()
+		if _, _, err := f.svc.Update(t.Context(), f.owner, f.record, domain.RecordPatchInput{PerformedOn: ptr("2026-11-01")}); err != nil {
+			t.Fatal(err)
+		}
+		want := patchCall{f.household, f.record, domain.RecordPatch{PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 1}}}
+		if len(f.records.patches) != 1 || f.records.patches[0] != want {
+			t.Errorf("patches = %+v, want %+v", f.records.patches, want)
+		}
+	})
+
+	t.Run("未来の実施日は、世帯のタイムゾーンで判定する", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture()
+		_, _, err := f.svc.Update(t.Context(), f.editor, f.record, domain.RecordPatchInput{PerformedOn: ptr("2026-11-05")})
+		assertFields(t, err, map[string]string{"performedOn": "invalid"})
+	})
+
+	for _, tt := range recordWriteDenied {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newRecordFixture()
+			if _, _, err := f.svc.Update(t.Context(), tt.user(f), tt.record(f), domain.RecordPatchInput{}); !errors.Is(err, tt.wantErr) {
+				t.Errorf("err = %v, want %v", err, tt.wantErr)
+			}
+			if _, err := f.svc.Delete(t.Context(), tt.user(f), tt.record(f)); !errors.Is(err, tt.wantErr) {
+				t.Errorf("delete: err = %v, want %v", err, tt.wantErr)
+			}
+			if len(f.records.patches)+len(f.records.deleted) != 0 {
+				t.Errorf("changed: %+v, %+v", f.records.patches, f.records.deleted)
+			}
+		})
+	}
+}
+
+func TestCareRecordService_Delete(t *testing.T) {
+	t.Parallel()
+	f := newRecordFixture()
+	if _, err := f.svc.Delete(t.Context(), f.editor, f.record); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.records.deleted) != 1 || f.records.deleted[0] != f.record {
+		t.Errorf("deleted = %+v", f.records.deleted)
+	}
+}
+
+func TestCareRecordService_History(t *testing.T) {
+	t.Parallel()
+
+	t.Run("閲覧者も見られ、次のページがあれば、最後の記録の位置を cursor にする", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture()
+		last := domain.CareRecord{ID: uuid.Must(uuid.NewV7()), PerformedOn: civil.Date{Year: 2026, Month: 11, Day: 1}, CreatedAt: taskNow}
+		f.records.page, f.records.more = []domain.CareRecord{{}, last}, true
+		page, err := f.svc.History(t.Context(), f.viewer, f.plant, domain.RecordQueryInput{Kind: ptr("watering"), Limit: ptrOf(2)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Records) != 2 || page.NextCursor != domain.CursorOf(last).Encode() || len(page.LastPerformed) != 1 {
+			t.Errorf("page = %+v", page)
+		}
+		if q := f.records.queries[0]; q.Kind != domain.CareWatering || q.Limit != 2 {
+			t.Errorf("query = %+v", q)
+		}
+	})
+
+	t.Run("次のページがなければ cursor は空", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture()
+		f.records.page = []domain.CareRecord{{}}
+		if page, err := f.svc.History(t.Context(), f.viewer, f.plant, domain.RecordQueryInput{}); err != nil || page.NextCursor != "" {
+			t.Errorf("page = %+v, %v", page, err)
+		}
+	})
+
+	t.Run("ほかの世帯の植物は 404", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture()
+		if _, err := f.svc.History(t.Context(), f.stranger, f.plant, domain.RecordQueryInput{}); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}
+
+var recordWriteDenied = []struct {
+	name    string
+	user    func(recordFixture) uuid.UUID
+	record  func(recordFixture) uuid.UUID
+	wantErr error
+}{
+	{"閲覧者はできない", func(f recordFixture) uuid.UUID { return f.viewer }, func(f recordFixture) uuid.UUID { return f.record }, domain.ErrForbidden},
+	{"ほかの世帯の記録は 404", func(f recordFixture) uuid.UUID { return f.stranger }, func(f recordFixture) uuid.UUID { return f.record }, domain.ErrNotFound},
+	{"存在しない記録は 404", func(f recordFixture) uuid.UUID { return f.owner }, func(recordFixture) uuid.UUID { return uuid.Must(uuid.NewV7()) }, domain.ErrNotFound},
 }
 
 func ptrOf[T any](v T) *T { return &v }

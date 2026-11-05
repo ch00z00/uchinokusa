@@ -15,12 +15,15 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
-// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了）を行う（実装は app.CareRecordService）。
+// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了・編集・削除・履歴）を行う（実装は app.CareRecordService）。
 type CareRecordService interface {
 	Complete(ctx context.Context, userID, taskID uuid.UUID, in domain.CompletionInput) (domain.CareRecord, domain.CareTask, error)
 	Skip(ctx context.Context, userID, taskID uuid.UUID, in domain.SkipInput) (domain.CareRecord, domain.CareTask, error)
 	Undo(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error)
 	CompleteBatch(ctx context.Context, userID, householdID uuid.UUID, items []app.BatchCompletionItem) ([]app.BatchCompletionResult, error)
+	Update(ctx context.Context, userID, recordID uuid.UUID, in domain.RecordPatchInput) (domain.CareRecord, domain.CareTask, error)
+	Delete(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error)
+	History(ctx context.Context, userID, plantID uuid.UUID, in domain.RecordQueryInput) (domain.RecordPage, error)
 }
 
 func (s *server) CompleteCareTask(ctx context.Context, req oapi.CompleteCareTaskRequestObject) (oapi.CompleteCareTaskResponseObject, error) {
@@ -91,6 +94,51 @@ func (s *server) UndoCareRecord(ctx context.Context, req oapi.UndoCareRecordRequ
 		return nil, err
 	}
 	return oapi.UndoCareRecord200JSONResponse(toCareTask(task)), nil
+}
+
+func (s *server) UpdateCareRecord(ctx context.Context, req oapi.UpdateCareRecordRequestObject) (oapi.UpdateCareRecordResponseObject, error) {
+	rec, task, err := s.records.Update(ctx, currentUser(ctx).ID, req.RecordId, domain.RecordPatchInput{PerformedOn: &req.Body.PerformedOn})
+	if err != nil {
+		return nil, err
+	}
+	return oapi.UpdateCareRecord200JSONResponse{Record: toCareRecord(rec), Task: omitZeroTask(task)}, nil
+}
+
+func (s *server) DeleteCareRecord(ctx context.Context, req oapi.DeleteCareRecordRequestObject) (oapi.DeleteCareRecordResponseObject, error) {
+	task, err := s.records.Delete(ctx, currentUser(ctx).ID, req.RecordId)
+	if err != nil {
+		return nil, err
+	}
+	return oapi.DeleteCareRecord200JSONResponse{Task: omitZeroTask(task)}, nil
+}
+
+func (s *server) ListPlantRecords(ctx context.Context, req oapi.ListPlantRecordsRequestObject) (oapi.ListPlantRecordsResponseObject, error) {
+	p := req.Params
+	page, err := s.records.History(ctx, currentUser(ctx).ID, req.PlantId, domain.RecordQueryInput{Kind: p.Kind, Cursor: p.Cursor, Limit: p.Limit})
+	if err != nil {
+		return nil, err
+	}
+	out := oapi.ListPlantRecords200JSONResponse{
+		Records:       make([]oapi.CareRecord, len(page.Records)),
+		NextCursor:    omitEmptyAs[string](page.NextCursor),
+		LastPerformed: make([]oapi.LastPerformed, len(page.LastPerformed)),
+	}
+	for i, r := range page.Records {
+		out.Records[i] = toCareRecord(r)
+	}
+	for i, l := range page.LastPerformed {
+		out.LastPerformed[i] = oapi.LastPerformed{Kind: oapi.CareKind(l.Kind), CustomName: omitEmptyAs[string](l.CustomName), PerformedOn: toDate(l.PerformedOn)}
+	}
+	return out, nil
+}
+
+// omitZeroTask は、タスクがない（削除した）ときに、項目ごと省く。
+func omitZeroTask(t domain.CareTask) *oapi.CareTask {
+	if t.ID == uuid.Nil {
+		return nil
+	}
+	c := toCareTask(t)
+	return &c
 }
 
 func (s *server) SkipCareTask(ctx context.Context, req oapi.SkipCareTaskRequestObject) (oapi.SkipCareTaskResponseObject, error) {

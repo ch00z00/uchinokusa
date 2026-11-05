@@ -23,6 +23,15 @@ type CareRecordRepository interface {
 	// Undo は、タスクの行ロックを取って domain.CheckUndo で取り消せるかを確かめ、記録する前の予定日・回に戻して記録を消す。
 	// まだ送っていない完了通知は、取り消し済みにする（要件16-6）。
 	Undo(ctx context.Context, householdID, recordID, actorID uuid.UUID, now time.Time) (domain.CareTask, error)
+	// UpdatePerformedOn は、記録の実施日を変え、最新の完了であれば次回予定を計算し直す（domain.RescheduleAfterChange）。
+	// タスクを削除していれば、ゼロ値のタスクを返す。
+	UpdatePerformedOn(ctx context.Context, householdID, recordID uuid.UUID, p domain.RecordPatch) (domain.CareRecord, domain.CareTask, error)
+	// Delete は、記録を消し、最新の完了であれば、残った最新の完了から次回予定を計算し直す。
+	Delete(ctx context.Context, householdID, recordID uuid.UUID) (domain.CareTask, error)
+	// ListByPlant は、植物の履歴を新しい順に q.Limit 件まで返す。more は、次のページがあるかを表す。
+	ListByPlant(ctx context.Context, householdID, plantID uuid.UUID, q domain.RecordQuery) (records []domain.CareRecord, more bool, err error)
+	// LastPerformed は、植物の、作業の種類ごとの最終実施日を返す。
+	LastPerformed(ctx context.Context, householdID, plantID uuid.UUID) ([]domain.LastPerformed, error)
 }
 
 // MaxBatchCompletions は、まとめて完了できるタスクの数の上限である。
@@ -42,13 +51,14 @@ type BatchCompletionResult struct {
 	Err    error
 }
 
-// TaskLocator は、タスクの ID から、権限を確かめる世帯と、今日を決めるタイムゾーンを探す（実装は CareTaskRepository）。
+// TaskLocator は、タスク・植物の ID から、権限を確かめる世帯と、今日を決めるタイムゾーンを探す（実装は CareTaskRepository）。
 type TaskLocator interface {
 	HouseholdOf(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error)
 	TimeZoneOf(ctx context.Context, householdID uuid.UUID) (string, error)
+	TaskPlantOf(ctx context.Context, plantID uuid.UUID) (TaskPlant, error)
 }
 
-// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了）を扱う（要件10・11-2〜11-4）。
+// CareRecordService は、お手入れの記録（完了・スキップ・取り消し・まとめて完了・編集・削除・履歴）を扱う（要件10・11-2〜11-4）。
 type CareRecordService struct {
 	records CareRecordRepository
 	tasks   TaskLocator
@@ -92,11 +102,8 @@ func (s *CareRecordService) Skip(ctx context.Context, userID, taskID uuid.UUID, 
 // Undo は、記録を取り消し、タスクを記録する前の予定日と予定の回に戻す（要件10-4）。
 // 編集者以上で、記録した本人が、記録してから domain.UndoWindow のうちに、そのタスクの最新の記録に限ってできる。
 func (s *CareRecordService) Undo(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error) {
-	householdID, err := s.records.HouseholdOf(ctx, recordID)
+	householdID, err := s.authorizeRecord(ctx, userID, recordID)
 	if err != nil {
-		return domain.CareTask{}, err
-	}
-	if _, err := s.authz.Require(ctx, userID, householdID, domain.ActionRecordWrite); err != nil {
 		return domain.CareTask{}, err
 	}
 	return s.records.Undo(ctx, householdID, recordID, userID, s.now())
@@ -132,6 +139,74 @@ func (s *CareRecordService) CompleteBatch(ctx context.Context, userID, household
 		results[i].Record, results[i].Task, results[i].Err = s.records.Complete(ctx, householdID, item.TaskID, userID, c)
 	}
 	return results, nil
+}
+
+// Update は、記録の実施日を変える。編集者以上ができ、記録した本人でなくてもよい（要件12-4）。
+// 最新の完了であれば、次回予定を計算し直す。未来の実施日は、世帯のタイムゾーンで判定する。
+func (s *CareRecordService) Update(ctx context.Context, userID, recordID uuid.UUID, in domain.RecordPatchInput) (domain.CareRecord, domain.CareTask, error) {
+	householdID, err := s.authorizeRecord(ctx, userID, recordID)
+	if err != nil {
+		return domain.CareRecord{}, domain.CareTask{}, err
+	}
+	timeZone, err := s.tasks.TimeZoneOf(ctx, householdID)
+	if err != nil {
+		return domain.CareRecord{}, domain.CareTask{}, err
+	}
+	p, err := domain.NewRecordPatch(in, domain.TodayIn(s.now(), timeZone))
+	if err != nil {
+		return domain.CareRecord{}, domain.CareTask{}, err
+	}
+	return s.records.UpdatePerformedOn(ctx, householdID, recordID, p)
+}
+
+// Delete は、記録を消す。編集者以上ができる（要件12-4）。最新の完了であれば、次回予定を計算し直す。
+func (s *CareRecordService) Delete(ctx context.Context, userID, recordID uuid.UUID) (domain.CareTask, error) {
+	householdID, err := s.authorizeRecord(ctx, userID, recordID)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	return s.records.Delete(ctx, householdID, recordID)
+}
+
+// History は、植物の履歴を新しい順に1ページ返し、作業の種類ごとの最終実施日を添える（要件12-1〜12-3）。閲覧者も見られる。
+// 最終実施日は、種類の絞り込みにかかわらず、すべての種類について返す。
+func (s *CareRecordService) History(ctx context.Context, userID, plantID uuid.UUID, in domain.RecordQueryInput) (domain.RecordPage, error) {
+	p, err := s.tasks.TaskPlantOf(ctx, plantID)
+	if err != nil {
+		return domain.RecordPage{}, err
+	}
+	if _, err := s.authz.Require(ctx, userID, p.HouseholdID, domain.ActionRead); err != nil {
+		return domain.RecordPage{}, err
+	}
+	q, err := domain.NewRecordQuery(in)
+	if err != nil {
+		return domain.RecordPage{}, err
+	}
+	records, more, err := s.records.ListByPlant(ctx, p.HouseholdID, plantID, q)
+	if err != nil {
+		return domain.RecordPage{}, err
+	}
+	last, err := s.records.LastPerformed(ctx, p.HouseholdID, plantID)
+	if err != nil {
+		return domain.RecordPage{}, err
+	}
+	page := domain.RecordPage{Records: records, LastPerformed: last}
+	if more && len(records) > 0 {
+		page.NextCursor = domain.CursorOf(records[len(records)-1]).Encode()
+	}
+	return page, nil
+}
+
+// authorizeRecord は、記録の世帯で、記録の権限を確かめる。入力の検証より先に行う。
+func (s *CareRecordService) authorizeRecord(ctx context.Context, userID, recordID uuid.UUID) (uuid.UUID, error) {
+	householdID, err := s.records.HouseholdOf(ctx, recordID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if _, err := s.authz.Require(ctx, userID, householdID, domain.ActionRecordWrite); err != nil {
+		return uuid.Nil, err
+	}
+	return householdID, nil
 }
 
 // authorize は、タスクの世帯で記録の権限を確かめ、世帯のタイムゾーンでの今日を返す。入力の検証より先に行う。

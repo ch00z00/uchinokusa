@@ -84,3 +84,47 @@ WHERE record_id = $1 AND status = 'pending';
 
 -- name: DeleteCareRecord :exec
 DELETE FROM care_records WHERE id = $1;
+
+-- name: GetScheduleOwner :one
+-- タスクの予定を最後に決めた記録。追加の記録は予定を変えないので除く（記録の編集・削除で、計算し直すかを決める）
+SELECT * FROM care_records
+WHERE task_id = $1 AND NOT is_extra
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetLatestCompletion :one
+-- タスクの最新の完了（実施日の新しい順）。次回予定を計算し直す起点にする
+SELECT * FROM care_records
+WHERE task_id = $1 AND outcome = 'completed'
+ORDER BY performed_on DESC, created_at DESC, id DESC
+LIMIT 1;
+
+-- name: UpdateCareRecordPerformedOn :one
+UPDATE care_records SET performed_on = $2, edited_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: RescheduleCareTask :one
+-- 記録の編集・削除で、次回予定を最新の完了から計算し直す。周期からの計算なので、手で変えた印を外す
+UPDATE care_tasks SET next_due_on = $2, due_overridden = false
+WHERE id = $1
+RETURNING *;
+
+-- name: ListPlantRecords :many
+-- 植物の履歴を、実施日・記録した日時・ID の新しい順に返す（要件12-1）。種類で絞り込める（要件12-2）
+-- 次のページは、前のページの最後の記録の位置（cursor）より後から始める
+SELECT * FROM care_records
+WHERE household_id = sqlc.arg(household_id) AND plant_id = sqlc.arg(plant_id)
+  AND (sqlc.narg(kind)::text IS NULL OR task_kind = sqlc.narg(kind))
+  AND (sqlc.narg(after_performed_on)::date IS NULL
+    OR (performed_on, created_at, id) < (sqlc.narg(after_performed_on), sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid))
+ORDER BY performed_on DESC, created_at DESC, id DESC
+LIMIT sqlc.arg(row_limit);
+
+-- name: ListLastPerformed :many
+-- 植物の、作業の種類（other は作業名）ごとの最終実施日（要件12-3）。スキップは実施していないので除く
+SELECT task_kind, task_custom_name, max(performed_on)::date AS performed_on
+FROM care_records
+WHERE household_id = $1 AND plant_id = $2 AND outcome = 'completed'
+GROUP BY task_kind, task_custom_name
+ORDER BY task_kind, task_custom_name;
