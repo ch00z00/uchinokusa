@@ -3,6 +3,7 @@ package domain_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"cloud.google.com/go/civil"
@@ -141,5 +142,85 @@ func TestAlreadyCompletedError(t *testing.T) {
 	var c *domain.ConflictError
 	if !errors.As(err, &c) || c.Code != domain.ConflictAlreadyCompleted {
 		t.Errorf("errors.As(ConflictError) = %v, %+v", err, c)
+	}
+}
+
+func TestNewSkip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("確認日を省くと翌日にし、実施日は今日にする", func(t *testing.T) {
+		t.Parallel()
+		got, err := domain.NewSkip(domain.SkipInput{CycleSeq: ptr(3)}, taskToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := domain.Skip{CycleSeq: 3, PerformedOn: taskToday, RecheckOn: civil.Date{Year: 2026, Month: 11, Day: 5}}
+		if got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("理由と、変更した確認日を受け付ける", func(t *testing.T) {
+		t.Parallel()
+		got, err := domain.NewSkip(domain.SkipInput{CycleSeq: ptr(3), Reason: ptr("soil_wet"), RecheckOn: ptr("2026-11-07")}, taskToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := domain.Skip{CycleSeq: 3, Reason: domain.SkipSoilWet, PerformedOn: taskToday, RecheckOn: civil.Date{Year: 2026, Month: 11, Day: 7}}
+		if got != want {
+			t.Errorf("got %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("その他の理由は、自由入力を前後の空白を除いて受け付ける", func(t *testing.T) {
+		t.Parallel()
+		got, err := domain.NewSkip(domain.SkipInput{CycleSeq: ptr(3), Reason: ptr("other"), ReasonText: ptr(" 旅行中 ")}, taskToday)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Reason != domain.SkipOther || got.ReasonText != "旅行中" {
+			t.Errorf("got %+v", got)
+		}
+	})
+
+	tests := []struct {
+		name string
+		in   domain.SkipInput
+		want map[string]string
+	}{
+		{"予定の回の番号は必須", domain.SkipInput{}, map[string]string{"cycleSeq": "required"}},
+		{"予定の回の番号は1以上", domain.SkipInput{CycleSeq: ptr(0)}, map[string]string{"cycleSeq": "invalid"}},
+		{"決められていない理由", domain.SkipInput{CycleSeq: ptr(1), Reason: ptr("busy")}, map[string]string{"reason": "invalid"}},
+		// 自由入力は「その他」のときだけ。ほかの理由に添えた文を、黙って捨てないようにする
+		{"その他でない理由に、自由入力は添えられない", domain.SkipInput{CycleSeq: ptr(1), Reason: ptr("soil_wet"), ReasonText: ptr("湿っている")}, map[string]string{"reasonText": "invalid"}},
+		{"理由なしに、自由入力は添えられない", domain.SkipInput{CycleSeq: ptr(1), ReasonText: ptr("湿っている")}, map[string]string{"reasonText": "invalid"}},
+		{"自由入力は200文字まで", domain.SkipInput{CycleSeq: ptr(1), Reason: ptr("other"), ReasonText: ptr(strings.Repeat("あ", 201))}, map[string]string{"reasonText": "too_long"}},
+		{"確認日の形式の誤り", domain.SkipInput{CycleSeq: ptr(1), RecheckOn: ptr("11/5")}, map[string]string{"recheckOn": "invalid"}},
+		{"確認日に今日は選べない（翌日以降）", domain.SkipInput{CycleSeq: ptr(1), RecheckOn: ptr("2026-11-04")}, map[string]string{"recheckOn": "invalid"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := domain.NewSkip(tt.in, taskToday)
+			var v *domain.ValidationError
+			if !errors.As(err, &v) || !reflect.DeepEqual(v.Fields, tt.want) {
+				t.Errorf("err = %v, want fields %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckSkip(t *testing.T) {
+	t.Parallel()
+	task := domain.CareTask{CycleSeq: 3}
+	if err := domain.CheckSkip(task, domain.Skip{CycleSeq: 3}); err != nil {
+		t.Errorf("same cycle: err = %v", err)
+	}
+	// スキップは回を進めないので、今の回以外へのスキップは、どれもアプリの表示が古い
+	for _, seq := range []int{2, 4} {
+		var c *domain.ConflictError
+		if err := domain.CheckSkip(task, domain.Skip{CycleSeq: seq}); !errors.As(err, &c) || c.Code != domain.ConflictStaleCycle {
+			t.Errorf("cycle %d: err = %v, want stale_cycle", seq, err)
+		}
 	}
 }

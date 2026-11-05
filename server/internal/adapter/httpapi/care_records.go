@@ -13,9 +13,10 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
-// CareRecordService は、お手入れの記録（完了）を行う（実装は app.CareRecordService）。
+// CareRecordService は、お手入れの記録（完了・スキップ）を行う（実装は app.CareRecordService）。
 type CareRecordService interface {
 	Complete(ctx context.Context, userID, taskID uuid.UUID, in domain.CompletionInput) (domain.CareRecord, domain.CareTask, error)
+	Skip(ctx context.Context, userID, taskID uuid.UUID, in domain.SkipInput) (domain.CareRecord, domain.CareTask, error)
 }
 
 func (s *server) CompleteCareTask(ctx context.Context, req oapi.CompleteCareTaskRequestObject) (oapi.CompleteCareTaskResponseObject, error) {
@@ -47,6 +48,20 @@ func (s *server) CompleteCareTask(ctx context.Context, req oapi.CompleteCareTask
 	return oapi.CompleteCareTask201JSONResponse{Record: toCareRecord(rec), Task: toCareTask(task)}, nil
 }
 
+func (s *server) SkipCareTask(ctx context.Context, req oapi.SkipCareTaskRequestObject) (oapi.SkipCareTaskResponseObject, error) {
+	b := req.Body
+	rec, task, err := s.records.Skip(ctx, currentUser(ctx).ID, req.TaskId, domain.SkipInput{
+		CycleSeq:   &b.CycleSeq,
+		Reason:     b.Reason,
+		ReasonText: b.ReasonText,
+		RecheckOn:  b.RecheckOn,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return oapi.SkipCareTask201JSONResponse{Record: toCareRecord(rec), Task: toCareTask(task)}, nil
+}
+
 // toCareRecord は、未設定の項目（削除したタスク、削除したアカウントなど）を、項目ごと省いた形にする。
 func toCareRecord(r domain.CareRecord) oapi.CareRecord {
 	return oapi.CareRecord{
@@ -62,8 +77,19 @@ func toCareRecord(r domain.CareRecord) oapi.CareRecord {
 		ActorDisplayName: r.ActorDisplayName,
 		CycleSeq:         r.CycleSeq,
 		IsExtra:          r.IsExtra,
+		SkipReason:       omitEmptyAs[oapi.SkipReason](r.SkipReason),
+		SkipReasonText:   omitEmptyAs[string](r.SkipReasonText),
+		RecheckOn:        omitZeroDate(r.RecheckOn),
 		CreatedAt:        r.CreatedAt.UTC(),
 	}
+}
+
+func omitZeroDate(d civil.Date) *openapi_types.Date {
+	if d.IsZero() {
+		return nil
+	}
+	t := toDate(d)
+	return &t
 }
 
 func toDate(d civil.Date) openapi_types.Date {

@@ -231,6 +231,30 @@ func (e Shading) Valid() bool {
 	}
 }
 
+// Defines values for SkipReason.
+const (
+	SkipReasonBadWeather SkipReason = "bad_weather"
+	SkipReasonOther      SkipReason = "other"
+	SkipReasonPlantWeak  SkipReason = "plant_weak"
+	SkipReasonSoilWet    SkipReason = "soil_wet"
+)
+
+// Valid indicates whether the value is a known member of the SkipReason enum.
+func (e SkipReason) Valid() bool {
+	switch e {
+	case SkipReasonBadWeather:
+		return true
+	case SkipReasonOther:
+		return true
+	case SkipReasonPlantWeak:
+		return true
+	case SkipReasonSoilWet:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskStatus.
 const (
 	TaskStatusActive TaskStatus = "active"
@@ -374,6 +398,17 @@ type CareRecord struct {
 	// Examples: 2026-10-26
 	PerformedOn Date               `json:"performedOn"`
 	PlantId     openapi_types.UUID `json:"plantId"`
+
+	// RecheckOn スキップの確認日。スキップのときだけ
+	//
+	// Examples: 2026-10-26
+	RecheckOn *Date `json:"recheckOn,omitempty"`
+
+	// SkipReason スキップの理由。スキップで理由を選んだときだけ
+	SkipReason *SkipReason `json:"skipReason,omitempty"`
+
+	// SkipReasonText スキップの理由の自由入力（`skipReason` が `other` のときだけ）
+	SkipReasonText *string `json:"skipReasonText,omitempty"`
 
 	// TaskId タスクを削除していれば、項目がない
 	TaskId *openapi_types.UUID `json:"taskId,omitempty"`
@@ -913,6 +948,30 @@ type SeasonalIntervalsInput struct {
 // Shading 窓の遮光（`none`：遮光なし、`sheer`：レースカーテンなどで光を和らげている）。値は今後も追加されうるため、アプリは知らない値を「未設定」として扱う
 type Shading string
 
+// SkipCareTaskRequest defines model for SkipCareTaskRequest.
+type SkipCareTaskRequest struct {
+	// CycleSeq アプリが見ていたタスクの `cycleSeq`。1以上（0 以下なら `fields.cycleSeq = invalid`）
+	CycleSeq int `json:"cycleSeq"`
+
+	// Reason 任意。スキップの理由。決められていない値は `fields.reason = invalid`
+	Reason *string `json:"reason,omitempty"`
+
+	// ReasonText 任意。`reason` が `other` のときの自由入力（200文字まで。超えると `fields.reasonText = too_long`）。`other` 以外に添えると `fields.reasonText = invalid`
+	ReasonText *string `json:"reasonText,omitempty"`
+
+	// RecheckOn 任意。次回の確認日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの翌日にする。翌日以降に限り、形式の誤りと今日以前の日付は `fields.recheckOn = invalid`
+	RecheckOn *string `json:"recheckOn,omitempty"`
+}
+
+// SkipReason スキップの理由。値は今後も追加されうる
+// | 値 | 意味 |
+// |---|---|
+// | `soil_wet` | 土がまだ湿っている |
+// | `bad_weather` | 天気が悪い |
+// | `plant_weak` | 株が弱っている |
+// | `other` | その他（`skipReasonText` に自由入力） |
+type SkipReason string
+
 // Species 植物マスタの1種類（全ユーザー共通）。性質の項目は、出典で確かめられたものだけを持つ。
 // 項目がない場合は「わからない」を表す（推測した値は入れない）
 type Species struct {
@@ -1145,6 +1204,9 @@ type UpdateCareTaskJSONRequestBody = UpdateCareTaskRequest
 // CompleteCareTaskJSONRequestBody defines body for CompleteCareTask for application/json ContentType.
 type CompleteCareTaskJSONRequestBody = CompleteCareTaskRequest
 
+// SkipCareTaskJSONRequestBody defines body for SkipCareTask for application/json ContentType.
+type SkipCareTaskJSONRequestBody = SkipCareTaskRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -1264,6 +1326,9 @@ type ServerInterface interface {
 	// ResumeCareTask 一時停止したお手入れタスクを再開する（編集者以上）
 	// (POST /tasks/{taskId}/resume)
 	ResumeCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
+	// SkipCareTask お手入れタスクを「今回はスキップ」として記録する（編集者以上）
+	// (POST /tasks/{taskId}/skips)
+	SkipCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -2305,6 +2370,32 @@ func (siw *ServerInterfaceWrapper) ResumeCareTask(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// SkipCareTask operation middleware
+func (siw *ServerInterfaceWrapper) SkipCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId TaskId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SkipCareTask(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -2463,6 +2554,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/pause", wrapper.PauseCareTask)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/resume", wrapper.ResumeCareTask)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/completions", wrapper.CompleteCareTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/skips", wrapper.SkipCareTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -5985,6 +6077,127 @@ func (response ResumeCareTask500JSONResponse) VisitResumeCareTaskResponse(w http
 	return err
 }
 
+type SkipCareTaskRequestObject struct {
+	TaskId TaskId `json:"taskId"`
+	Body   *SkipCareTaskJSONRequestBody
+}
+
+type SkipCareTaskResponseObject interface {
+	VisitSkipCareTaskResponse(w http.ResponseWriter) error
+}
+
+type SkipCareTask201JSONResponse CareRecordResult
+
+func (response SkipCareTask201JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response SkipCareTask400JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response SkipCareTask401JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response SkipCareTask403JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response SkipCareTask404JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask409JSONResponse struct{ ConflictJSONResponse }
+
+func (response SkipCareTask409JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response SkipCareTask422JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SkipCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response SkipCareTask500JSONResponse) VisitSkipCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -6104,6 +6317,9 @@ type StrictServerInterface interface {
 	// ResumeCareTask 一時停止したお手入れタスクを再開する（編集者以上）
 	// (POST /tasks/{taskId}/resume)
 	ResumeCareTask(ctx context.Context, request ResumeCareTaskRequestObject) (ResumeCareTaskResponseObject, error)
+	// SkipCareTask お手入れタスクを「今回はスキップ」として記録する（編集者以上）
+	// (POST /tasks/{taskId}/skips)
+	SkipCareTask(ctx context.Context, request SkipCareTaskRequestObject) (SkipCareTaskResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -7251,6 +7467,39 @@ func (sh *strictHandler) ResumeCareTask(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ResumeCareTaskResponseObject); ok {
 		if err := validResponse.VisitResumeCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SkipCareTask operation middleware
+func (sh *strictHandler) SkipCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
+	var request SkipCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	var body SkipCareTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SkipCareTask(ctx, request.(SkipCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SkipCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SkipCareTaskResponseObject); ok {
+		if err := validResponse.VisitSkipCareTaskResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

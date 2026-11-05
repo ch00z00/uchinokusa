@@ -895,6 +895,38 @@ paths:
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /tasks/{taskId}/skips:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      operationId: skipCareTask
+      summary: お手入れタスクを「今回はスキップ」として記録する（編集者以上）
+      description: |
+        作業をしたことにはせず、スキップとして記録する（要件10-6）。理由は任意（要件10-7）。
+        タスクは未完了のまま、次回予定を確認日（初期値は世帯のタイムゾーンでの翌日）にする。予定の回は進めないので、スキップした回にあとから完了できる（要件10-8）。
+        確認日はユーザーが決めた日として扱い、季節の切り替えでは動かさない（次の完了で周期からの計算に戻る）。
+        スキップは完了通知を送らない（要件16-7）。一時停止中のタスクもスキップでき、一時停止のままにする。
+        `cycleSeq` がタスクの今の回と合わなければ `409 stale_cycle`（タスクを取り直す）
+      tags: [record]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SkipCareTaskRequest" }
+      responses:
+        "201":
+          description: 作った記録と、更新後のタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareRecordResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -1488,6 +1520,15 @@ components:
         isExtra:
           description: 完了済みの回への、追加の記録
           type: boolean
+        skipReason:
+          description: スキップの理由。スキップで理由を選んだときだけ
+          $ref: "#/components/schemas/SkipReason"
+        skipReasonText:
+          description: スキップの理由の自由入力（`skipReason` が `other` のときだけ）
+          type: string
+        recheckOn:
+          description: スキップの確認日。スキップのときだけ
+          $ref: "#/components/schemas/Date"
         createdAt:
           $ref: "#/components/schemas/DateTime"
 
@@ -1514,6 +1555,35 @@ components:
         allowExtra:
           description: 任意。true なら、完了済みの回でも追加の記録として保存する（重複の表示を見たうえで、それでも記録する場合）
           type: boolean
+
+    SkipReason:
+      description: |
+        スキップの理由。値は今後も追加されうる
+        | 値 | 意味 |
+        |---|---|
+        | `soil_wet` | 土がまだ湿っている |
+        | `bad_weather` | 天気が悪い |
+        | `plant_weak` | 株が弱っている |
+        | `other` | その他（`skipReasonText` に自由入力） |
+      type: string
+      enum: [soil_wet, bad_weather, plant_weak, other]
+
+    SkipCareTaskRequest:
+      type: object
+      required: [cycleSeq]
+      properties:
+        cycleSeq:
+          description: アプリが見ていたタスクの `cycleSeq`。1以上（0 以下なら `fields.cycleSeq = invalid`）
+          type: integer
+        reason:
+          description: 任意。スキップの理由。決められていない値は `fields.reason = invalid`
+          type: string
+        reasonText:
+          description: 任意。`reason` が `other` のときの自由入力（200文字まで。超えると `fields.reasonText = too_long`）。`other` 以外に添えると `fields.reasonText = invalid`
+          type: string
+        recheckOn:
+          description: 任意。次回の確認日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの翌日にする。翌日以降に限り、形式の誤りと今日以前の日付は `fields.recheckOn = invalid`
+          type: string
 
     CompletionConflict:
       description: |

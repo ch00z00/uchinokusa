@@ -4,7 +4,7 @@
 
 ## 現在の状況（2026-11-04 時点）
 - 仕様駆動開発（Kiro 方式）で、**要件・設計・タスクの3つのフェーズがすべて承認済み**
-- 実装フェーズ中。**完了したタスク：1.1**（Go の API サーバーの雛形、ローカル開発環境）、**1.2**（API 定義、コードの生成、エラーの変換）、**1.3**（DB のスキーマ、migrate、sqlc、結合テストの基盤）、**2.1**（ID トークンの認証、`/v1/me`）、**2.2**（端末の登録・解除、`/v1/me/devices`）、**3.1**（次回予定の計算と季節の判定、`domain/schedule.go`）、**3.2**（植え替えの適期の判定、`domain/repotting.go`）、**4.1**（ロールにもとづく権限の判定、`domain/role.go`・`app/authorizer.go`）、**4.2**（世帯の作成・一覧・変更・削除、`/v1/households`）、**4.3**（メンバーの管理・退出・オーナー権限の移譲・通知設定）、**5.1**（招待の発行・一覧・取り消し）、**5.2**（招待の確認と参加、レート制限）、**6.1**（植物マスタ・初期データ・検索）、**6.2**（置き場所の登録・変更・削除）、**6.3**（植物の登録・一覧・編集・削除・アーカイブ）、**7.1**（お手入れタスクの作成・一覧・変更・削除、作成画面の初期値）、**7.2**（タスクの一時停止と再開）、**8.1**（完了の記録と、重複の防止）
+- 実装フェーズ中。**完了したタスク：1.1**（Go の API サーバーの雛形、ローカル開発環境）、**1.2**（API 定義、コードの生成、エラーの変換）、**1.3**（DB のスキーマ、migrate、sqlc、結合テストの基盤）、**2.1**（ID トークンの認証、`/v1/me`）、**2.2**（端末の登録・解除、`/v1/me/devices`）、**3.1**（次回予定の計算と季節の判定、`domain/schedule.go`）、**3.2**（植え替えの適期の判定、`domain/repotting.go`）、**4.1**（ロールにもとづく権限の判定、`domain/role.go`・`app/authorizer.go`）、**4.2**（世帯の作成・一覧・変更・削除、`/v1/households`）、**4.3**（メンバーの管理・退出・オーナー権限の移譲・通知設定）、**5.1**（招待の発行・一覧・取り消し）、**5.2**（招待の確認と参加、レート制限）、**6.1**（植物マスタ・初期データ・検索）、**6.2**（置き場所の登録・変更・削除）、**6.3**（植物の登録・一覧・編集・削除・アーカイブ）、**7.1**（お手入れタスクの作成・一覧・変更・削除、作成画面の初期値）、**7.2**（タスクの一時停止と再開）、**8.1**（完了の記録と、重複の防止）、**8.2**（スキップの記録）
   - サーバーの起動方法・環境変数は `server/README.md` を参照
 - 仕様：`.kiro/specs/household-plant-care-mvp/`
   - `requirements.md`：要件（20項目、EARS の考え方で日本語化した受け入れ基準）
@@ -15,10 +15,10 @@
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 8.2
+/kiro:spec-impl household-plant-care-mvp 8.3
 ```
 - API 定義は `api/openapi.yaml`。変えたら `make gen-api`。アプリの型の生成は、`mobile/` を作るタスク 14.1 から有効になる（その際 `openapi-typescript` を devDependency にする）。生成し直し忘れの確認は `make check-gen`
-- **タスクは1つずつ進める**（1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 → 3.2 → 4.1 → 4.2 → 4.3 → 5.1 → 5.2 → 6.1 → 6.2 → 6.3 → 7.1 → 7.2 → 8.1 → 8.2 …）
+- **タスクは1つずつ進める**（1.1 → 1.2 → 1.3 → 2.1 → 2.2 → 3.1 → 3.2 → 4.1 → 4.2 → 4.3 → 5.1 → 5.2 → 6.1 → 6.2 → 6.3 → 7.1 → 7.2 → 8.1 → 8.2 → 8.3 …）
 - 世帯のデータを扱うユースケースは、最初に `Authorizer.Require(userID, householdID, action)` を通す（メンバーでなければ 404、ロール不足は 403）
 - 世帯の変更の通知（`households.version` を増やす）は、11.1 で加える。4.2 の時点では増やしていない
 - オーナーは常に1人（ロールの変更で owner は指定できず、交代は移譲だけ）。招待（5.x）でも owner のロールは発行しない
@@ -27,10 +27,10 @@
 - 植物マスタ（`server/db/seeds/species.yaml`）は34種。性質を出典つきで入れたのは10種で、残りの24種は名前だけ。性質を足すときは、値ごとに出典を確かめ、`sources` の `fields` に挙げる（`seed` とテストが、出典のない値を拒否する。docs/decisions/0015）
 - 置き場所の ID だけのパス（`/locations/{id}`）は、置き場所から世帯を探してから `Authorizer.Require` を通す（`app/location.go` の `authorize`）。植物の ID だけのパス（`/plants/{id}`）も同じ形（`app/plant.go` の `authorize`）。タスクの ID だけのパスも同じ形にする
 - アーカイブした植物（`plants.archived_at` が NULL でない）のタスクは、今日やること（9.1）・リマインダー（12.3）の対象から外す。植物の一覧の `nextDueOn` は、有効なタスクの `next_due_on` の最小値（docs/decisions/0017）
-- タスクの予定日を手で変えると `care_tasks.due_overridden` が立つ。完了（8.1）で印を外す。周期を変えても次回予定日は動かさない（docs/decisions/0018）
+- タスクの予定日を手で変えると `care_tasks.due_overridden` が立つ。完了（8.1）で印を外す。スキップ（8.2）の確認日も印を立てる（docs/decisions/0021）。周期を変えても次回予定日は動かさない（docs/decisions/0018）
 - 「今日」は世帯のタイムゾーンで決める（`domain.TodayIn`）。現在時刻は Service に関数（`now func() time.Time`）で渡し、テストでは固定する（`CareTaskService` を参照）。タスクの ID だけのパスでは `CareTaskRepository.TimeZoneOf` で世帯のタイムゾーンを取る
 - 一時停止中のタスク（`care_tasks.status = 'paused'`）は、今日やること（9.1）・リマインダー（12.3）で `status = 'active'` に絞って外す。再開すると次回予定は `max(今の次回予定, 今日)`。一時停止中のタスクも完了でき、一時停止のままにする（docs/decisions/0019・0020）
-- 完了・スキップは `CareRecordRepository` の1つのトランザクションで、`LockCareTask`（行ロック）→ domain の照合（`PlanCompletion`）→ 記録 → タスクの更新 → アウトボックス、の順に行う。スキップ（8.2）も同じ形にする。記録の `prev_next_due_on`・`prev_cycle_seq` は取り消し（8.3）で戻す先（docs/decisions/0020）
+- 完了・スキップは `CareRecordRepository` の1つのトランザクションで、`LockCareTask`（行ロック）→ domain の照合（`PlanCompletion`）→ 記録 → タスクの更新 → アウトボックス、の順に行う。スキップ（8.2）も同じ形で、照合は `CheckSkip`（今の回だけ）、アウトボックスには入れない。記録の `prev_next_due_on`・`prev_cycle_seq` は取り消し（8.3）で戻す先（docs/decisions/0020）
 - DB の結合テストには Docker が必要（起動していないと testcontainers が失敗する）
 - エンドポイントを追加するときは、`api/openapi.yaml` → `make gen-api` → `httpapi/server.go` にメソッドを実装、の順。認証は自動でかかり、ハンドラーでは `currentUser(ctx)` でユーザーを取れる
 - DB のクエリは `server/db/queries/` に書き、`make gen-db` で生成する。結合テストは `pgtest.New(t)` でテストごとのデータベースを使う

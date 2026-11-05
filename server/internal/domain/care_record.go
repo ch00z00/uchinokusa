@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"cloud.google.com/go/civil"
 	"github.com/google/uuid"
@@ -38,10 +39,26 @@ type CareRecord struct {
 	PerformedAt      time.Time  // 記録した日時
 	ActorUserID      uuid.UUID  // アカウントを削除していれば uuid.Nil
 	ActorDisplayName string
-	CycleSeq         int  // 記録した予定の回の番号
-	IsExtra          bool // 完了済みの回への、追加の記録
+	CycleSeq         int        // 記録した予定の回の番号
+	IsExtra          bool       // 完了済みの回への、追加の記録
+	SkipReason       SkipReason // スキップの理由。理由なし・完了なら ""
+	SkipReasonText   string     // スキップの理由が other のときの自由入力
+	RecheckOn        civil.Date // スキップの確認日。完了ならゼロ値
 	CreatedAt        time.Time
 }
+
+// SkipReason は、スキップの理由である（要件10-7）。助言の改善に使えるよう、自由入力と分けて決まった値で持つ（要件19-7）。
+type SkipReason string
+
+const (
+	SkipSoilWet    SkipReason = "soil_wet"    // 土がまだ湿っている
+	SkipBadWeather SkipReason = "bad_weather" // 天気が悪い
+	SkipPlantWeak  SkipReason = "plant_weak"  // 株が弱っている
+	SkipOther      SkipReason = "other"       // その他（自由入力）
+)
+
+// MaxSkipReasonTextLength は、スキップの理由の自由入力の上限（文字数）である。
+const MaxSkipReasonTextLength = 200
 
 // CompletionInput は、完了の記録の入力（未検証）である。
 type CompletionInput struct {
@@ -125,4 +142,73 @@ func (e *AlreadyCompletedError) Error() string {
 // Unwrap は、詳細を扱わない層でも、衝突のコード（ConflictError）として扱えるようにする。
 func (e *AlreadyCompletedError) Unwrap() error {
 	return &ConflictError{Code: ConflictAlreadyCompleted}
+}
+
+// SkipInput は、スキップの記録の入力（未検証）である。
+type SkipInput struct {
+	CycleSeq   *int    // アプリが見ていた予定の回の番号
+	Reason     *string // 任意
+	ReasonText *string // 任意。Reason が other のときだけ
+	RecheckOn  *string // 省くと翌日
+}
+
+// Skip は、検証済みのスキップの記録の入力である。
+type Skip struct {
+	CycleSeq    int
+	Reason      SkipReason
+	ReasonText  string
+	PerformedOn civil.Date // スキップを判断した日（今日）
+	RecheckOn   civil.Date // 次回の確認日。タスクの次回予定になる
+}
+
+// NewSkip は、スキップの記録の入力を検証する。確認日を省くと、today の翌日にする。
+// 確認日は翌日以降に限る（要件10-8）。今日以前にすると、スキップしたタスクが今日やることに残ってしまうため。
+func NewSkip(in SkipInput, today civil.Date) (Skip, error) {
+	fields := map[string]string{}
+	s := Skip{PerformedOn: today, RecheckOn: today.AddDays(1)}
+	switch {
+	case in.CycleSeq == nil:
+		fields["cycleSeq"] = "required"
+	case *in.CycleSeq < 1:
+		fields["cycleSeq"] = "invalid"
+	default:
+		s.CycleSeq = *in.CycleSeq
+	}
+	if r := SkipReason(strings.TrimSpace(deref(in.Reason))); r != "" {
+		switch r {
+		case SkipSoilWet, SkipBadWeather, SkipPlantWeak, SkipOther:
+			s.Reason = r
+		default:
+			fields["reason"] = "invalid"
+		}
+	}
+	if text := strings.TrimSpace(deref(in.ReasonText)); text != "" {
+		switch {
+		case SkipReason(strings.TrimSpace(deref(in.Reason))) != SkipOther:
+			fields["reasonText"] = "invalid"
+		case utf8.RuneCountInString(text) > MaxSkipReasonTextLength:
+			fields["reasonText"] = "too_long"
+		}
+		s.ReasonText = text
+	}
+	if r := strings.TrimSpace(deref(in.RecheckOn)); r != "" {
+		d, err := civil.ParseDate(r)
+		if err != nil || !d.IsValid() || !d.After(today) {
+			fields["recheckOn"] = "invalid"
+		}
+		s.RecheckOn = d
+	}
+	if len(fields) > 0 {
+		return Skip{}, &ValidationError{Fields: fields}
+	}
+	return s, nil
+}
+
+// CheckSkip は、ロックしたタスクの今の回へのスキップかを確かめる（設計の「次回予定の計算ルール」）。
+// スキップは回を進めない（スキップした回に、あとから完了できる）ので、今の回以外へのスキップは stale_cycle にする。
+func CheckSkip(t CareTask, s Skip) error {
+	if s.CycleSeq != t.CycleSeq {
+		return &ConflictError{Code: ConflictStaleCycle}
+	}
+	return nil
 }

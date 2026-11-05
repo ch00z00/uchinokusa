@@ -39,14 +39,7 @@ func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID
 	)
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		q := r.q.WithTx(tx)
-		locked, err := q.LockCareTask(ctx, sqlcgen.LockCareTaskParams{ID: taskID, HouseholdID: householdID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock care task: %w", err)
-		}
-		current, err := toDomainCareTask(locked.CareTask)
+		locked, current, err := lockCareTask(ctx, q, householdID, taskID)
 		if err != nil {
 			return err
 		}
@@ -106,6 +99,67 @@ func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID
 	return record, task, err
 }
 
+// Skip は、タスクのスキップを記録する。タスクの行ロック → 予定の回の確認（domain.CheckSkip） → 記録の作成 →
+// 次回予定を確認日にする更新を、1つのトランザクションで行う。予定の回は進めず、完了通知も予約しない（要件16-7）。
+func (r *CareRecordRepository) Skip(ctx context.Context, householdID, taskID, actorID uuid.UUID, s domain.Skip) (domain.CareRecord, domain.CareTask, error) {
+	var (
+		record domain.CareRecord
+		task   domain.CareTask
+	)
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		locked, current, err := lockCareTask(ctx, q, householdID, taskID)
+		if err != nil {
+			return err
+		}
+		if err := domain.CheckSkip(current, s); err != nil {
+			return err
+		}
+
+		row, err := q.CreateSkipRecord(ctx, sqlcgen.CreateSkipRecordParams{
+			HouseholdID:    householdID,
+			PlantID:        current.PlantID,
+			TaskID:         nullUUID(taskID),
+			TaskKind:       string(current.Kind),
+			TaskCustomName: nullIfEmpty(current.CustomName),
+			PerformedOn:    pgDate(s.PerformedOn),
+			SkipReasonCode: nullIfEmpty(string(s.Reason)),
+			SkipReasonText: nullIfEmpty(s.ReasonText),
+			RecheckOn:      pgDate(s.RecheckOn),
+			CycleSeq:       int32(s.CycleSeq),
+			// 取り消し（8.3）で戻す先
+			PrevNextDueOn: locked.CareTask.NextDueOn,
+			PrevCycleSeq:  pgtype.Int4{Int32: locked.CareTask.CycleSeq, Valid: true},
+			ActorUserID:   actorID,
+		})
+		if err != nil {
+			return fmt.Errorf("create skip record: %w", err)
+		}
+		record = toDomainCareRecord(row)
+
+		deferred, err := q.DeferCareTask(ctx, sqlcgen.DeferCareTaskParams{ID: taskID, NextDueOn: pgDate(s.RecheckOn)})
+		if err != nil {
+			return fmt.Errorf("defer care task: %w", err)
+		}
+		task, err = toDomainCareTask(deferred)
+		return err
+	})
+	return record, task, err
+}
+
+// lockCareTask は、完了・スキップの前に、世帯のタスクの行をロックする。同じタスクへの記録は、先のコミットを待って順に処理される。
+func lockCareTask(ctx context.Context, q *sqlcgen.Queries, householdID, taskID uuid.UUID) (sqlcgen.LockCareTaskRow, domain.CareTask, error) {
+	locked, err := q.LockCareTask(ctx, sqlcgen.LockCareTaskParams{ID: taskID, HouseholdID: householdID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlcgen.LockCareTaskRow{}, domain.CareTask{}, domain.ErrNotFound
+	}
+	if err != nil {
+		return sqlcgen.LockCareTaskRow{}, domain.CareTask{}, fmt.Errorf("lock care task: %w", err)
+	}
+	current, err := toDomainCareTask(locked.CareTask)
+	return locked, current, err
+}
+
 // alreadyCompleted は、完了済みの回について、先に完了した記録と最新のタスクを持つエラーを作る。
 // 回が今より前でも、完了の記録がなければ（取り消しなどで）、アプリの表示が古いものとして stale_cycle にする。
 func alreadyCompleted(ctx context.Context, q *sqlcgen.Queries, current domain.CareTask, cycleSeq int) error {
@@ -134,6 +188,9 @@ func toDomainCareRecord(row sqlcgen.CareRecord) domain.CareRecord {
 		ActorDisplayName: row.ActorDisplayName,
 		CycleSeq:         int(row.CycleSeq),
 		IsExtra:          row.IsExtra,
+		SkipReason:       domain.SkipReason(emptyIfNull(row.SkipReasonCode)),
+		SkipReasonText:   emptyIfNull(row.SkipReasonText),
+		RecheckOn:        civilDate(row.RecheckOn),
 		CreatedAt:        row.CreatedAt,
 	}
 }

@@ -192,3 +192,92 @@ func assertConflict(t *testing.T, err error, code string) {
 		t.Errorf("err = %v, want conflict %q", err, code)
 	}
 }
+
+func TestCareRecordRepository_Skip(t *testing.T) {
+	t.Parallel()
+	recheckOn := civil.Date{Year: 2026, Month: 11, Day: 5}
+	skip := domain.Skip{CycleSeq: 1, Reason: domain.SkipOther, ReasonText: "旅行中", PerformedOn: performedOn, RecheckOn: recheckOn}
+
+	t.Run("スキップは理由とともに記録し、次回予定を確認日にして、予定の回は進めない", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		before := f.task.NextDueOn
+
+		rec, task, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, skip)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Outcome != domain.OutcomeSkipped || rec.TaskID != f.task.ID || rec.TaskKind != domain.CareWatering || rec.PerformedOn != performedOn ||
+			rec.ActorDisplayName != "さくら" || rec.SkipReason != domain.SkipOther || rec.SkipReasonText != "旅行中" || rec.RecheckOn != recheckOn ||
+			rec.CycleSeq != 1 || rec.IsExtra {
+			t.Errorf("record = %+v", rec)
+		}
+		// 確認日はユーザーが決めた日なので、季節の切り替えで動かさない
+		if task.NextDueOn != recheckOn || task.CycleSeq != 1 || !task.DueOverridden {
+			t.Errorf("task = %+v", task)
+		}
+		var prevDue *string
+		var prevSeq *int
+		f.queryRow(`SELECT prev_next_due_on::text, prev_cycle_seq FROM care_records WHERE id = $1`, rec.ID).scan(&prevDue, &prevSeq)
+		if prevDue == nil || *prevDue != before.String() || prevSeq == nil || *prevSeq != 1 {
+			t.Errorf("prev = %v, %v, want %s, 1", prevDue, prevSeq, before)
+		}
+		// スキップは完了通知を送らない（要件16-7）
+		if n := f.count(`SELECT count(*) FROM notification_outbox`); n != 0 {
+			t.Errorf("outbox = %d, want 0", n)
+		}
+	})
+
+	t.Run("理由なしのスキップは、理由を NULL にする", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		rec, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, domain.Skip{CycleSeq: 1, PerformedOn: performedOn, RecheckOn: recheckOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := f.count(`SELECT count(*) FROM care_records WHERE id = $1 AND skip_reason_code IS NULL AND skip_reason_text IS NULL`, rec.ID); n != 1 {
+			t.Errorf("reason is not NULL")
+		}
+	})
+
+	t.Run("スキップした回に、あとから完了できる", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		if _, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, skip); err != nil {
+			t.Fatal(err)
+		}
+		// 同じ回を続けてスキップすることもできる（翌日も湿っていた場合）
+		if _, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, skip); err != nil {
+			t.Fatal(err)
+		}
+		_, task, err := f.records.Complete(f.ctx, f.home, f.task.ID, f.sakura, domain.Completion{CycleSeq: 1, PerformedOn: performedOn})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if task.CycleSeq != 2 || task.NextDueOn != (civil.Date{Year: 2026, Month: 11, Day: 11}) || task.DueOverridden {
+			t.Errorf("task = %+v", task)
+		}
+	})
+
+	t.Run("今の回でなければ stale_cycle で、記録しない", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		if err := f.complete(1); err != nil {
+			t.Fatal(err)
+		}
+		// 別のメンバーが先に完了したあとの、古い表示からのスキップ
+		_, _, err := f.records.Skip(f.ctx, f.home, f.task.ID, f.sakura, skip)
+		assertConflict(t, err, domain.ConflictStaleCycle)
+		if n := f.count(`SELECT count(*) FROM care_records WHERE outcome = 'skipped'`); n != 0 {
+			t.Errorf("skips = %d, want 0", n)
+		}
+	})
+
+	t.Run("ほかの世帯のタスクは 404", func(t *testing.T) {
+		t.Parallel()
+		f := newRecordFixture(t)
+		if _, _, err := f.records.Skip(f.ctx, f.other, f.task.ID, f.sakura, skip); !errors.Is(err, domain.ErrNotFound) {
+			t.Errorf("err = %v, want ErrNotFound", err)
+		}
+	})
+}

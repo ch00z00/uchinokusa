@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,23 @@ var testRecord = domain.CareRecord{
 // 送られた cycleSeq で振る舞いを変える：3 は成功、2 は完了済み、それ以外は予定の回が合わない。ほかのタスクは権限なし。
 type fakeCareRecordService struct {
 	inputs []domain.CompletionInput
+	skips  []domain.SkipInput
+}
+
+// Skip は、cycleSeq が 3 なら成功、それ以外は予定の回が合わない。
+func (f *fakeCareRecordService) Skip(_ context.Context, _, taskID uuid.UUID, in domain.SkipInput) (domain.CareRecord, domain.CareTask, error) {
+	f.skips = append(f.skips, in)
+	if taskID != testTask.ID {
+		return domain.CareRecord{}, domain.CareTask{}, domain.ErrForbidden
+	}
+	if *in.CycleSeq != 3 {
+		return domain.CareRecord{}, domain.CareTask{}, &domain.ConflictError{Code: domain.ConflictStaleCycle}
+	}
+	rec := testRecord
+	rec.Outcome, rec.SkipReason, rec.SkipReasonText, rec.RecheckOn = domain.OutcomeSkipped, domain.SkipOther, "旅行中", civil.Date{Year: 2026, Month: 11, Day: 5}
+	deferred := testTask
+	deferred.NextDueOn = rec.RecheckOn
+	return rec, deferred, nil
 }
 
 func (f *fakeCareRecordService) Complete(_ context.Context, _, taskID uuid.UUID, in domain.CompletionInput) (domain.CareRecord, domain.CareTask, error) {
@@ -131,6 +149,62 @@ func TestCompleteCareTask(t *testing.T) {
 	t.Run("権限がなければ 403", func(t *testing.T) {
 		t.Parallel()
 		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/tasks/"+uuid.Must(uuid.NewV7()).String()+"/completions", "Bearer "+validToken, `{"cycleSeq": 3}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+}
+
+func TestSkipCareTask(t *testing.T) {
+	t.Parallel()
+	path := "/v1/tasks/" + testTask.ID.String() + "/skips"
+
+	t.Run("作った記録（理由・確認日つき）と更新後のタスクを 201 で返す", func(t *testing.T) {
+		t.Parallel()
+		records := &fakeCareRecordService{}
+		rec := serve(t, newRecordRouter(t, records), http.MethodPost, path, "Bearer "+validToken, `{"cycleSeq": 3, "reason": "other", "reasonText": "旅行中", "recheckOn": "2026-11-05"}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		got := decode[struct {
+			Record struct {
+				Outcome, SkipReason, SkipReasonText, RecheckOn string
+			}
+			Task struct{ NextDueOn string }
+		}](t, rec)
+		if got.Record.Outcome != "skipped" || got.Record.SkipReason != "other" || got.Record.SkipReasonText != "旅行中" ||
+			got.Record.RecheckOn != "2026-11-05" || got.Task.NextDueOn != "2026-11-05" {
+			t.Errorf("body = %s", rec.Body.String())
+		}
+		in := records.skips[0]
+		if in.CycleSeq == nil || *in.CycleSeq != 3 || in.Reason == nil || *in.Reason != "other" ||
+			in.ReasonText == nil || *in.ReasonText != "旅行中" || in.RecheckOn == nil || *in.RecheckOn != "2026-11-05" {
+			t.Errorf("input = %+v", in)
+		}
+	})
+
+	t.Run("完了の記録には、スキップの項目がない", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/tasks/"+testTask.ID.String()+"/completions", "Bearer "+validToken, `{"cycleSeq": 3}`)
+		if body := rec.Body.String(); strings.Contains(body, "skipReason") || strings.Contains(body, "recheckOn") {
+			t.Errorf("body = %s", body)
+		}
+	})
+
+	t.Run("予定の回が合わなければ 409 stale_cycle", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, path, "Bearer "+validToken, `{"cycleSeq": 2}`)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d (%s)", rec.Code, rec.Body.String())
+		}
+		if got := decode[errorBody](t, rec); got.Code != "stale_cycle" {
+			t.Errorf("code = %q", got.Code)
+		}
+	})
+
+	t.Run("権限がなければ 403", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, newRecordRouter(t, &fakeCareRecordService{}), http.MethodPost, "/v1/tasks/"+uuid.Must(uuid.NewV7()).String()+"/skips", "Bearer "+validToken, `{"cycleSeq": 3}`)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
 		}

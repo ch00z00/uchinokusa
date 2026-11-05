@@ -118,6 +118,117 @@ func (q *Queries) CreateCompletionRecord(ctx context.Context, arg CreateCompleti
 	return i, err
 }
 
+const createSkipRecord = `-- name: CreateSkipRecord :one
+INSERT INTO care_records (
+  household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on,
+  actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, prev_next_due_on, prev_cycle_seq
+)
+SELECT $1, $2, $3, $4, $5, 'skipped', $6,
+  users.id, users.display_name, $7, $8, $9, $10,
+  $11, $12
+FROM users
+WHERE users.id = $13
+RETURNING id, household_id, plant_id, task_id, task_kind, task_custom_name, outcome, performed_on, performed_at, actor_user_id, actor_display_name, skip_reason_code, skip_reason_text, recheck_on, cycle_seq, is_extra, prev_next_due_on, prev_cycle_seq, edited_at, created_at
+`
+
+type CreateSkipRecordParams struct {
+	HouseholdID    uuid.UUID
+	PlantID        uuid.UUID
+	TaskID         uuid.NullUUID
+	TaskKind       string
+	TaskCustomName *string
+	PerformedOn    pgtype.Date
+	SkipReasonCode *string
+	SkipReasonText *string
+	RecheckOn      pgtype.Date
+	CycleSeq       int32
+	PrevNextDueOn  pgtype.Date
+	PrevCycleSeq   pgtype.Int4
+	ActorUserID    uuid.UUID
+}
+
+// スキップは作業をしたことにしない（outcome = skipped）。理由は、助言の改善に使えるよう、決まった値と自由入力に分けて持つ（要件19-7）
+// prev_* は、取り消し（8.3）で戻す先
+func (q *Queries) CreateSkipRecord(ctx context.Context, arg CreateSkipRecordParams) (CareRecord, error) {
+	row := q.db.QueryRow(ctx, createSkipRecord,
+		arg.HouseholdID,
+		arg.PlantID,
+		arg.TaskID,
+		arg.TaskKind,
+		arg.TaskCustomName,
+		arg.PerformedOn,
+		arg.SkipReasonCode,
+		arg.SkipReasonText,
+		arg.RecheckOn,
+		arg.CycleSeq,
+		arg.PrevNextDueOn,
+		arg.PrevCycleSeq,
+		arg.ActorUserID,
+	)
+	var i CareRecord
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.TaskID,
+		&i.TaskKind,
+		&i.TaskCustomName,
+		&i.Outcome,
+		&i.PerformedOn,
+		&i.PerformedAt,
+		&i.ActorUserID,
+		&i.ActorDisplayName,
+		&i.SkipReasonCode,
+		&i.SkipReasonText,
+		&i.RecheckOn,
+		&i.CycleSeq,
+		&i.IsExtra,
+		&i.PrevNextDueOn,
+		&i.PrevCycleSeq,
+		&i.EditedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deferCareTask = `-- name: DeferCareTask :one
+UPDATE care_tasks SET next_due_on = $2, due_overridden = true
+WHERE id = $1
+RETURNING id, household_id, plant_id, kind, custom_name, interval_value, interval_unit, seasonal_intervals, condition_text, note, next_due_on, due_overridden, cycle_seq, status, deleted_at, created_at, updated_at
+`
+
+type DeferCareTaskParams struct {
+	ID        uuid.UUID
+	NextDueOn pgtype.Date
+}
+
+// スキップで、次回予定を確認日にする。予定の回は進めない（スキップした回に、あとから完了できる）
+// 確認日はユーザーが決めた日なので、手で変えた印（due_overridden）を立て、季節の切り替えで動かさない。次の完了で外れる
+func (q *Queries) DeferCareTask(ctx context.Context, arg DeferCareTaskParams) (CareTask, error) {
+	row := q.db.QueryRow(ctx, deferCareTask, arg.ID, arg.NextDueOn)
+	var i CareTask
+	err := row.Scan(
+		&i.ID,
+		&i.HouseholdID,
+		&i.PlantID,
+		&i.Kind,
+		&i.CustomName,
+		&i.IntervalValue,
+		&i.IntervalUnit,
+		&i.SeasonalIntervals,
+		&i.ConditionText,
+		&i.Note,
+		&i.NextDueOn,
+		&i.DueOverridden,
+		&i.CycleSeq,
+		&i.Status,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const enqueueCompletion = `-- name: EnqueueCompletion :exec
 INSERT INTO notification_outbox (household_id, kind, actor_user_id, record_id)
 VALUES ($1, 'completion', $2, $3)
