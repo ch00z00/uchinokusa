@@ -131,6 +131,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
+	taskRepo := postgres.NewCareTaskRepository(pool)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,
@@ -141,7 +142,8 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Species:     app.NewSpeciesService(postgres.NewSpeciesRepository(pool)),
 		Locations:   app.NewLocationService(postgres.NewLocationRepository(pool), authz),
 		Plants:      app.NewPlantService(postgres.NewPlantRepository(pool), authz),
-		Tasks:       app.NewCareTaskService(postgres.NewCareTaskRepository(pool), authz, time.Now),
+		Tasks:       app.NewCareTaskService(taskRepo, authz, time.Now),
+		Records:     app.NewCareRecordService(postgres.NewCareRecordRepository(pool), taskRepo, authz, time.Now),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

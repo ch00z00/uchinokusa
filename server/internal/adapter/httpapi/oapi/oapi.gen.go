@@ -45,8 +45,27 @@ func (e CareKind) Valid() bool {
 	}
 }
 
+// Defines values for CareOutcome.
+const (
+	CareOutcomeCompleted CareOutcome = "completed"
+	CareOutcomeSkipped   CareOutcome = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the CareOutcome enum.
+func (e CareOutcome) Valid() bool {
+	switch e {
+	case CareOutcomeCompleted:
+		return true
+	case CareOutcomeSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ErrorCode.
 const (
+	ErrorCodeAlreadyCompleted  ErrorCode = "already_completed"
 	ErrorCodeAlreadyMember     ErrorCode = "already_member"
 	ErrorCodeBadRequest        ErrorCode = "bad_request"
 	ErrorCodeConflict          ErrorCode = "conflict"
@@ -56,6 +75,7 @@ const (
 	ErrorCodeLastOwner         ErrorCode = "last_owner"
 	ErrorCodeNotFound          ErrorCode = "not_found"
 	ErrorCodeRateLimited       ErrorCode = "rate_limited"
+	ErrorCodeStaleCycle        ErrorCode = "stale_cycle"
 	ErrorCodeUnauthenticated   ErrorCode = "unauthenticated"
 	ErrorCodeValidationFailed  ErrorCode = "validation_failed"
 )
@@ -63,6 +83,8 @@ const (
 // Valid indicates whether the value is a known member of the ErrorCode enum.
 func (e ErrorCode) Valid() bool {
 	switch e {
+	case ErrorCodeAlreadyCompleted:
+		return true
 	case ErrorCodeAlreadyMember:
 		return true
 	case ErrorCodeBadRequest:
@@ -80,6 +102,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeNotFound:
 		return true
 	case ErrorCodeRateLimited:
+		return true
+	case ErrorCodeStaleCycle:
 		return true
 	case ErrorCodeUnauthenticated:
 		return true
@@ -307,6 +331,63 @@ func (e WindowDistance) Valid() bool {
 // 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
 type CareKind string
 
+// CareOutcome 記録の結果（`completed`：完了、`skipped`：スキップ）。値は今後も追加されうる
+type CareOutcome string
+
+// CareRecord お手入れの記録。作業の種類と作業した人の名前は、記録の時点の値。未設定の項目は、項目がない
+type CareRecord struct {
+	// ActorDisplayName 作業した人の表示名（記録の時点）
+	ActorDisplayName string `json:"actorDisplayName"`
+
+	// ActorUserId 作業した人。アカウントを削除していれば、項目がない
+	ActorUserId *openapi_types.UUID `json:"actorUserId,omitempty"`
+
+	// CreatedAt 日時（RFC 3339）。サーバーは常に UTC（末尾が `Z`）で返す
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	CreatedAt DateTime `json:"createdAt"`
+
+	// CustomName 作業名（`kind` が `other` のときだけ）
+	CustomName *string `json:"customName,omitempty"`
+
+	// CycleSeq 記録した予定の回の番号
+	CycleSeq int                `json:"cycleSeq"`
+	Id       openapi_types.UUID `json:"id"`
+
+	// IsExtra 完了済みの回への、追加の記録
+	IsExtra bool `json:"isExtra"`
+
+	// Kind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+	// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+	Kind CareKind `json:"kind"`
+
+	// Outcome 記録の結果（`completed`：完了、`skipped`：スキップ）。値は今後も追加されうる
+	Outcome CareOutcome `json:"outcome"`
+
+	// PerformedAt 記録した日時
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	PerformedAt DateTime `json:"performedAt"`
+
+	// PerformedOn 実施日
+	//
+	// Examples: 2026-10-26
+	PerformedOn Date               `json:"performedOn"`
+	PlantId     openapi_types.UUID `json:"plantId"`
+
+	// TaskId タスクを削除していれば、項目がない
+	TaskId *openapi_types.UUID `json:"taskId,omitempty"`
+}
+
+// CareRecordResult 記録と、記録したあとのタスク
+type CareRecordResult struct {
+	// Record お手入れの記録。作業の種類と作業した人の名前は、記録の時点の値。未設定の項目は、項目がない
+	Record CareRecord `json:"record"`
+
+	// Task 植物のお手入れタスク。未設定の項目は、項目がない
+	Task CareTask `json:"task"`
+}
+
 // CareTask 植物のお手入れタスク。未設定の項目は、項目がない
 type CareTask struct {
 	// ConditionText 実行条件（例：土の表面が乾いていたら）
@@ -355,6 +436,64 @@ type CareTaskDefault struct {
 	// Kind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
 	// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
 	Kind CareKind `json:"kind"`
+}
+
+// CompleteCareTaskRequest defines model for CompleteCareTaskRequest.
+type CompleteCareTaskRequest struct {
+	// AllowExtra 任意。true なら、完了済みの回でも追加の記録として保存する（重複の表示を見たうえで、それでも記録する場合）
+	AllowExtra *bool `json:"allowExtra,omitempty"`
+
+	// CycleSeq アプリが見ていたタスクの `cycleSeq`。1以上（0 以下なら `fields.cycleSeq = invalid`）
+	CycleSeq int `json:"cycleSeq"`
+
+	// PerformedOn 任意。実施日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。過去の日付は受け付ける。形式の誤りと未来の日付は `fields.performedOn = invalid`
+	PerformedOn *string `json:"performedOn,omitempty"`
+}
+
+// CompletedBy 先に完了した記録の、誰が・いつ
+type CompletedBy struct {
+	ActorDisplayName string `json:"actorDisplayName"`
+
+	// PerformedAt 記録した日時
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	PerformedAt DateTime `json:"performedAt"`
+
+	// PerformedOn 実施日
+	//
+	// Examples: 2026-10-26
+	PerformedOn Date               `json:"performedOn"`
+	RecordId    openapi_types.UUID `json:"recordId"`
+}
+
+// CompletionConflict 完了の衝突。`already_completed` のときは、先に完了した記録（`existing`）と最新のタスク（`task`）が入る。
+// アプリは、楽観的な反映を戻し、誰がいつ完了したかを表示する
+type CompletionConflict struct {
+	// Code エラーの種類。アプリはこの値で分岐する。値は今後も追加されるため、知らない値は「不明なエラー」として扱う。
+	//
+	// | code | HTTP | 意味 |
+	// |---|---|---|
+	// | `bad_request` | 400 | リクエストの形式の誤り（JSON として読めない、パラメーターの型が違う、など） |
+	// | `validation_failed` | 422 | 入力の内容の誤り。`fields` に入力欄ごとの理由が入る |
+	// | `unauthenticated` | 401 | ID トークンがない・無効・期限切れ |
+	// | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
+	// | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
+	// | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+	// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
+	// | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+	// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
+	// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
+	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
+	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
+	// | `internal` | 500 | サーバーの障害 |
+	Code ErrorCode `json:"code"`
+
+	// Existing 先に完了した記録の、誰が・いつ
+	Existing *CompletedBy `json:"existing,omitempty"`
+	Message  string       `json:"message"`
+
+	// Task 植物のお手入れタスク。未設定の項目は、項目がない
+	Task *CareTask `json:"task,omitempty"`
 }
 
 // CreateCareTaskRequest defines model for CreateCareTaskRequest.
@@ -501,6 +640,8 @@ type Error struct {
 	// | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
 	// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
 	// | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+	// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
+	// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
 	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
@@ -528,6 +669,8 @@ type Error struct {
 // | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
 // | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
 // | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
+// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
 // | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 // | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 // | `internal` | 500 | サーバーの障害 |
@@ -999,6 +1142,9 @@ type CreateCareTaskJSONRequestBody = CreateCareTaskRequest
 // UpdateCareTaskJSONRequestBody defines body for UpdateCareTask for application/json ContentType.
 type UpdateCareTaskJSONRequestBody = UpdateCareTaskRequest
 
+// CompleteCareTaskJSONRequestBody defines body for CompleteCareTask for application/json ContentType.
+type CompleteCareTaskJSONRequestBody = CompleteCareTaskRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// ListHouseholds 所属するすべての世帯を、自分のロールとともに返す
@@ -1109,6 +1255,9 @@ type ServerInterface interface {
 	// UpdateCareTask お手入れタスクを変更する（編集者以上）
 	// (PATCH /tasks/{taskId})
 	UpdateCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
+	// CompleteCareTask お手入れタスクの完了を記録する（編集者以上）
+	// (POST /tasks/{taskId}/completions)
+	CompleteCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
 	// PauseCareTask お手入れタスクを一時停止する（編集者以上）
 	// (POST /tasks/{taskId}/pause)
 	PauseCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
@@ -2078,6 +2227,32 @@ func (siw *ServerInterfaceWrapper) UpdateCareTask(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// CompleteCareTask operation middleware
+func (siw *ServerInterfaceWrapper) CompleteCareTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId TaskId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", r.PathValue("taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteCareTask(w, r, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PauseCareTask operation middleware
 func (siw *ServerInterfaceWrapper) PauseCareTask(w http.ResponseWriter, r *http.Request) {
 
@@ -2287,6 +2462,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/tasks/{taskId}", wrapper.UpdateCareTask)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/pause", wrapper.PauseCareTask)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/resume", wrapper.ResumeCareTask)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/tasks/{taskId}/completions", wrapper.CompleteCareTask)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -5504,6 +5680,127 @@ func (response UpdateCareTask500JSONResponse) VisitUpdateCareTaskResponse(w http
 	return err
 }
 
+type CompleteCareTaskRequestObject struct {
+	TaskId TaskId `json:"taskId"`
+	Body   *CompleteCareTaskJSONRequestBody
+}
+
+type CompleteCareTaskResponseObject interface {
+	VisitCompleteCareTaskResponse(w http.ResponseWriter) error
+}
+
+type CompleteCareTask201JSONResponse CareRecordResult
+
+func (response CompleteCareTask201JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response CompleteCareTask400JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response CompleteCareTask401JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CompleteCareTask403JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response CompleteCareTask404JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask409JSONResponse CompletionConflict
+
+func (response CompleteCareTask409JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response CompleteCareTask422JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CompleteCareTask500JSONResponse struct{ InternalJSONResponse }
+
+func (response CompleteCareTask500JSONResponse) VisitCompleteCareTaskResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PauseCareTaskRequestObject struct {
 	TaskId TaskId `json:"taskId"`
 }
@@ -5798,6 +6095,9 @@ type StrictServerInterface interface {
 	// UpdateCareTask お手入れタスクを変更する（編集者以上）
 	// (PATCH /tasks/{taskId})
 	UpdateCareTask(ctx context.Context, request UpdateCareTaskRequestObject) (UpdateCareTaskResponseObject, error)
+	// CompleteCareTask お手入れタスクの完了を記録する（編集者以上）
+	// (POST /tasks/{taskId}/completions)
+	CompleteCareTask(ctx context.Context, request CompleteCareTaskRequestObject) (CompleteCareTaskResponseObject, error)
 	// PauseCareTask お手入れタスクを一時停止する（編集者以上）
 	// (POST /tasks/{taskId}/pause)
 	PauseCareTask(ctx context.Context, request PauseCareTaskRequestObject) (PauseCareTaskResponseObject, error)
@@ -6866,6 +7166,39 @@ func (sh *strictHandler) UpdateCareTask(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateCareTaskResponseObject); ok {
 		if err := validResponse.VisitUpdateCareTaskResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteCareTask operation middleware
+func (sh *strictHandler) CompleteCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId) {
+	var request CompleteCareTaskRequestObject
+
+	request.TaskId = taskId
+
+	var body CompleteCareTaskJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteCareTask(ctx, request.(CompleteCareTaskRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteCareTask")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteCareTaskResponseObject); ok {
+		if err := validResponse.VisitCompleteCareTaskResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -859,6 +859,42 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /tasks/{taskId}/completions:
+    parameters:
+      - $ref: "#/components/parameters/TaskId"
+    post:
+      operationId: completeCareTask
+      summary: お手入れタスクの完了を記録する（編集者以上）
+      description: |
+        実施日・作業の種類・作業した人を記録し、次回予定を「実施日 + 実施日の季節の周期」にして、予定の回を1つ進める（要件10-1〜10-3・10-5）。
+        手で変えた予定日も、完了すれば周期から計算し直す。一時停止中のタスクも完了でき、一時停止のままにする。
+        送った `cycleSeq` の回がすでに完了していれば、記録せずに `409 already_completed` と、先に完了した記録・最新のタスクを返す（要件11-2・11-4）。
+        `allowExtra` を true にすると、完了済みの回でも追加の記録として保存する。追加の記録は、タスクの予定を変えない（要件11-3）。
+        `cycleSeq` がタスクの今の回より後の場合などは `409 stale_cycle`（タスクを取り直す）
+      tags: [record]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteCareTaskRequest" }
+      responses:
+        "201":
+          description: 作った記録と、更新後のタスク
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CareRecordResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: すでに完了している（`already_completed`）、または予定の回が合わない（`stale_cycle`）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompletionConflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -1406,6 +1442,112 @@ components:
           description: 実行条件の初期値
           type: string
 
+    CareOutcome:
+      description: 記録の結果（`completed`：完了、`skipped`：スキップ）。値は今後も追加されうる
+      type: string
+      enum: [completed, skipped]
+
+    CareRecord:
+      description: お手入れの記録。作業の種類と作業した人の名前は、記録の時点の値。未設定の項目は、項目がない
+      type: object
+      required: [id, plantId, kind, outcome, performedOn, performedAt, actorDisplayName, cycleSeq, isExtra, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        taskId:
+          description: タスクを削除していれば、項目がない
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/CareKind"
+        customName:
+          description: 作業名（`kind` が `other` のときだけ）
+          type: string
+        outcome:
+          $ref: "#/components/schemas/CareOutcome"
+        performedOn:
+          description: 実施日
+          $ref: "#/components/schemas/Date"
+        performedAt:
+          description: 記録した日時
+          $ref: "#/components/schemas/DateTime"
+        actorUserId:
+          description: 作業した人。アカウントを削除していれば、項目がない
+          type: string
+          format: uuid
+        actorDisplayName:
+          description: 作業した人の表示名（記録の時点）
+          type: string
+        cycleSeq:
+          description: 記録した予定の回の番号
+          type: integer
+        isExtra:
+          description: 完了済みの回への、追加の記録
+          type: boolean
+        createdAt:
+          $ref: "#/components/schemas/DateTime"
+
+    CareRecordResult:
+      description: 記録と、記録したあとのタスク
+      type: object
+      required: [record, task]
+      properties:
+        record:
+          $ref: "#/components/schemas/CareRecord"
+        task:
+          $ref: "#/components/schemas/CareTask"
+
+    CompleteCareTaskRequest:
+      type: object
+      required: [cycleSeq]
+      properties:
+        cycleSeq:
+          description: アプリが見ていたタスクの `cycleSeq`。1以上（0 以下なら `fields.cycleSeq = invalid`）
+          type: integer
+        performedOn:
+          description: 任意。実施日（`YYYY-MM-DD`）。省くと、世帯のタイムゾーンでの今日にする。過去の日付は受け付ける。形式の誤りと未来の日付は `fields.performedOn = invalid`
+          type: string
+        allowExtra:
+          description: 任意。true なら、完了済みの回でも追加の記録として保存する（重複の表示を見たうえで、それでも記録する場合）
+          type: boolean
+
+    CompletionConflict:
+      description: |
+        完了の衝突。`already_completed` のときは、先に完了した記録（`existing`）と最新のタスク（`task`）が入る。
+        アプリは、楽観的な反映を戻し、誰がいつ完了したかを表示する
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+        existing:
+          $ref: "#/components/schemas/CompletedBy"
+        task:
+          $ref: "#/components/schemas/CareTask"
+
+    CompletedBy:
+      description: 先に完了した記録の、誰が・いつ
+      type: object
+      required: [recordId, actorDisplayName, performedOn, performedAt]
+      properties:
+        recordId:
+          type: string
+          format: uuid
+        actorDisplayName:
+          type: string
+        performedOn:
+          description: 実施日
+          $ref: "#/components/schemas/Date"
+        performedAt:
+          description: 記録した日時
+          $ref: "#/components/schemas/DateTime"
+
     IntervalInput:
       description: 周期の入力。`value` は1以上で、`day` なら365、`week` なら52、`month` なら24まで
       type: object
@@ -1535,6 +1677,8 @@ components:
         | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
         | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
         | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+        | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
+        | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
         | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
         | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
         | `internal` | 500 | サーバーの障害 |
@@ -1548,6 +1692,8 @@ components:
         - conflict
         - last_owner
         - already_member
+        - already_completed
+        - stale_cycle
         - invitation_invalid
         - rate_limited
         - internal

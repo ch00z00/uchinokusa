@@ -1,0 +1,139 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres/sqlcgen"
+	"github.com/ch00z00/uchinokusa/server/internal/domain"
+)
+
+// oneCompletionPerCycleIdx は、同じ予定の回への完了を1件に限る部分ユニーク制約の名前である。
+const oneCompletionPerCycleIdx = "care_records_one_completion_per_cycle_idx"
+
+// CareRecordRepository は、app.CareRecordRepository の PostgreSQL の実装である。
+type CareRecordRepository struct {
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
+}
+
+// NewCareRecordRepository は、CareRecordRepository を作る。
+func NewCareRecordRepository(pool *pgxpool.Pool) *CareRecordRepository {
+	return &CareRecordRepository{pool: pool, q: sqlcgen.New(pool)}
+}
+
+// Complete は、タスクの完了を記録する。タスクの行ロック → 予定の回の照合（domain.PlanCompletion） → 記録の作成 →
+// タスクの更新 → 完了通知の予約を、1つのトランザクションで行う（設計の判断2）。
+// 同じタスクへの同時の完了は行ロックで順に処理されるので、後のほうは先の完了を見て *domain.AlreadyCompletedError になる。
+func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID, actorID uuid.UUID, c domain.Completion) (domain.CareRecord, domain.CareTask, error) {
+	var (
+		record domain.CareRecord
+		task   domain.CareTask
+	)
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		q := r.q.WithTx(tx)
+		locked, err := q.LockCareTask(ctx, sqlcgen.LockCareTaskParams{ID: taskID, HouseholdID: householdID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("lock care task: %w", err)
+		}
+		current, err := toDomainCareTask(locked.CareTask)
+		if err != nil {
+			return err
+		}
+
+		plan, err := domain.PlanCompletion(current, c, domain.Hemisphere(locked.Hemisphere))
+		var conflict *domain.ConflictError
+		if errors.As(err, &conflict) && conflict.Code == domain.ConflictAlreadyCompleted {
+			return alreadyCompleted(ctx, q, current, c.CycleSeq)
+		}
+		if err != nil {
+			return err
+		}
+
+		params := sqlcgen.CreateCompletionRecordParams{
+			HouseholdID:    householdID,
+			PlantID:        current.PlantID,
+			TaskID:         nullUUID(taskID),
+			TaskKind:       string(current.Kind),
+			TaskCustomName: nullIfEmpty(current.CustomName),
+			PerformedOn:    pgDate(c.PerformedOn),
+			CycleSeq:       int32(plan.RecordCycleSeq),
+			IsExtra:        plan.Extra,
+			ActorUserID:    actorID,
+		}
+		if !plan.Extra {
+			// 取り消し（8.3）で戻す先。追加の記録はタスクを変えないので、戻す先を持たない
+			params.PrevNextDueOn = locked.CareTask.NextDueOn
+			params.PrevCycleSeq = pgtype.Int4{Int32: locked.CareTask.CycleSeq, Valid: true}
+		}
+		row, err := q.CreateCompletionRecord(ctx, params)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == oneCompletionPerCycleIdx {
+			// 行ロックがあるため通常は起きない。ロックを通らない書き込みがあっても、最後は制約が重複を防ぐ
+			return &domain.ConflictError{Code: domain.ConflictAlreadyCompleted}
+		}
+		if err != nil {
+			return fmt.Errorf("create completion record: %w", err)
+		}
+		record = toDomainCareRecord(row)
+
+		task = current
+		if !plan.Extra {
+			advanced, err := q.AdvanceCareTask(ctx, sqlcgen.AdvanceCareTaskParams{ID: taskID, NextDueOn: pgDate(plan.NextDueOn), CycleSeq: int32(plan.NextCycleSeq)})
+			if err != nil {
+				return fmt.Errorf("advance care task: %w", err)
+			}
+			if task, err = toDomainCareTask(advanced); err != nil {
+				return err
+			}
+		}
+
+		if err := q.EnqueueCompletion(ctx, sqlcgen.EnqueueCompletionParams{HouseholdID: householdID, ActorUserID: nullUUID(actorID), RecordID: nullUUID(record.ID)}); err != nil {
+			return fmt.Errorf("enqueue completion: %w", err)
+		}
+		return nil
+	})
+	return record, task, err
+}
+
+// alreadyCompleted は、完了済みの回について、先に完了した記録と最新のタスクを持つエラーを作る。
+// 回が今より前でも、完了の記録がなければ（取り消しなどで）、アプリの表示が古いものとして stale_cycle にする。
+func alreadyCompleted(ctx context.Context, q *sqlcgen.Queries, current domain.CareTask, cycleSeq int) error {
+	row, err := q.GetCycleCompletion(ctx, sqlcgen.GetCycleCompletionParams{TaskID: nullUUID(current.ID), CycleSeq: int32(cycleSeq)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &domain.ConflictError{Code: domain.ConflictStaleCycle}
+	}
+	if err != nil {
+		return fmt.Errorf("get cycle completion: %w", err)
+	}
+	return &domain.AlreadyCompletedError{Existing: toDomainCareRecord(row), Task: current}
+}
+
+func toDomainCareRecord(row sqlcgen.CareRecord) domain.CareRecord {
+	return domain.CareRecord{
+		ID:               row.ID,
+		HouseholdID:      row.HouseholdID,
+		PlantID:          row.PlantID,
+		TaskID:           row.TaskID.UUID,
+		TaskKind:         domain.CareKind(row.TaskKind),
+		TaskCustomName:   emptyIfNull(row.TaskCustomName),
+		Outcome:          domain.CareOutcome(row.Outcome),
+		PerformedOn:      civilDate(row.PerformedOn),
+		PerformedAt:      row.PerformedAt,
+		ActorUserID:      row.ActorUserID.UUID,
+		ActorDisplayName: row.ActorDisplayName,
+		CycleSeq:         int(row.CycleSeq),
+		IsExtra:          row.IsExtra,
+		CreatedAt:        row.CreatedAt,
+	}
+}

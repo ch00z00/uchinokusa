@@ -27,6 +27,7 @@ type Deps struct {
 	Locations   LocationService
 	Plants      PlantService
 	Tasks       CareTaskService
+	Records     CareRecordService
 }
 
 // NewRouter は、API のすべてのエンドポイントを登録したハンドラーを返す。
@@ -43,7 +44,7 @@ func NewRouter(d Deps) http.Handler {
 	// 招待の確認と参加は、招待コードの総当たりを防ぐため、利用者ごとに回数を制限する（要件20-3）。
 	// 10回まで続けて呼べ、6秒ごとに1回分回復する（1分に約10回）
 	invitationLimit := withRateLimit(newUserRateLimiter(rate.Every(6*time.Second), 10, time.Now), "GetInvitation", "AcceptInvitation")
-	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts, households: d.Households, members: d.Members, invitations: d.Invitations, species: d.Species, locations: d.Locations, plants: d.Plants, tasks: d.Tasks}, []oapi.StrictMiddlewareFunc{invitationLimit}, oapi.StrictHTTPServerOptions{
+	strict := oapi.NewStrictHandlerWithOptions(&server{accounts: d.Accounts, households: d.Households, members: d.Members, invitations: d.Invitations, species: d.Species, locations: d.Locations, plants: d.Plants, tasks: d.Tasks, records: d.Records}, []oapi.StrictMiddlewareFunc{invitationLimit}, oapi.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: onRequestError,
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, r, logger, err)
