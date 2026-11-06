@@ -417,6 +417,36 @@ func (e WindowDistance) Valid() bool {
 	}
 }
 
+// CalendarNote defines model for CalendarNote.
+type CalendarNote struct {
+	// Date メモを書いた日（世帯のタイムゾーン）
+	//
+	// Examples: 2026-10-26
+	Date Date `json:"date"`
+
+	// Note 植物のメモ。作成者の名前は、作成の時点の値
+	Note Note `json:"note"`
+}
+
+// CalendarPlan defines model for CalendarPlan.
+type CalendarPlan struct {
+	// CustomName 作業名（`kind` が `other` のときだけ）
+	CustomName *string `json:"customName,omitempty"`
+
+	// Date 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
+	//
+	// Examples: 2026-10-26
+	Date Date `json:"date"`
+
+	// Kind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
+	// 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
+	Kind CareKind `json:"kind"`
+
+	// Projected 周期から展開した見込み。`false` はタスクの今の予定日（完了の対象の回）
+	Projected bool               `json:"projected"`
+	TaskId    openapi_types.UUID `json:"taskId"`
+}
+
 // CareKind お手入れの作業の種類（`watering`：水やり、`fertilizing`：肥料、`repotting`：植え替え、`pruning`：剪定、`other`：その他）。
 // 値は今後も追加されうるため、アプリは知らない値を「その他」として扱う
 type CareKind string
@@ -1083,6 +1113,23 @@ type Plant struct {
 	SpeciesName *string `json:"speciesName,omitempty"`
 }
 
+// PlantCalendar defines model for PlantCalendar.
+type PlantCalendar struct {
+	// Month 月（`YYYY-MM`）
+	//
+	// Examples: 2026-11
+	Month string `json:"month"`
+
+	// Notes その月に書いたメモを、古い順に
+	Notes []CalendarNote `json:"notes"`
+
+	// Plans 予定を日付の順に
+	Plans []CalendarPlan `json:"plans"`
+
+	// Records 実施日がその月の記録を、実施日・記録した順に
+	Records []CareRecord `json:"records"`
+}
+
 // Platform 端末の OS の種類。値は今後も追加されうるため、アプリは知らない値を無視する
 type Platform string
 
@@ -1432,6 +1479,12 @@ type GetTodayParams struct {
 	Date *string `form:"date,omitempty" json:"date,omitempty"`
 }
 
+// GetPlantCalendarParams defines parameters for GetPlantCalendar.
+type GetPlantCalendarParams struct {
+	// Month 任意。月（`YYYY-MM`）。省くと今月。形式の誤りと、24か月より先の月は `fields.month = invalid`
+	Month *string `form:"month,omitempty" json:"month,omitempty"`
+}
+
 // ListPlantNotesParams defines parameters for ListPlantNotes.
 type ListPlantNotesParams struct {
 	// Cursor 任意。前のページの `nextCursor`。読めない値は `fields.cursor = invalid`
@@ -1620,6 +1673,9 @@ type ServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(w http.ResponseWriter, r *http.Request, plantId PlantId)
+	// GetPlantCalendar 植物の1か月のカレンダー（閲覧者も）
+	// (GET /plants/{plantId}/calendar)
+	GetPlantCalendar(w http.ResponseWriter, r *http.Request, plantId PlantId, params GetPlantCalendarParams)
 	// ListPlantNotes 植物のメモの一覧（閲覧者も）
 	// (GET /plants/{plantId}/notes)
 	ListPlantNotes(w http.ResponseWriter, r *http.Request, plantId PlantId, params ListPlantNotesParams)
@@ -2565,6 +2621,48 @@ func (siw *ServerInterfaceWrapper) ArchivePlant(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetPlantCalendar operation middleware
+func (siw *ServerInterfaceWrapper) GetPlantCalendar(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "plantId" -------------
+	var plantId PlantId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "plantId", r.PathValue("plantId"), &plantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "plantId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetPlantCalendarParams
+
+	// ------------- Optional query parameter "month" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "month", r.URL.Query(), &params.Month, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "month"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "month", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlantCalendar(w, r, plantId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListPlantNotes operation middleware
 func (siw *ServerInterfaceWrapper) ListPlantNotes(w http.ResponseWriter, r *http.Request) {
 
@@ -3254,6 +3352,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/notes", wrapper.CreateNote)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/notes/{noteId}", wrapper.DeleteNote)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/notes/{noteId}", wrapper.UpdateNote)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/calendar", wrapper.GetPlantCalendar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
 	return m
@@ -6246,6 +6345,99 @@ func (response ArchivePlant500JSONResponse) VisitArchivePlantResponse(w http.Res
 	return err
 }
 
+type GetPlantCalendarRequestObject struct {
+	PlantId PlantId `json:"plantId"`
+	Params  GetPlantCalendarParams
+}
+
+type GetPlantCalendarResponseObject interface {
+	VisitGetPlantCalendarResponse(w http.ResponseWriter) error
+}
+
+type GetPlantCalendar200JSONResponse PlantCalendar
+
+func (response GetPlantCalendar200JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantCalendar400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetPlantCalendar400JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantCalendar401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetPlantCalendar401JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantCalendar404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetPlantCalendar404JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantCalendar422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response GetPlantCalendar422JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPlantCalendar500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetPlantCalendar500JSONResponse) VisitGetPlantCalendarResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListPlantNotesRequestObject struct {
 	PlantId PlantId `json:"plantId"`
 	Params  ListPlantNotesParams
@@ -7989,6 +8181,9 @@ type StrictServerInterface interface {
 	// ArchivePlant 植物を「枯れた・手放した」としてアーカイブする（編集者以上）
 	// (POST /plants/{plantId}/archive)
 	ArchivePlant(ctx context.Context, request ArchivePlantRequestObject) (ArchivePlantResponseObject, error)
+	// GetPlantCalendar 植物の1か月のカレンダー（閲覧者も）
+	// (GET /plants/{plantId}/calendar)
+	GetPlantCalendar(ctx context.Context, request GetPlantCalendarRequestObject) (GetPlantCalendarResponseObject, error)
 	// ListPlantNotes 植物のメモの一覧（閲覧者も）
 	// (GET /plants/{plantId}/notes)
 	ListPlantNotes(ctx context.Context, request ListPlantNotesRequestObject) (ListPlantNotesResponseObject, error)
@@ -9025,6 +9220,33 @@ func (sh *strictHandler) ArchivePlant(w http.ResponseWriter, r *http.Request, pl
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ArchivePlantResponseObject); ok {
 		if err := validResponse.VisitArchivePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlantCalendar operation middleware
+func (sh *strictHandler) GetPlantCalendar(w http.ResponseWriter, r *http.Request, plantId PlantId, params GetPlantCalendarParams) {
+	var request GetPlantCalendarRequestObject
+
+	request.PlantId = plantId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlantCalendar(ctx, request.(GetPlantCalendarRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlantCalendar")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlantCalendarResponseObject); ok {
+		if err := validResponse.VisitGetPlantCalendarResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -1196,6 +1196,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /plants/{plantId}/calendar:
+    parameters:
+      - $ref: "#/components/parameters/PlantId"
+    get:
+      operationId: getPlantCalendar
+      summary: 植物の1か月のカレンダー（閲覧者も）
+      description: |
+        指定した月の記録（完了・スキップ）、予定、メモを返す（要件14-1・14-3〜14-5）。
+        予定は、有効なタスク（一時停止・削除を除く）ごとに、今の予定日と周期から月の範囲で展開する。
+        今の予定日は期限切れでもその日に出す。2回目からは、前の予定日（期限切れなら今日）に作業したものとして、その日の季節の周期を足した見込み（`projected`）。
+        アーカイブした植物は、予定を返さない。メモの日付と「今月」は、世帯のタイムゾーンで決める
+      tags: [calendar]
+      parameters:
+        - name: month
+          in: query
+          description: 任意。月（`YYYY-MM`）。省くと今月。形式の誤りと、24か月より先の月は `fields.month = invalid`
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 月のカレンダー
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlantCalendar" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /species:
     get:
       operationId: searchSpecies
@@ -2092,6 +2122,58 @@ components:
           description: |
             本文。前後の空白は除いて保存する。空は `fields.body = required`、2000文字を超えると `fields.body = too_long`（要件13-4）
           type: string
+
+    PlantCalendar:
+      type: object
+      required: [month, records, plans, notes]
+      properties:
+        month:
+          description: 月（`YYYY-MM`）
+          type: string
+          examples: ["2026-11"]
+        records:
+          description: 実施日がその月の記録を、実施日・記録した順に
+          type: array
+          items:
+            $ref: "#/components/schemas/CareRecord"
+        plans:
+          description: 予定を日付の順に
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarPlan"
+        notes:
+          description: その月に書いたメモを、古い順に
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarNote"
+
+    CalendarPlan:
+      type: object
+      required: [date, projected, taskId, kind]
+      properties:
+        date:
+          $ref: "#/components/schemas/Date"
+        projected:
+          description: 周期から展開した見込み。`false` はタスクの今の予定日（完了の対象の回）
+          type: boolean
+        taskId:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/CareKind"
+        customName:
+          description: 作業名（`kind` が `other` のときだけ）
+          type: string
+
+    CalendarNote:
+      type: object
+      required: [date, note]
+      properties:
+        date:
+          description: メモを書いた日（世帯のタイムゾーン）
+          $ref: "#/components/schemas/Date"
+        note:
+          $ref: "#/components/schemas/Note"
 
     SkipReason:
       description: |

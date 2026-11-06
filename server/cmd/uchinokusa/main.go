@@ -147,6 +147,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Records:     app.NewCareRecordService(postgres.NewCareRecordRepository(pool), taskRepo, authz, time.Now),
 		Today:       app.NewTodayService(postgres.NewTodayRepository(pool), authz, time.Now),
 		Notes:       app.NewNoteService(postgres.NewNoteRepository(pool), plantRepo, authz),
+		Calendar:    app.NewCalendarService(postgres.NewCalendarRepository(pool), authz, time.Now),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),
