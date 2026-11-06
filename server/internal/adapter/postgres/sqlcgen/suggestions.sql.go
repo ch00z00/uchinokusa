@@ -22,7 +22,14 @@ INSERT INTO suggestions (
   $8, $9, $10, $11, $12,
   $13, $14, $15, $16, $17, $18, $19
 )
-ON CONFLICT (household_id, dedupe_key) DO NOTHING
+ON CONFLICT (household_id, dedupe_key) DO UPDATE SET
+  plant_id = EXCLUDED.plant_id, task_id = EXCLUDED.task_id, provider_id = EXCLUDED.provider_id, kind = EXCLUDED.kind, action = EXCLUDED.action,
+  task_kind = EXCLUDED.task_kind, task_interval_value = EXCLUDED.task_interval_value, task_interval_unit = EXCLUDED.task_interval_unit,
+  task_seasonal_intervals = EXCLUDED.task_seasonal_intervals, proposed_date = EXCLUDED.proposed_date, condition_text = EXCLUDED.condition_text,
+  message_key = EXCLUDED.message_key, message_params = EXCLUDED.message_params, reason_key = EXCLUDED.reason_key, reason_params = EXCLUDED.reason_params,
+  valid_from = EXCLUDED.valid_from, valid_until = EXCLUDED.valid_until,
+  status = 'pending', responded_by = NULL, responded_at = NULL, created_at = now()
+WHERE suggestions.status = 'expired'
 RETURNING id, household_id, plant_id, task_id, provider_id, kind, action, task_kind, proposed_date, condition_text, message_key, message_params, reason_key, reason_params, valid_from, valid_until, status, responded_by, responded_at, dedupe_key, created_at, task_interval_value, task_interval_unit, task_seasonal_intervals
 `
 
@@ -49,6 +56,7 @@ type CreateSuggestionParams struct {
 }
 
 // 世帯に同じ重複防止のキーの提案があれば（見送ったものも含む）、作らずに行を返さない（要件17-6）
+// ただし、撤回した（expired の）提案なら、新しい内容で未回答に戻して返す（予定日を戻したときに、助言を出し直すため）
 func (q *Queries) CreateSuggestion(ctx context.Context, arg CreateSuggestionParams) (Suggestion, error) {
 	row := q.db.QueryRow(ctx, createSuggestion,
 		arg.HouseholdID,
@@ -313,4 +321,28 @@ func (q *Queries) RespondSuggestion(ctx context.Context, arg RespondSuggestionPa
 		&i.TaskSeasonalIntervals,
 	)
 	return i, err
+}
+
+const retractSuggestions = `-- name: RetractSuggestions :exec
+UPDATE suggestions SET status = 'expired'
+WHERE household_id = $1 AND provider_id = $2 AND task_id = $3
+  AND status = 'pending' AND dedupe_key <> ALL($4::text[])
+`
+
+type RetractSuggestionsParams struct {
+	HouseholdID uuid.UUID
+	ProviderID  string
+	TaskID      uuid.NullUUID
+	KeepKeys    []string
+}
+
+// プロバイダの、タスクへの未回答の提案のうち、今回返さなかったもの（キーが keep_keys にないもの）を撤回する
+func (q *Queries) RetractSuggestions(ctx context.Context, arg RetractSuggestionsParams) error {
+	_, err := q.db.Exec(ctx, retractSuggestions,
+		arg.HouseholdID,
+		arg.ProviderID,
+		arg.TaskID,
+		arg.KeepKeys,
+	)
+	return err
 }

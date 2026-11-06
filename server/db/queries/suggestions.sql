@@ -1,5 +1,6 @@
 -- name: CreateSuggestion :one
 -- 世帯に同じ重複防止のキーの提案があれば（見送ったものも含む）、作らずに行を返さない（要件17-6）
+-- ただし、撤回した（expired の）提案なら、新しい内容で未回答に戻して返す（予定日を戻したときに、助言を出し直すため）
 INSERT INTO suggestions (
   household_id, plant_id, task_id, provider_id, kind, action, task_kind,
   task_interval_value, task_interval_unit, task_seasonal_intervals, proposed_date, condition_text,
@@ -9,8 +10,21 @@ INSERT INTO suggestions (
   sqlc.narg(task_interval_value), sqlc.narg(task_interval_unit), sqlc.arg(task_seasonal_intervals), sqlc.narg(proposed_date), sqlc.narg(condition_text),
   sqlc.arg(message_key), sqlc.arg(message_params), sqlc.arg(reason_key), sqlc.arg(reason_params), sqlc.arg(valid_from), sqlc.narg(valid_until), sqlc.arg(dedupe_key)
 )
-ON CONFLICT (household_id, dedupe_key) DO NOTHING
+ON CONFLICT (household_id, dedupe_key) DO UPDATE SET
+  plant_id = EXCLUDED.plant_id, task_id = EXCLUDED.task_id, provider_id = EXCLUDED.provider_id, kind = EXCLUDED.kind, action = EXCLUDED.action,
+  task_kind = EXCLUDED.task_kind, task_interval_value = EXCLUDED.task_interval_value, task_interval_unit = EXCLUDED.task_interval_unit,
+  task_seasonal_intervals = EXCLUDED.task_seasonal_intervals, proposed_date = EXCLUDED.proposed_date, condition_text = EXCLUDED.condition_text,
+  message_key = EXCLUDED.message_key, message_params = EXCLUDED.message_params, reason_key = EXCLUDED.reason_key, reason_params = EXCLUDED.reason_params,
+  valid_from = EXCLUDED.valid_from, valid_until = EXCLUDED.valid_until,
+  status = 'pending', responded_by = NULL, responded_at = NULL, created_at = now()
+WHERE suggestions.status = 'expired'
 RETURNING *;
+
+-- name: RetractSuggestions :exec
+-- プロバイダの、タスクへの未回答の提案のうち、今回返さなかったもの（キーが keep_keys にないもの）を撤回する
+UPDATE suggestions SET status = 'expired'
+WHERE household_id = sqlc.arg(household_id) AND provider_id = sqlc.arg(provider_id) AND task_id = sqlc.arg(task_id)
+  AND status = 'pending' AND dedupe_key <> ALL(sqlc.arg(keep_keys)::text[]);
 
 -- name: GetSuggestionHouseholdID :one
 -- 権限を確かめるため、提案が属する世帯を探す

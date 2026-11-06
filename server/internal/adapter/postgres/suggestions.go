@@ -90,6 +90,7 @@ func (r *SuggestionRepository) Subject(ctx context.Context, plantID uuid.UUID) (
 }
 
 // Save は、提案を保存する。世帯に同じ重複防止のキーの提案があれば、保存せず created を false にする。
+// 撤回した（expired の）提案なら、新しい内容で未回答に戻し、created を true にする。
 func (r *SuggestionRepository) Save(ctx context.Context, s domain.Suggestion) (domain.Suggestion, bool, error) {
 	seasonal, err := marshalSeasonal(s.TaskSchedule.Seasonal)
 	if err != nil {
@@ -120,13 +121,25 @@ func (r *SuggestionRepository) Save(ctx context.Context, s domain.Suggestion) (d
 	}
 	row, err := r.q.CreateSuggestion(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Suggestion{}, false, nil // 同じキーの提案がある（ON CONFLICT DO NOTHING）
+		return domain.Suggestion{}, false, nil // 同じキーの、撤回していない提案がある
 	}
 	if err != nil {
 		return domain.Suggestion{}, false, fmt.Errorf("create suggestion: %w", err)
 	}
 	saved, err := toDomainSuggestion(row)
 	return saved, err == nil, err
+}
+
+// Retract は、プロバイダの、タスクへの未回答の提案のうち、キーが keep にないものを撤回する（状態を expired にする）。
+func (r *SuggestionRepository) Retract(ctx context.Context, householdID uuid.UUID, providerID string, taskID uuid.UUID, keep []string) error {
+	if keep == nil {
+		keep = []string{} // NULL の配列では <> ALL が NULL になり、何も撤回しないため
+	}
+	err := r.q.RetractSuggestions(ctx, sqlcgen.RetractSuggestionsParams{HouseholdID: householdID, ProviderID: providerID, TaskID: nullUUID(taskID), KeepKeys: keep})
+	if err != nil {
+		return fmt.Errorf("retract suggestions: %w", err)
+	}
+	return nil
 }
 
 // HouseholdOf は、提案が属する世帯の ID を返す。提案がなければ domain.ErrNotFound を返す。

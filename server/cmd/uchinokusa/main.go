@@ -134,11 +134,12 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	taskRepo := postgres.NewCareTaskRepository(pool)
 	plantRepo := postgres.NewPlantRepository(pool)
-	// 助言プロバイダ。植え替えのプロバイダはタスク 10.2 で登録する
-	advisors, err := advisor.NewRegistry()
+	// 助言プロバイダ。新しいプロバイダは、ここに登録する（docs/decisions/0027）
+	advisors, err := advisor.NewRegistry(advisor.Repotting{})
 	if err != nil {
 		return err
 	}
+	suggestions := app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,
@@ -148,13 +149,13 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),
 		Species:     app.NewSpeciesService(postgres.NewSpeciesRepository(pool)),
 		Locations:   app.NewLocationService(postgres.NewLocationRepository(pool), authz),
-		Plants:      app.NewPlantService(plantRepo, authz),
-		Tasks:       app.NewCareTaskService(taskRepo, authz, time.Now),
+		Plants:      app.NewPlantService(plantRepo, authz, suggestions),
+		Tasks:       app.NewCareTaskService(taskRepo, authz, time.Now, suggestions),
 		Records:     app.NewCareRecordService(postgres.NewCareRecordRepository(pool), taskRepo, authz, time.Now),
 		Today:       app.NewTodayService(postgres.NewTodayRepository(pool), authz, time.Now),
 		Notes:       app.NewNoteService(postgres.NewNoteRepository(pool), plantRepo, authz),
 		Calendar:    app.NewCalendarService(postgres.NewCalendarRepository(pool), authz, time.Now),
-		Suggestions: app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger),
+		Suggestions: suggestions,
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

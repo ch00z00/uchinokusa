@@ -95,6 +95,7 @@ type plantFixture struct {
 	householdFixture
 	plant  uuid.UUID
 	plants *fakePlants
+	advice *fakeAdvice
 	svc    *app.PlantService
 }
 
@@ -102,7 +103,8 @@ func newPlantFixture() plantFixture {
 	hf := newHouseholdFixture()
 	f := plantFixture{householdFixture: hf, plant: uuid.Must(uuid.NewV7()), plants: &fakePlants{byID: map[uuid.UUID]domain.Plant{}}}
 	f.plants.byID[f.plant] = domain.Plant{ID: f.plant, HouseholdID: hf.household, PlantProfile: domain.PlantProfile{Name: "モンステラ"}}
-	f.svc = app.NewPlantService(f.plants, hf.authz)
+	f.advice = &fakeAdvice{}
+	f.svc = app.NewPlantService(f.plants, hf.authz, f.advice)
 	return f
 }
 

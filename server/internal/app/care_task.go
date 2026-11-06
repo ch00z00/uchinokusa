@@ -7,6 +7,7 @@ import (
 	"cloud.google.com/go/civil"
 	"github.com/google/uuid"
 
+	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
@@ -39,15 +40,23 @@ type CareTaskRepository interface {
 }
 
 // CareTaskService は、お手入れタスクの作成・一覧・変更・削除・一時停止・再開を扱う（要件8）。
+// 予定日に関わる変更（作成・予定日の変更・一時停止・再開・削除）のあとには、提案を評価する（要件17-8）。
+// 一時停止・削除したタスクには、プロバイダが何も返さないので、前の予定日についての助言は撤回される。
 type CareTaskService struct {
-	tasks CareTaskRepository
-	authz *Authorizer
-	now   func() time.Time
+	tasks  CareTaskRepository
+	authz  *Authorizer
+	now    func() time.Time
+	advice AdviceEvaluator
 }
 
 // NewCareTaskService は、CareTaskService を作る。now は現在時刻を返す関数で、テストでは固定の時刻を渡す。
-func NewCareTaskService(tasks CareTaskRepository, authz *Authorizer, now func() time.Time) *CareTaskService {
-	return &CareTaskService{tasks: tasks, authz: authz, now: now}
+func NewCareTaskService(tasks CareTaskRepository, authz *Authorizer, now func() time.Time, advice AdviceEvaluator) *CareTaskService {
+	return &CareTaskService{tasks: tasks, authz: authz, now: now, advice: advice}
+}
+
+// dueChanged は、タスクの予定日に関わる変更のあとに、提案を評価する。
+func (s *CareTaskService) dueChanged(ctx context.Context, t domain.CareTask) {
+	s.advice.Evaluate(ctx, AdviceEvent{Trigger: advisor.TriggerTaskDueChanged, PlantID: t.PlantID, TaskID: t.ID})
 }
 
 // List は、植物のタスクを返す。閲覧者も見られる。
@@ -79,7 +88,12 @@ func (s *CareTaskService) Create(ctx context.Context, userID, plantID uuid.UUID,
 	if err != nil {
 		return domain.CareTask{}, err
 	}
-	return s.tasks.Create(ctx, p.HouseholdID, plantID, d)
+	t, err := s.tasks.Create(ctx, p.HouseholdID, plantID, d)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	s.dueChanged(ctx, t)
+	return t, nil
 }
 
 // Update は、タスクの周期・実行条件・予定日などを変更する。編集者以上ができる（要件8-8）。
@@ -97,7 +111,15 @@ func (s *CareTaskService) Update(ctx context.Context, userID, taskID uuid.UUID, 
 	if err != nil {
 		return domain.CareTask{}, err
 	}
-	return s.tasks.Update(ctx, householdID, taskID, p)
+	if p.NextDueOn == nil {
+		return s.tasks.Update(ctx, householdID, taskID, p)
+	}
+	t, err := s.tasks.Update(ctx, householdID, taskID, p)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	s.dueChanged(ctx, t)
+	return t, nil
 }
 
 // Delete は、タスクを削除する。過去の記録は履歴として残す。編集者以上ができる（要件8-10）。
@@ -106,7 +128,15 @@ func (s *CareTaskService) Delete(ctx context.Context, userID, taskID uuid.UUID) 
 	if err != nil {
 		return err
 	}
-	return s.tasks.Delete(ctx, householdID, taskID)
+	current, err := s.tasks.Get(ctx, householdID, taskID) // 評価に使う植物の ID を、消す前に取る
+	if err != nil {
+		return err
+	}
+	if err := s.tasks.Delete(ctx, householdID, taskID); err != nil {
+		return err
+	}
+	s.dueChanged(ctx, current)
+	return nil
 }
 
 // Pause は、タスクを一時停止し、予定・今日やること・リマインダーの対象から外す。編集者以上ができる（要件8-9）。
@@ -116,7 +146,12 @@ func (s *CareTaskService) Pause(ctx context.Context, userID, taskID uuid.UUID) (
 	if err != nil {
 		return domain.CareTask{}, err
 	}
-	return s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskPaused, nil)
+	t, err := s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskPaused, nil)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	s.dueChanged(ctx, t)
+	return t, nil
 }
 
 // Resume は、一時停止したタスクを再開する。編集者以上ができる（要件8-9）。
@@ -139,7 +174,12 @@ func (s *CareTaskService) Resume(ctx context.Context, userID, taskID uuid.UUID) 
 		return domain.CareTask{}, err
 	}
 	next := domain.ResumedNextDueOn(current.NextDueOn, domain.TodayIn(s.now(), timeZone))
-	return s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskActive, &next)
+	t, err := s.tasks.SetStatus(ctx, householdID, taskID, domain.TaskActive, &next)
+	if err != nil {
+		return domain.CareTask{}, err
+	}
+	s.dueChanged(ctx, t)
+	return t, nil
 }
 
 // plantFor は、植物の世帯を探し、ユーザーがその世帯で action を行えることを確かめる。

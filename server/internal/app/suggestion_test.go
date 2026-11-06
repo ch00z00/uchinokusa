@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -24,6 +25,13 @@ type fakeSuggestions struct {
 	byID       map[uuid.UUID]domain.Suggestion
 	listedOn   []civil.Date
 	acceptedOn []civil.Date
+	retracted  []retraction
+}
+
+type retraction struct {
+	providerID string
+	taskID     uuid.UUID
+	keep       []string
 }
 
 func (f *fakeSuggestions) Subject(_ context.Context, plantID uuid.UUID) (advisor.Subject, error) {
@@ -42,6 +50,11 @@ func (f *fakeSuggestions) Save(_ context.Context, s domain.Suggestion) (domain.S
 	s.ID = uuid.Must(uuid.NewV7())
 	f.byID[s.ID] = s
 	return s, true, nil
+}
+
+func (f *fakeSuggestions) Retract(_ context.Context, householdID uuid.UUID, providerID string, taskID uuid.UUID, keep []string) error {
+	f.retracted = append(f.retracted, retraction{providerID: providerID, taskID: taskID, keep: keep})
+	return nil
 }
 
 func (f *fakeSuggestions) HouseholdOf(_ context.Context, id uuid.UUID) (uuid.UUID, error) {
@@ -235,6 +248,31 @@ func TestSuggestionService_Evaluate(t *testing.T) {
 		}
 	})
 
+	t.Run("予定日の変更では、プロバイダが今回返さなかった、そのタスクへの前の提案を撤回する", func(t *testing.T) {
+		t.Parallel()
+		f := newSuggestionFixture()
+		task := uuid.Must(uuid.NewV7())
+		trig := []advisor.Trigger{advisor.TriggerTaskDueChanged}
+		ok := &fakeAdvisor{id: "repotting.v1", triggers: trig, proposals: []advisor.Proposal{proposal("k1")}}
+		failing := &fakeAdvisor{id: "fail.v1", triggers: trig, err: errors.New("boom")}
+		f.service(ok, failing).Evaluate(t.Context(), app.AdviceEvent{Trigger: advisor.TriggerTaskDueChanged, PlantID: f.plant, TaskID: task})
+		// 失敗したプロバイダの前の提案は、今の考えがわからないので撤回しない
+		want := []retraction{{providerID: "repotting.v1", taskID: task, keep: []string{"k1"}}}
+		if !reflect.DeepEqual(f.repo.retracted, want) {
+			t.Errorf("retracted = %+v, want %+v", f.repo.retracted, want)
+		}
+	})
+
+	t.Run("植物への評価では、撤回しない", func(t *testing.T) {
+		t.Parallel()
+		f := newSuggestionFixture()
+		a := &fakeAdvisor{id: "repotting.v1", triggers: []advisor.Trigger{advisor.TriggerPlantCreated}}
+		f.service(a).Evaluate(t.Context(), app.AdviceEvent{Trigger: advisor.TriggerPlantCreated, PlantID: f.plant})
+		if len(f.repo.retracted) != 0 {
+			t.Errorf("retracted = %+v", f.repo.retracted)
+		}
+	})
+
 	t.Run("予定日の変更では、対象のタスクを渡す", func(t *testing.T) {
 		t.Parallel()
 		f := newSuggestionFixture()
@@ -297,6 +335,33 @@ func TestSuggestionService_Accept(t *testing.T) {
 		}
 		if f.repo.acceptedOn[0] != (civil.Date{Year: 2026, Month: 11, Day: 6}) {
 			t.Errorf("today = %v", f.repo.acceptedOn)
+		}
+	})
+
+	t.Run("採用でタスクを作ったら、そのタスクで予定日の提案を評価する", func(t *testing.T) {
+		t.Parallel()
+		f := newSuggestionFixture()
+		id := f.addSuggestion(domain.SuggestionCreateTask)
+		a := &fakeAdvisor{id: "repotting.v1", triggers: []advisor.Trigger{advisor.TriggerTaskDueChanged}}
+		_, task, err := f.service(a).Accept(t.Context(), f.editor, id, domain.AcceptInput{Date: ptr("2027-07-20")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(a.got) != 1 || a.got[0].TaskID != task.ID || a.got[0].Plant.ID != f.plant {
+			t.Errorf("contexts = %+v", a.got)
+		}
+	})
+
+	t.Run("タスクを作らない提案の採用では、評価しない", func(t *testing.T) {
+		t.Parallel()
+		f := newSuggestionFixture()
+		id := f.addSuggestion(domain.SuggestionInfo)
+		a := &fakeAdvisor{id: "repotting.v1", triggers: []advisor.Trigger{advisor.TriggerTaskDueChanged}}
+		if _, _, err := f.service(a).Accept(t.Context(), f.editor, id, domain.AcceptInput{}); err != nil {
+			t.Fatal(err)
+		}
+		if len(a.got) != 0 {
+			t.Errorf("contexts = %+v", a.got)
 		}
 	})
 

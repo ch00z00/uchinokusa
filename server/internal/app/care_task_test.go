@@ -106,6 +106,7 @@ type taskFixture struct {
 	householdFixture
 	plant, watering, other uuid.UUID
 	tasks                  *fakeCareTasks
+	advice                 *fakeAdvice
 	svc                    *app.CareTaskService
 }
 
@@ -124,7 +125,8 @@ func newTaskFixture() taskFixture {
 	}
 	f.tasks.byID[f.watering] = domain.CareTask{ID: f.watering, HouseholdID: hf.household, PlantID: f.plant, CareTaskProfile: domain.CareTaskProfile{Kind: domain.CareWatering}}
 	f.tasks.byID[f.other] = domain.CareTask{ID: f.other, HouseholdID: hf.household, PlantID: f.plant, CareTaskProfile: domain.CareTaskProfile{Kind: domain.CareOther, CustomName: "葉水"}}
-	f.svc = app.NewCareTaskService(f.tasks, hf.authz, func() time.Time { return taskNow })
+	f.advice = &fakeAdvice{}
+	f.svc = app.NewCareTaskService(f.tasks, hf.authz, func() time.Time { return taskNow }, f.advice)
 	return f
 }
 

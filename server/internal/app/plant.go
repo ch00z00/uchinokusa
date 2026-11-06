@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
@@ -41,10 +42,11 @@ type PlantQuery struct {
 type PlantService struct {
 	plants PlantRepository
 	authz  *Authorizer
+	advice AdviceEvaluator
 }
 
-func NewPlantService(plants PlantRepository, authz *Authorizer) *PlantService {
-	return &PlantService{plants: plants, authz: authz}
+func NewPlantService(plants PlantRepository, authz *Authorizer, advice AdviceEvaluator) *PlantService {
+	return &PlantService{plants: plants, authz: authz, advice: advice}
 }
 
 // List は、世帯の植物を返す。閲覧者も見られる（要件5-4・5-5）。
@@ -64,6 +66,8 @@ func (s *PlantService) List(ctx context.Context, userID, householdID uuid.UUID, 
 }
 
 // Create は、植物を登録する。編集者以上ができ、株数に上限はない（要件5-1〜5-3）。
+// 登録したあとに、提案を評価する（購入日があれば、植え替えの提案ができる。要件17-1）。
+// 作った提案は返さない。アプリは、提案の一覧を取り直して表示する。
 func (s *PlantService) Create(ctx context.Context, userID, householdID uuid.UUID, in domain.PlantInput) (domain.Plant, error) {
 	if _, err := s.authz.Require(ctx, userID, householdID, domain.ActionPlantWrite); err != nil {
 		return domain.Plant{}, err
@@ -72,7 +76,12 @@ func (s *PlantService) Create(ctx context.Context, userID, householdID uuid.UUID
 	if err != nil {
 		return domain.Plant{}, err
 	}
-	return s.plants.Create(ctx, householdID, p)
+	plant, err := s.plants.Create(ctx, householdID, p)
+	if err != nil {
+		return domain.Plant{}, err
+	}
+	s.advice.Evaluate(ctx, AdviceEvent{Trigger: advisor.TriggerPlantCreated, PlantID: plant.ID})
+	return plant, nil
 }
 
 // Get は、植物を返す。閲覧者も見られ、アーカイブした植物も見られる（記録とメモを閲覧するため。要件5-8）。

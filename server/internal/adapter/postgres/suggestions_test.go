@@ -95,6 +95,66 @@ func TestSuggestionRepository_Save(t *testing.T) {
 	})
 }
 
+func TestSuggestionRepository_Retract(t *testing.T) {
+	t.Parallel()
+	f := newSuggestionFixture(t)
+	warn := func(key, provider string, task uuid.UUID) domain.Suggestion {
+		s := f.repotting(key)
+		s.Kind, s.Action, s.TaskID, s.ProviderID = domain.SuggestionAvoid, domain.SuggestionInfo, task, provider
+		return f.save(s)
+	}
+	otherTask := f.createTask(f.monsteraPlant, domain.CareTaskDraft{CareTaskProfile: domain.CareTaskProfile{Kind: domain.CareRepotting, Schedule: wateringDraft.Schedule}, NextDueOn: nov(20)})
+	old := warn("old", "repotting.v1", f.task.ID)
+	kept := warn("kept", "repotting.v1", f.task.ID)
+	dismissed := warn("dismissed", "repotting.v1", f.task.ID)
+	if _, err := f.suggestions.Dismiss(f.ctx, f.home, dismissed.ID, f.sakura); err != nil {
+		t.Fatal(err)
+	}
+	otherProvider := warn("weather", "weather.v1", f.task.ID)
+	onOtherTask := warn("other-task", "repotting.v1", otherTask.ID)
+
+	if err := f.suggestions.Retract(f.ctx, f.home, "repotting.v1", f.task.ID, []string{"kept"}); err != nil {
+		t.Fatal(err)
+	}
+	status := func(id uuid.UUID) string {
+		var st string
+		f.queryRow(`SELECT status FROM suggestions WHERE id = $1`, id).scan(&st)
+		return st
+	}
+	// 撤回するのは、そのプロバイダの、そのタスクへの未回答の提案で、今回返さなかったものだけ
+	for id, want := range map[uuid.UUID]string{old.ID: "expired", kept.ID: "pending", dismissed.ID: "dismissed", otherProvider.ID: "pending", onOtherTask.ID: "pending"} {
+		if got := status(id); got != want {
+			t.Errorf("%v: status = %s, want %s", id, got, want)
+		}
+	}
+
+	t.Run("残すキーがなければ、すべて撤回する", func(t *testing.T) {
+		if err := f.suggestions.Retract(f.ctx, f.home, "repotting.v1", f.task.ID, nil); err != nil {
+			t.Fatal(err)
+		}
+		if got := status(kept.ID); got != "expired" {
+			t.Errorf("status = %s, want expired", got)
+		}
+	})
+
+	t.Run("撤回した提案は、同じキーで来れば未回答に戻す", func(t *testing.T) {
+		s := f.repotting("old")
+		s.Kind, s.Action, s.TaskID, s.ValidUntil = domain.SuggestionAvoid, domain.SuggestionInfo, f.task.ID, nov(28)
+		got, created, err := f.suggestions.Save(f.ctx, s)
+		if err != nil || !created || got.ID != old.ID || got.Status != domain.SuggestionPending || got.ValidUntil != nov(28) {
+			t.Errorf("revived = %+v, created = %v, err = %v", got, created, err)
+		}
+	})
+
+	t.Run("見送った提案は、同じキーで来ても戻さない", func(t *testing.T) {
+		s := f.repotting("dismissed")
+		s.Kind, s.Action, s.TaskID = domain.SuggestionAvoid, domain.SuggestionInfo, f.task.ID
+		if _, created, err := f.suggestions.Save(f.ctx, s); err != nil || created || status(dismissed.ID) != "dismissed" {
+			t.Errorf("created = %v, err = %v, status = %s", created, err, status(dismissed.ID))
+		}
+	})
+}
+
 func TestSuggestionRepository_ListActive(t *testing.T) {
 	t.Parallel()
 	f := newSuggestionFixture(t)

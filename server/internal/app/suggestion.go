@@ -18,7 +18,10 @@ type SuggestionRepository interface {
 	// Subject は、植物と、その世帯・植物マスタ・置き場所・タスク・最近の記録を返す。植物がなければ domain.ErrNotFound を返す。
 	Subject(ctx context.Context, plantID uuid.UUID) (advisor.Subject, error)
 	// Save は、提案を保存する。世帯に同じ重複防止のキーの提案があれば（見送ったものも含む）、保存せず created を false にする。
+	// ただし、撤回した（expired の）提案なら、未回答に戻して created を true にする。
 	Save(ctx context.Context, s domain.Suggestion) (saved domain.Suggestion, created bool, err error)
+	// Retract は、プロバイダの、タスクへの未回答の提案のうち、キーが keep にないものを撤回する（状態を expired にする）。
+	Retract(ctx context.Context, householdID uuid.UUID, providerID string, taskID uuid.UUID, keep []string) error
 	// HouseholdOf は、提案が属する世帯の ID を返す。提案がなければ domain.ErrNotFound を返す。
 	HouseholdOf(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	TimeZoneOf(ctx context.Context, householdID uuid.UUID) (string, error)
@@ -29,6 +32,12 @@ type SuggestionRepository interface {
 	Accept(ctx context.Context, householdID, id, actorID uuid.UUID, in domain.AcceptInput, today civil.Date) (domain.Suggestion, domain.CareTask, error)
 	// Dismiss は、提案の行をロックして見送る（domain.CheckDismiss）。
 	Dismiss(ctx context.Context, householdID, id, actorID uuid.UUID) (domain.Suggestion, error)
+}
+
+// AdviceEvaluator は、出来事をきっかけに提案を評価する（実装は SuggestionService）。
+// 植物・タスクのサービスが、変更のあとに呼ぶ。エラーを返さないので、元の操作の結果は変わらない。
+type AdviceEvaluator interface {
+	Evaluate(ctx context.Context, ev AdviceEvent) []domain.Suggestion
 }
 
 // AdviceEvent は、提案を作るきっかけの出来事である。
@@ -56,6 +65,9 @@ func NewSuggestionService(repo SuggestionRepository, registry *advisor.Registry,
 // 植物の登録などの元の操作を失敗させないため、エラーは返さず記録だけする（設計の「プロバイダの障害」）。
 // プロバイダのエラー・panic・形の誤った提案は、そのプロバイダ（その提案）だけを飛ばし、ほかのプロバイダは続ける。
 // アーカイブした植物には、プロバイダを呼ばない。
+//
+// タスクへの評価（task_due_changed）では、プロバイダが今回返さなかった、そのタスクへの前の未回答の提案を撤回する。
+// 予定日を変えたあとに、前の予定日についての助言が残らないようにするため。失敗したプロバイダの提案は撤回しない。
 func (s *SuggestionService) Evaluate(ctx context.Context, ev AdviceEvent) []domain.Suggestion {
 	subject, err := s.repo.Subject(ctx, ev.PlantID)
 	if err != nil {
@@ -74,7 +86,10 @@ func (s *SuggestionService) Evaluate(ctx context.Context, ev AdviceEvent) []doma
 			s.logger.ErrorContext(ctx, "advisor failed", "advisor", a.ID(), "trigger", ev.Trigger, "plant_id", ev.PlantID, "error", err)
 			continue
 		}
+		keep := make([]string, 0, len(proposals))
 		for _, p := range proposals {
+			// 保存に失敗した提案も、プロバイダの今の考えには入っているので、撤回しない
+			keep = append(keep, p.DedupeKey)
 			saved, ok, err := s.save(ctx, a.ID(), subject, p)
 			if err != nil {
 				s.logger.ErrorContext(ctx, "save suggestion", "advisor", a.ID(), "dedupe_key", p.DedupeKey, "plant_id", ev.PlantID, "error", err)
@@ -82,6 +97,11 @@ func (s *SuggestionService) Evaluate(ctx context.Context, ev AdviceEvent) []doma
 			}
 			if ok {
 				created = append(created, saved)
+			}
+		}
+		if ev.TaskID != uuid.Nil {
+			if err := s.repo.Retract(ctx, subject.Household.ID, a.ID(), ev.TaskID, keep); err != nil {
+				s.logger.ErrorContext(ctx, "retract suggestions", "advisor", a.ID(), "task_id", ev.TaskID, "error", err)
 			}
 		}
 	}
@@ -136,7 +156,15 @@ func (s *SuggestionService) Accept(ctx context.Context, userID, suggestionID uui
 	if err != nil {
 		return domain.Suggestion{}, domain.CareTask{}, err
 	}
-	return s.repo.Accept(ctx, householdID, suggestionID, userID, in, today)
+	sg, task, err := s.repo.Accept(ctx, householdID, suggestionID, userID, in, today)
+	if err != nil {
+		return domain.Suggestion{}, domain.CareTask{}, err
+	}
+	if task.ID != uuid.Nil {
+		// 日付を変えて採用した日が、避ける時期のこともあるため（要件17-8）
+		s.Evaluate(ctx, AdviceEvent{Trigger: advisor.TriggerTaskDueChanged, PlantID: sg.PlantID, TaskID: task.ID})
+	}
+	return sg, task, nil
 }
 
 // Dismiss は、提案を見送る。同じ重複防止のキーの提案は、このあと作らない（要件17-6）。編集者以上ができる。
