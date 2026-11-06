@@ -27,11 +27,12 @@ const (
 
 // PlantRepository は、plants テーブルへのアクセスを提供する。
 type PlantRepository struct {
-	q *sqlcgen.Queries
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
 }
 
 func NewPlantRepository(pool *pgxpool.Pool) *PlantRepository {
-	return &PlantRepository{q: sqlcgen.New(pool)}
+	return &PlantRepository{pool: pool, q: sqlcgen.New(pool)}
 }
 
 // List は、世帯の植物のうち、条件に合うものを登録の古い順に返す。
@@ -55,19 +56,25 @@ func (r *PlantRepository) List(ctx context.Context, householdID uuid.UUID, filte
 // Create は、世帯に植物を登録し、マスタの和名と次回予定日を含めて返す。
 // 種類・置き場所が存在しない（置き場所はほかの世帯のものも含む）場合は、domain.ValidationError を返す。
 func (r *PlantRepository) Create(ctx context.Context, householdID uuid.UUID, p domain.PlantProfile) (domain.Plant, error) {
-	id, err := r.q.CreatePlant(ctx, sqlcgen.CreatePlantParams{
-		HouseholdID:     householdID,
-		Name:            p.Name,
-		NameSearch:      domain.NormalizeSearchText(p.Name),
-		SpeciesID:       nullUUID(p.Species.ID),
-		SpeciesFreeText: nullIfEmpty(p.Species.FreeText),
-		LocationID:      nullUUID(p.LocationID),
-		AcquiredOn:      pgDate(p.AcquiredOn),
+	var out domain.Plant
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		id, err := q.CreatePlant(ctx, sqlcgen.CreatePlantParams{
+			HouseholdID:     householdID,
+			Name:            p.Name,
+			NameSearch:      domain.NormalizeSearchText(p.Name),
+			SpeciesID:       nullUUID(p.Species.ID),
+			SpeciesFreeText: nullIfEmpty(p.Species.FreeText),
+			LocationID:      nullUUID(p.LocationID),
+			AcquiredOn:      pgDate(p.AcquiredOn),
+		})
+		if err != nil {
+			return plantWriteError("create plant", err)
+		}
+		ch.add(householdID, domain.ChangePlant, id, domain.ChangeCreated, id)
+		out, err = getPlant(ctx, q, householdID, id)
+		return err
 	})
-	if err != nil {
-		return domain.Plant{}, plantWriteError("create plant", err)
-	}
-	return r.Get(ctx, householdID, id)
+	return out, err
 }
 
 // HouseholdOf は、植物が属する世帯の ID を返す。植物がなければ domain.ErrNotFound を返す。
@@ -84,7 +91,11 @@ func (r *PlantRepository) HouseholdOf(ctx context.Context, id uuid.UUID) (uuid.U
 
 // Get は、世帯の植物を返す。世帯の植物でなければ domain.ErrNotFound を返す。
 func (r *PlantRepository) Get(ctx context.Context, householdID, id uuid.UUID) (domain.Plant, error) {
-	row, err := r.q.GetPlant(ctx, sqlcgen.GetPlantParams{ID: id, HouseholdID: householdID})
+	return getPlant(ctx, r.q, householdID, id)
+}
+
+func getPlant(ctx context.Context, q *sqlcgen.Queries, householdID, id uuid.UUID) (domain.Plant, error) {
+	row, err := q.GetPlant(ctx, sqlcgen.GetPlantParams{ID: id, HouseholdID: householdID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Plant{}, domain.ErrNotFound
 	}
@@ -110,37 +121,54 @@ func (r *PlantRepository) Update(ctx context.Context, householdID, id uuid.UUID,
 	if p.AcquiredOn != nil {
 		params.SetAcquiredOn, params.AcquiredOn = true, pgDate(*p.AcquiredOn)
 	}
-	if _, err := r.q.UpdatePlant(ctx, params); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Plant{}, domain.ErrNotFound
+	var out domain.Plant
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		if _, err := q.UpdatePlant(ctx, params); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return domain.ErrNotFound
+			}
+			return plantWriteError("update plant", err)
 		}
-		return domain.Plant{}, plantWriteError("update plant", err)
-	}
-	return r.Get(ctx, householdID, id)
+		ch.add(householdID, domain.ChangePlant, id, domain.ChangeUpdated, id)
+		var err error
+		out, err = getPlant(ctx, q, householdID, id)
+		return err
+	})
+	return out, err
 }
 
 // Delete は、世帯の植物を削除する。タスク・記録・メモ・提案は、外部キーの ON DELETE CASCADE でいっしょに消える。
+// 変更イベントは植物の削除の1件だけにし、いっしょに消えたデータは、アプリが植物のイベントから読み取る。
 func (r *PlantRepository) Delete(ctx context.Context, householdID, id uuid.UUID) error {
-	n, err := r.q.DeletePlant(ctx, sqlcgen.DeletePlantParams{ID: id, HouseholdID: householdID})
-	if err != nil {
-		return fmt.Errorf("delete plant: %w", err)
-	}
-	if n == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		n, err := q.DeletePlant(ctx, sqlcgen.DeletePlantParams{ID: id, HouseholdID: householdID})
+		if err != nil {
+			return fmt.Errorf("delete plant: %w", err)
+		}
+		if n == 0 {
+			return domain.ErrNotFound
+		}
+		ch.add(householdID, domain.ChangePlant, id, domain.ChangeDeleted, id)
+		return nil
+	})
 }
 
 // SetArchived は、植物をアーカイブする（archived が false なら元に戻す）。アーカイブし直しても、最初の日時を残す。
 func (r *PlantRepository) SetArchived(ctx context.Context, householdID, id uuid.UUID, archived bool) (domain.Plant, error) {
-	_, err := r.q.SetPlantArchived(ctx, sqlcgen.SetPlantArchivedParams{ID: id, HouseholdID: householdID, Archived: archived})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Plant{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.Plant{}, fmt.Errorf("set plant archived: %w", err)
-	}
-	return r.Get(ctx, householdID, id)
+	var out domain.Plant
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		_, err := q.SetPlantArchived(ctx, sqlcgen.SetPlantArchivedParams{ID: id, HouseholdID: householdID, Archived: archived})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("set plant archived: %w", err)
+		}
+		ch.add(householdID, domain.ChangePlant, id, domain.ChangeUpdated, id)
+		out, err = getPlant(ctx, q, householdID, id)
+		return err
+	})
+	return out, err
 }
 
 // plantWriteError は、種類・置き場所の外部キーの違反を、入力の誤りに変換する。

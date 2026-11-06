@@ -31,6 +31,7 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
+	"github.com/ch00z00/uchinokusa/server/internal/domain"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
 
@@ -163,6 +164,16 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ReadHeaderTimeout: 10 * time.Second, // ヘッダーを少しずつ送る攻撃（Slowloris）への対策
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
+
+	// 変更イベントを受け取る（どのインスタンスで起きた変更も届く）。WebSocket への配信はタスク 11.2 でつなぐ
+	listenerCtx, stopListener := context.WithCancel(ctx)
+	defer stopListener()
+	go func() {
+		_ = postgres.NewChangeListener(pool, logger).Run(listenerCtx, func(e domain.ChangeEvent) {
+			logger.Debug("household changed", slog.String("household_id", e.HouseholdID.String()), slog.Int64("version", e.Version),
+				slog.String("entity", string(e.Entity)), slog.String("op", string(e.Op)))
+		})
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {

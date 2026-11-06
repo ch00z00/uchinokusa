@@ -119,15 +119,27 @@ func (r *SuggestionRepository) Save(ctx context.Context, s domain.Suggestion) (d
 		params.TaskIntervalValue = pgtype.Int4{Int32: int32(base.Value), Valid: true}
 		params.TaskIntervalUnit = nullIfEmpty(string(base.Unit))
 	}
-	row, err := r.q.CreateSuggestion(ctx, params)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Suggestion{}, false, nil // 同じキーの、撤回していない提案がある
-	}
-	if err != nil {
-		return domain.Suggestion{}, false, fmt.Errorf("create suggestion: %w", err)
-	}
-	saved, err := toDomainSuggestion(row)
-	return saved, err == nil, err
+	var (
+		saved   domain.Suggestion
+		created bool
+	)
+	err = withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.CreateSuggestion(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil // 同じキーの、撤回していない提案がある。変更はないので、イベントも出さない
+		}
+		if err != nil {
+			return fmt.Errorf("create suggestion: %w", err)
+		}
+		if saved, err = toDomainSuggestion(row); err != nil {
+			return err
+		}
+		created = true
+		// 撤回した提案を未回答に戻した場合も、アプリには新しく現れた提案なので created にする
+		ch.add(saved.HouseholdID, domain.ChangeSuggestion, saved.ID, domain.ChangeCreated, saved.PlantID)
+		return nil
+	})
+	return saved, created, err
 }
 
 // Retract は、プロバイダの、タスクへの未回答の提案のうち、キーが keep にないものを撤回する（状態を expired にする）。
@@ -135,11 +147,16 @@ func (r *SuggestionRepository) Retract(ctx context.Context, householdID uuid.UUI
 	if keep == nil {
 		keep = []string{} // NULL の配列では <> ALL が NULL になり、何も撤回しないため
 	}
-	err := r.q.RetractSuggestions(ctx, sqlcgen.RetractSuggestionsParams{HouseholdID: householdID, ProviderID: providerID, TaskID: nullUUID(taskID), KeepKeys: keep})
-	if err != nil {
-		return fmt.Errorf("retract suggestions: %w", err)
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		rows, err := q.RetractSuggestions(ctx, sqlcgen.RetractSuggestionsParams{HouseholdID: householdID, ProviderID: providerID, TaskID: nullUUID(taskID), KeepKeys: keep})
+		if err != nil {
+			return fmt.Errorf("retract suggestions: %w", err)
+		}
+		for _, row := range rows {
+			ch.add(householdID, domain.ChangeSuggestion, row.ID, domain.ChangeUpdated, row.PlantID.UUID)
+		}
+		return nil
+	})
 }
 
 // HouseholdOf は、提案が属する世帯の ID を返す。提案がなければ domain.ErrNotFound を返す。
@@ -182,13 +199,13 @@ func (r *SuggestionRepository) Accept(ctx context.Context, householdID, id, acto
 		suggestion domain.Suggestion
 		task       domain.CareTask
 	)
-	err := r.respond(ctx, householdID, id, actorID, domain.SuggestionAccepted, func(q *sqlcgen.Queries, s domain.Suggestion) error {
+	err := r.respond(ctx, householdID, id, actorID, domain.SuggestionAccepted, func(q *sqlcgen.Queries, ch *changes, s domain.Suggestion) error {
 		plan, err := domain.PlanAcceptance(s, in, today)
 		if err != nil {
 			return err
 		}
 		if plan.Task != nil {
-			if task, err = createCareTask(ctx, q, householdID, s.PlantID, *plan.Task); err != nil {
+			if task, err = createCareTask(ctx, q, ch, householdID, s.PlantID, *plan.Task); err != nil {
 				return err
 			}
 		}
@@ -200,7 +217,7 @@ func (r *SuggestionRepository) Accept(ctx context.Context, householdID, id, acto
 // Dismiss は、提案の行をロックして見送る。
 func (r *SuggestionRepository) Dismiss(ctx context.Context, householdID, id, actorID uuid.UUID) (domain.Suggestion, error) {
 	var suggestion domain.Suggestion
-	err := r.respond(ctx, householdID, id, actorID, domain.SuggestionDismissed, func(_ *sqlcgen.Queries, s domain.Suggestion) error {
+	err := r.respond(ctx, householdID, id, actorID, domain.SuggestionDismissed, func(_ *sqlcgen.Queries, _ *changes, s domain.Suggestion) error {
 		return domain.CheckDismiss(s)
 	}, &suggestion)
 	return suggestion, err
@@ -208,9 +225,8 @@ func (r *SuggestionRepository) Dismiss(ctx context.Context, householdID, id, act
 
 // respond は、提案の行をロックし、apply（規則の確認と、採用で作るタスク）のあとに、対応を記録する。
 func (r *SuggestionRepository) respond(ctx context.Context, householdID, id, actorID uuid.UUID, status domain.SuggestionStatus,
-	apply func(*sqlcgen.Queries, domain.Suggestion) error, out *domain.Suggestion) error {
-	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	apply func(*sqlcgen.Queries, *changes, domain.Suggestion) error, out *domain.Suggestion) error {
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		row, err := q.LockSuggestion(ctx, sqlcgen.LockSuggestionParams{ID: id, HouseholdID: householdID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrNotFound
@@ -222,9 +238,10 @@ func (r *SuggestionRepository) respond(ctx context.Context, householdID, id, act
 		if err != nil {
 			return err
 		}
-		if err := apply(q, current); err != nil {
+		if err := apply(q, ch, current); err != nil {
 			return err
 		}
+		ch.add(householdID, domain.ChangeSuggestion, id, domain.ChangeUpdated, current.PlantID)
 		updated, err := q.RespondSuggestion(ctx, sqlcgen.RespondSuggestionParams{ID: id, Status: string(status), RespondedBy: nullUUID(actorID)})
 		if err != nil {
 			return fmt.Errorf("respond suggestion: %w", err)

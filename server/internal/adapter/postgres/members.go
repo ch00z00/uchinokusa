@@ -45,33 +45,43 @@ func (r *MemberRepository) List(ctx context.Context, householdID uuid.UUID) ([]d
 
 // UpdateRole は、メンバーのロールを変える。オーナーの行は変えない。
 func (r *MemberRepository) UpdateRole(ctx context.Context, householdID, userID uuid.UUID, role domain.Role) (domain.Member, error) {
-	row, err := r.q.UpdateMemberRole(ctx, sqlcgen.UpdateMemberRoleParams{HouseholdID: householdID, UserID: userID, Role: string(role)})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Member{}, r.whyUnchanged(ctx, householdID, userID)
-	}
-	if err != nil {
-		return domain.Member{}, fmt.Errorf("update member role: %w", err)
-	}
-	return toDomainMember(row.UserID, row.DisplayName, row.Role, row.CreatedAt)
+	var out domain.Member
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.UpdateMemberRole(ctx, sqlcgen.UpdateMemberRoleParams{HouseholdID: householdID, UserID: userID, Role: string(role)})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return whyUnchanged(ctx, q, householdID, userID)
+		}
+		if err != nil {
+			return fmt.Errorf("update member role: %w", err)
+		}
+		ch.add(householdID, domain.ChangeMember, userID, domain.ChangeUpdated, uuid.Nil)
+		out, err = toDomainMember(row.UserID, row.DisplayName, row.Role, row.CreatedAt)
+		return err
+	})
+	return out, err
 }
 
 // Remove は、メンバーを世帯から外す。オーナーは外さない。
 // 記録の作業者は users を参照し、名前も記録に持っているため、メンバーシップを消しても記録は残る（要件4-7）。
 func (r *MemberRepository) Remove(ctx context.Context, householdID, userID uuid.UUID) error {
-	n, err := r.q.RemoveMember(ctx, sqlcgen.RemoveMemberParams{HouseholdID: householdID, UserID: userID})
-	if err != nil {
-		return fmt.Errorf("remove member: %w", err)
-	}
-	if n == 0 {
-		return r.whyUnchanged(ctx, householdID, userID)
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		n, err := q.RemoveMember(ctx, sqlcgen.RemoveMemberParams{HouseholdID: householdID, UserID: userID})
+		if err != nil {
+			return fmt.Errorf("remove member: %w", err)
+		}
+		if n == 0 {
+			return whyUnchanged(ctx, q, householdID, userID)
+		}
+		// 外されたメンバーにも届くので、アプリはこの世帯の表示をやめられる（購読の見直しは 11.2）
+		ch.add(householdID, domain.ChangeMember, userID, domain.ChangeDeleted, uuid.Nil)
+		return nil
+	})
 }
 
 // whyUnchanged は、オーナーを除く条件の更新・削除が0行だった理由を返す。
 // オーナーなら last_owner の衝突、メンバーでなければ domain.ErrNotFound にする。
-func (r *MemberRepository) whyUnchanged(ctx context.Context, householdID, userID uuid.UUID) error {
-	m, err := r.q.GetMembership(ctx, sqlcgen.GetMembershipParams{HouseholdID: householdID, UserID: userID})
+func whyUnchanged(ctx context.Context, q *sqlcgen.Queries, householdID, userID uuid.UUID) error {
+	m, err := q.GetMembership(ctx, sqlcgen.GetMembershipParams{HouseholdID: householdID, UserID: userID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return domain.ErrNotFound
@@ -86,8 +96,7 @@ func (r *MemberRepository) whyUnchanged(ctx context.Context, householdID, userID
 // TransferOwnership は、from のオーナー権限を to に移し、from を編集者にする（要件4-8）。
 // 2行をトランザクションの中でロックしてから確かめるので、同時に複数の移譲が届いても、オーナーは1人のままになる。
 func (r *MemberRepository) TransferOwnership(ctx context.Context, householdID, from, to uuid.UUID) error {
-	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		// ロックを取るまで待つ。ほかの移譲が先に終わっていれば、待ったあとに最新の行が返る
 		rows, err := q.LockMemberships(ctx, sqlcgen.LockMembershipsParams{HouseholdID: householdID, UserIds: []uuid.UUID{from, to}})
 		if err != nil {
@@ -115,6 +124,8 @@ func (r *MemberRepository) TransferOwnership(ctx context.Context, householdID, f
 		if err := q.SetMemberRole(ctx, sqlcgen.SetMemberRoleParams{HouseholdID: householdID, UserID: to, Role: string(domain.RoleOwner)}); err != nil {
 			return fmt.Errorf("promote new owner: %w", err)
 		}
+		ch.add(householdID, domain.ChangeMember, from, domain.ChangeUpdated, uuid.Nil)
+		ch.add(householdID, domain.ChangeMember, to, domain.ChangeUpdated, uuid.Nil)
 		return nil // 関数が nil を返すとコミット、エラーを返すとロールバックする
 	})
 }

@@ -38,8 +38,7 @@ func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID
 		record domain.CareRecord
 		task   domain.CareTask
 	)
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		locked, current, err := lockCareTask(ctx, q, householdID, taskID)
 		if err != nil {
 			return err
@@ -81,9 +80,11 @@ func (r *CareRecordRepository) Complete(ctx context.Context, householdID, taskID
 			return fmt.Errorf("create completion record: %w", err)
 		}
 		record = toDomainCareRecord(row)
+		ch.add(householdID, domain.ChangeRecord, record.ID, domain.ChangeCreated, current.PlantID)
 
 		task = current
 		if !plan.Extra {
+			ch.add(householdID, domain.ChangeTask, taskID, domain.ChangeUpdated, current.PlantID)
 			advanced, err := q.AdvanceCareTask(ctx, sqlcgen.AdvanceCareTaskParams{ID: taskID, NextDueOn: pgDate(plan.NextDueOn), CycleSeq: int32(plan.NextCycleSeq)})
 			if err != nil {
 				return fmt.Errorf("advance care task: %w", err)
@@ -108,8 +109,7 @@ func (r *CareRecordRepository) Skip(ctx context.Context, householdID, taskID, ac
 		record domain.CareRecord
 		task   domain.CareTask
 	)
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		locked, current, err := lockCareTask(ctx, q, householdID, taskID)
 		if err != nil {
 			return err
@@ -139,6 +139,8 @@ func (r *CareRecordRepository) Skip(ctx context.Context, householdID, taskID, ac
 			return fmt.Errorf("create skip record: %w", err)
 		}
 		record = toDomainCareRecord(row)
+		ch.add(householdID, domain.ChangeRecord, record.ID, domain.ChangeCreated, current.PlantID)
+		ch.add(householdID, domain.ChangeTask, taskID, domain.ChangeUpdated, current.PlantID)
 
 		deferred, err := q.DeferCareTask(ctx, sqlcgen.DeferCareTaskParams{ID: taskID, NextDueOn: pgDate(s.RecheckOn)})
 		if err != nil {
@@ -167,8 +169,7 @@ func (r *CareRecordRepository) HouseholdOf(ctx context.Context, recordID uuid.UU
 // 追加の記録は、タスクを変えていないので、記録を消すだけにする。
 func (r *CareRecordRepository) Undo(ctx context.Context, householdID, recordID, actorID uuid.UUID, now time.Time) (domain.CareTask, error) {
 	var task domain.CareTask
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		row, err := q.GetCareRecord(ctx, sqlcgen.GetCareRecordParams{ID: recordID, HouseholdID: householdID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrNotFound
@@ -206,6 +207,7 @@ func (r *CareRecordRepository) Undo(ctx context.Context, householdID, recordID, 
 			if task, err = toDomainCareTask(restored); err != nil {
 				return err
 			}
+			ch.add(householdID, domain.ChangeTask, task.ID, domain.ChangeUpdated, row.PlantID)
 		}
 		if err := q.CancelCompletionNotice(ctx, nullUUID(recordID)); err != nil {
 			return fmt.Errorf("cancel completion notice: %w", err)
@@ -213,6 +215,7 @@ func (r *CareRecordRepository) Undo(ctx context.Context, householdID, recordID, 
 		if err := q.DeleteCareRecord(ctx, recordID); err != nil {
 			return fmt.Errorf("delete care record: %w", err)
 		}
+		ch.add(householdID, domain.ChangeRecord, recordID, domain.ChangeDeleted, row.PlantID)
 		return nil
 	})
 	return task, err

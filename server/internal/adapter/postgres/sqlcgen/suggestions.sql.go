@@ -323,10 +323,11 @@ func (q *Queries) RespondSuggestion(ctx context.Context, arg RespondSuggestionPa
 	return i, err
 }
 
-const retractSuggestions = `-- name: RetractSuggestions :exec
+const retractSuggestions = `-- name: RetractSuggestions :many
 UPDATE suggestions SET status = 'expired'
 WHERE household_id = $1 AND provider_id = $2 AND task_id = $3
   AND status = 'pending' AND dedupe_key <> ALL($4::text[])
+RETURNING id, plant_id
 `
 
 type RetractSuggestionsParams struct {
@@ -336,13 +337,33 @@ type RetractSuggestionsParams struct {
 	KeepKeys    []string
 }
 
+type RetractSuggestionsRow struct {
+	ID      uuid.UUID
+	PlantID uuid.NullUUID
+}
+
 // プロバイダの、タスクへの未回答の提案のうち、今回返さなかったもの（キーが keep_keys にないもの）を撤回する
-func (q *Queries) RetractSuggestions(ctx context.Context, arg RetractSuggestionsParams) error {
-	_, err := q.db.Exec(ctx, retractSuggestions,
+func (q *Queries) RetractSuggestions(ctx context.Context, arg RetractSuggestionsParams) ([]RetractSuggestionsRow, error) {
+	rows, err := q.db.Query(ctx, retractSuggestions,
 		arg.HouseholdID,
 		arg.ProviderID,
 		arg.TaskID,
 		arg.KeepKeys,
 	)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RetractSuggestionsRow{}
+	for rows.Next() {
+		var i RetractSuggestionsRow
+		if err := rows.Scan(&i.ID, &i.PlantID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

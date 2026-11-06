@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
+	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
@@ -41,6 +42,7 @@ func canonicalJSON(t *testing.T, b []byte) string {
 
 // fakeNoteService は、app.NoteService の偽物である。受け取った本文と取得の条件を記録する。
 type fakeNoteService struct {
+	actors  []uuid.UUID // context に入っていた、操作した人（変更イベントに使う）
 	bodies  []*string
 	queries []domain.NoteQueryInput
 	deleted []uuid.UUID
@@ -54,7 +56,8 @@ func (f *fakeNoteService) List(_ context.Context, _, _ uuid.UUID, in domain.Note
 	return domain.NotePage{Notes: []domain.Note{testNote, edited}, NextCursor: "next"}, nil
 }
 
-func (f *fakeNoteService) Create(_ context.Context, _, _ uuid.UUID, body *string) (domain.Note, error) {
+func (f *fakeNoteService) Create(ctx context.Context, _, _ uuid.UUID, body *string) (domain.Note, error) {
+	f.actors = append(f.actors, app.ActorFrom(ctx))
 	f.bodies = append(f.bodies, body)
 	return testNote, nil
 }
@@ -115,6 +118,10 @@ func TestCreateNote(t *testing.T) {
 	}
 	if b := notes.bodies[0]; b == nil || *b != "新芽が出た" {
 		t.Errorf("body = %v", b)
+	}
+	// 認証した人を、操作した人として context に入れる（変更イベントの actorUserId）
+	if notes.actors[0] != testUser.ID {
+		t.Errorf("actor = %v, want %v", notes.actors[0], testUser.ID)
 	}
 }
 

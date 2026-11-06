@@ -20,8 +20,9 @@ SET body = sqlc.arg(body), edited_at = CASE WHEN body = sqlc.arg(body) THEN edit
 WHERE id = sqlc.arg(id) AND household_id = sqlc.arg(household_id)
 RETURNING *;
 
--- name: DeleteNote :execrows
-DELETE FROM notes WHERE id = $1 AND household_id = $2;
+-- name: DeleteNote :one
+-- 変更イベントに入れるため、消したメモの植物を返す
+DELETE FROM notes WHERE id = $1 AND household_id = $2 RETURNING plant_id;
 
 -- name: ListPlantNotes :many
 -- 植物のメモを、作成日時・ID の新しい順に返す（要件13-2）。編集しても並びは変えない

@@ -19,11 +19,12 @@ import (
 
 // CareTaskRepository は、care_tasks テーブルへのアクセスを提供する。
 type CareTaskRepository struct {
-	q *sqlcgen.Queries
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
 }
 
 func NewCareTaskRepository(pool *pgxpool.Pool) *CareTaskRepository {
-	return &CareTaskRepository{q: sqlcgen.New(pool)}
+	return &CareTaskRepository{pool: pool, q: sqlcgen.New(pool)}
 }
 
 // TaskPlantOf は、植物の世帯・タイムゾーン・植物マスタの目安を返す。植物がなければ domain.ErrNotFound を返す。
@@ -65,11 +66,17 @@ func (r *CareTaskRepository) List(ctx context.Context, householdID, plantID uuid
 
 // Create は、植物にタスクを作る。空文字の作業名・実行条件・メモは NULL（未設定）にする。
 func (r *CareTaskRepository) Create(ctx context.Context, householdID, plantID uuid.UUID, d domain.CareTaskDraft) (domain.CareTask, error) {
-	return createCareTask(ctx, r.q, householdID, plantID, d)
+	var out domain.CareTask
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		var err error
+		out, err = createCareTask(ctx, q, ch, householdID, plantID, d)
+		return err
+	})
+	return out, err
 }
 
-// createCareTask は、タスクを作る。提案の採用（SuggestionRepository.Accept）のトランザクションの中でも使う。
-func createCareTask(ctx context.Context, q *sqlcgen.Queries, householdID, plantID uuid.UUID, d domain.CareTaskDraft) (domain.CareTask, error) {
+// createCareTask は、タスクを作り、変更イベントを足す。提案の採用（SuggestionRepository.Accept）のトランザクションの中でも使う。
+func createCareTask(ctx context.Context, q *sqlcgen.Queries, ch *changes, householdID, plantID uuid.UUID, d domain.CareTaskDraft) (domain.CareTask, error) {
 	seasonal, err := marshalSeasonal(d.Schedule.Seasonal)
 	if err != nil {
 		return domain.CareTask{}, err
@@ -89,6 +96,7 @@ func createCareTask(ctx context.Context, q *sqlcgen.Queries, householdID, plantI
 	if err != nil {
 		return domain.CareTask{}, fmt.Errorf("create care task: %w", err)
 	}
+	ch.add(householdID, domain.ChangeTask, row.ID, domain.ChangeCreated, plantID)
 	return toDomainCareTask(row)
 }
 
@@ -139,26 +147,35 @@ func (r *CareTaskRepository) Update(ctx context.Context, householdID, id uuid.UU
 	if p.NextDueOn != nil {
 		params.NextDueOn = pgDate(*p.NextDueOn)
 	}
-	row, err := r.q.UpdateCareTask(ctx, params)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.CareTask{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.CareTask{}, fmt.Errorf("update care task: %w", err)
-	}
-	return toDomainCareTask(row)
+	var out domain.CareTask
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.UpdateCareTask(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("update care task: %w", err)
+		}
+		ch.add(householdID, domain.ChangeTask, id, domain.ChangeUpdated, row.PlantID)
+		out, err = toDomainCareTask(row)
+		return err
+	})
+	return out, err
 }
 
 // Delete は、世帯のタスクを論理削除する。記録の task_id は残り、履歴として表示できる。
 func (r *CareTaskRepository) Delete(ctx context.Context, householdID, id uuid.UUID) error {
-	n, err := r.q.DeleteCareTask(ctx, sqlcgen.DeleteCareTaskParams{ID: id, HouseholdID: householdID})
-	if err != nil {
-		return fmt.Errorf("delete care task: %w", err)
-	}
-	if n == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		plantID, err := q.DeleteCareTask(ctx, sqlcgen.DeleteCareTaskParams{ID: id, HouseholdID: householdID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("delete care task: %w", err)
+		}
+		ch.add(householdID, domain.ChangeTask, id, domain.ChangeDeleted, plantID)
+		return nil
+	})
 }
 
 // SetStatus は、世帯の削除していないタスクの状態を変える。nextDueOn が nil なら、次回予定は変えない。
@@ -167,14 +184,20 @@ func (r *CareTaskRepository) SetStatus(ctx context.Context, householdID, id uuid
 	if nextDueOn != nil {
 		params.NextDueOn = pgDate(*nextDueOn)
 	}
-	row, err := r.q.SetCareTaskStatus(ctx, params)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.CareTask{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.CareTask{}, fmt.Errorf("set care task status: %w", err)
-	}
-	return toDomainCareTask(row)
+	var out domain.CareTask
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.SetCareTaskStatus(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("set care task status: %w", err)
+		}
+		ch.add(householdID, domain.ChangeTask, id, domain.ChangeUpdated, row.PlantID)
+		out, err = toDomainCareTask(row)
+		return err
+	})
+	return out, err
 }
 
 // TimeZoneOf は、世帯のタイムゾーンを返す。世帯がなければ domain.ErrNotFound を返す。

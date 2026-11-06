@@ -108,8 +108,7 @@ type memberJoinedPayload struct {
 // 招待のロック・メンバーの追加・通知の予約を1つのトランザクションで行い、どれか1つだけが起きることを防ぐ。
 func (r *InvitationRepository) Accept(ctx context.Context, key domain.InvitationKey, userID uuid.UUID) (domain.HouseholdWithRole, error) {
 	var out domain.HouseholdWithRole
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		inv, err := q.LockValidInvitation(ctx, sqlcgen.LockValidInvitationParams{Code: nullIfEmpty(key.Code), TokenHash: key.TokenHash})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrInvitationInvalid
@@ -130,6 +129,7 @@ func (r *InvitationRepository) Accept(ctx context.Context, key domain.Invitation
 		if err != nil {
 			return fmt.Errorf("add member: %w", err)
 		}
+		ch.add(inv.HouseholdID, domain.ChangeMember, userID, domain.ChangeCreated, uuid.Nil)
 
 		payload, err := json.Marshal(memberJoinedPayload{InvitationID: inv.ID, Role: role})
 		if err != nil {

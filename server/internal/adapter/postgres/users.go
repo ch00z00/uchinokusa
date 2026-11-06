@@ -15,11 +15,12 @@ import (
 
 // UserRepository は、users テーブルへのアクセスを提供する。
 type UserRepository struct {
-	q *sqlcgen.Queries
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
 }
 
 func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
-	return &UserRepository{q: sqlcgen.New(pool)}
+	return &UserRepository{pool: pool, q: sqlcgen.New(pool)}
 }
 
 // GetOrCreate は、firebase_uid が一致するユーザーを返す。いなければ作る。
@@ -58,15 +59,28 @@ func (r *UserRepository) GetOrCreate(ctx context.Context, id domain.Identity) (d
 }
 
 // UpdateDisplayName は、表示名を変更する。ユーザーがいなければ domain.ErrNotFound を返す。
+// 所属するすべての世帯に、メンバーの変更として知らせる（メンバーの一覧に表示名が出るため）。
 func (r *UserRepository) UpdateDisplayName(ctx context.Context, userID uuid.UUID, name string) (domain.User, error) {
-	row, err := r.q.UpdateUserDisplayName(ctx, sqlcgen.UpdateUserDisplayNameParams{ID: userID, DisplayName: name})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.User{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.User{}, fmt.Errorf("update display name: %w", err)
-	}
-	return toDomainUser(row), nil
+	var out domain.User
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.UpdateUserDisplayName(ctx, sqlcgen.UpdateUserDisplayNameParams{ID: userID, DisplayName: name})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("update display name: %w", err)
+		}
+		out = toDomainUser(row)
+		households, err := q.ListUserHouseholdIDs(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("list user households: %w", err)
+		}
+		for _, h := range households {
+			ch.add(h, domain.ChangeMember, userID, domain.ChangeUpdated, uuid.Nil)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func toDomainUser(row sqlcgen.User) domain.User {

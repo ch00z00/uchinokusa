@@ -16,7 +16,7 @@ import (
 // タスクを削除していれば、記録だけを変え、ゼロ値のタスクを返す。
 func (r *CareRecordRepository) UpdatePerformedOn(ctx context.Context, householdID, recordID uuid.UUID, p domain.RecordPatch) (domain.CareRecord, domain.CareTask, error) {
 	var record domain.CareRecord
-	task, err := r.changeRecord(ctx, householdID, recordID, func(q *sqlcgen.Queries) error {
+	task, err := r.changeRecord(ctx, householdID, recordID, domain.ChangeUpdated, func(q *sqlcgen.Queries) error {
 		row, err := q.UpdateCareRecordPerformedOn(ctx, sqlcgen.UpdateCareRecordPerformedOnParams{ID: recordID, PerformedOn: pgDate(p.PerformedOn)})
 		if err != nil {
 			return fmt.Errorf("update care record: %w", err)
@@ -30,7 +30,7 @@ func (r *CareRecordRepository) UpdatePerformedOn(ctx context.Context, householdI
 // Delete は、記録を消す。最新の完了であれば、残った最新の完了から次回予定を計算し直す。
 // 予定の回は戻さない。まだ送っていない完了通知は、取り消し済みにする（要件16-6）。
 func (r *CareRecordRepository) Delete(ctx context.Context, householdID, recordID uuid.UUID) (domain.CareTask, error) {
-	return r.changeRecord(ctx, householdID, recordID, func(q *sqlcgen.Queries) error {
+	return r.changeRecord(ctx, householdID, recordID, domain.ChangeDeleted, func(q *sqlcgen.Queries) error {
 		if err := q.CancelCompletionNotice(ctx, nullUUID(recordID)); err != nil {
 			return fmt.Errorf("cancel completion notice: %w", err)
 		}
@@ -43,10 +43,10 @@ func (r *CareRecordRepository) Delete(ctx context.Context, householdID, recordID
 
 // changeRecord は、記録の編集・削除（apply）を、タスクの行ロックの中で行い、必要なら次回予定を計算し直す。
 // 完了・スキップ・取り消しと同じロックを取るので、同時の記録と食い違わない。
-func (r *CareRecordRepository) changeRecord(ctx context.Context, householdID, recordID uuid.UUID, apply func(*sqlcgen.Queries) error) (domain.CareTask, error) {
+// op は、記録の変更イベントの操作（編集なら updated、削除なら deleted）である。
+func (r *CareRecordRepository) changeRecord(ctx context.Context, householdID, recordID uuid.UUID, op domain.ChangeOp, apply func(*sqlcgen.Queries) error) (domain.CareTask, error) {
 	var task domain.CareTask
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		q := r.q.WithTx(tx)
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
 		row, err := q.GetCareRecord(ctx, sqlcgen.GetCareRecordParams{ID: recordID, HouseholdID: householdID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrNotFound
@@ -54,6 +54,7 @@ func (r *CareRecordRepository) changeRecord(ctx context.Context, householdID, re
 		if err != nil {
 			return fmt.Errorf("get care record: %w", err)
 		}
+		ch.add(householdID, domain.ChangeRecord, recordID, op, row.PlantID)
 		if !row.TaskID.Valid {
 			return apply(q)
 		}
@@ -94,6 +95,7 @@ func (r *CareRecordRepository) changeRecord(ctx context.Context, householdID, re
 		if err != nil {
 			return fmt.Errorf("reschedule care task: %w", err)
 		}
+		ch.add(householdID, domain.ChangeTask, current.ID, domain.ChangeUpdated, row.PlantID)
 		task, err = toDomainCareTask(rescheduled)
 		return err
 	})

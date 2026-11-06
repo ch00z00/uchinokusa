@@ -15,20 +15,27 @@ import (
 
 // NoteRepository は、notes テーブルへのアクセスを提供する。
 type NoteRepository struct {
-	q *sqlcgen.Queries
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
 }
 
 func NewNoteRepository(pool *pgxpool.Pool) *NoteRepository {
-	return &NoteRepository{q: sqlcgen.New(pool)}
+	return &NoteRepository{pool: pool, q: sqlcgen.New(pool)}
 }
 
 // Create は、世帯の植物にメモを作る。作成者の名前は、作成の時点の値を写す。
 func (r *NoteRepository) Create(ctx context.Context, householdID, plantID, authorID uuid.UUID, body string) (domain.Note, error) {
-	row, err := r.q.CreateNote(ctx, sqlcgen.CreateNoteParams{HouseholdID: householdID, PlantID: plantID, AuthorUserID: authorID, Body: body})
-	if err != nil {
-		return domain.Note{}, fmt.Errorf("create note: %w", err)
-	}
-	return toDomainNote(row), nil
+	var out domain.Note
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.CreateNote(ctx, sqlcgen.CreateNoteParams{HouseholdID: householdID, PlantID: plantID, AuthorUserID: authorID, Body: body})
+		if err != nil {
+			return fmt.Errorf("create note: %w", err)
+		}
+		out = toDomainNote(row)
+		ch.add(householdID, domain.ChangeNote, out.ID, domain.ChangeCreated, plantID)
+		return nil
+	})
+	return out, err
 }
 
 // HouseholdOf は、メモが属する世帯の ID を返す。メモがなければ domain.ErrNotFound を返す。
@@ -57,26 +64,35 @@ func (r *NoteRepository) Get(ctx context.Context, householdID, id uuid.UUID) (do
 
 // Update は、メモの本文を変える。本文が変わったときだけ、編集した日時を付ける。世帯のメモでなければ domain.ErrNotFound を返す。
 func (r *NoteRepository) Update(ctx context.Context, householdID, id uuid.UUID, body string) (domain.Note, error) {
-	row, err := r.q.UpdateNoteBody(ctx, sqlcgen.UpdateNoteBodyParams{ID: id, HouseholdID: householdID, Body: body})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Note{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.Note{}, fmt.Errorf("update note: %w", err)
-	}
-	return toDomainNote(row), nil
+	var out domain.Note
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.UpdateNoteBody(ctx, sqlcgen.UpdateNoteBodyParams{ID: id, HouseholdID: householdID, Body: body})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("update note: %w", err)
+		}
+		out = toDomainNote(row)
+		ch.add(householdID, domain.ChangeNote, id, domain.ChangeUpdated, out.PlantID)
+		return nil
+	})
+	return out, err
 }
 
 // Delete は、メモを消す。世帯のメモでなければ domain.ErrNotFound を返す。
 func (r *NoteRepository) Delete(ctx context.Context, householdID, id uuid.UUID) error {
-	n, err := r.q.DeleteNote(ctx, sqlcgen.DeleteNoteParams{ID: id, HouseholdID: householdID})
-	if err != nil {
-		return fmt.Errorf("delete note: %w", err)
-	}
-	if n == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		plantID, err := q.DeleteNote(ctx, sqlcgen.DeleteNoteParams{ID: id, HouseholdID: householdID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("delete note: %w", err)
+		}
+		ch.add(householdID, domain.ChangeNote, id, domain.ChangeDeleted, plantID)
+		return nil
+	})
 }
 
 // ListByPlant は、植物のメモを新しい順に q.Limit 件まで返す。続きがあれば more を true にする。

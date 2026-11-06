@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/domain"
 )
 
@@ -62,7 +63,10 @@ func withAuth(logger *slog.Logger, verifier TokenVerifier, accounts AccountServi
 				fail(err)
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey{}, user)))
+			ctx := context.WithValue(r.Context(), userKey{}, user)
+			// 変更イベントの「操作した人」として、リポジトリまで context で渡す（app.ActorFrom）
+			ctx = app.WithActor(ctx, user.ID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

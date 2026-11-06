@@ -49,8 +49,8 @@ func (q *Queries) CreateNote(ctx context.Context, arg CreateNoteParams) (Note, e
 	return i, err
 }
 
-const deleteNote = `-- name: DeleteNote :execrows
-DELETE FROM notes WHERE id = $1 AND household_id = $2
+const deleteNote = `-- name: DeleteNote :one
+DELETE FROM notes WHERE id = $1 AND household_id = $2 RETURNING plant_id
 `
 
 type DeleteNoteParams struct {
@@ -58,12 +58,12 @@ type DeleteNoteParams struct {
 	HouseholdID uuid.UUID
 }
 
-func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteNote, arg.ID, arg.HouseholdID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// 変更イベントに入れるため、消したメモの植物を返す
+func (q *Queries) DeleteNote(ctx context.Context, arg DeleteNoteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteNote, arg.ID, arg.HouseholdID)
+	var plant_id uuid.UUID
+	err := row.Scan(&plant_id)
+	return plant_id, err
 }
 
 const getNote = `-- name: GetNote :one

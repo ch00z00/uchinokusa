@@ -68,9 +68,10 @@ func (q *Queries) CreateCareTask(ctx context.Context, arg CreateCareTaskParams) 
 	return i, err
 }
 
-const deleteCareTask = `-- name: DeleteCareTask :execrows
+const deleteCareTask = `-- name: DeleteCareTask :one
 UPDATE care_tasks SET deleted_at = now()
 WHERE id = $1 AND household_id = $2 AND deleted_at IS NULL
+RETURNING plant_id
 `
 
 type DeleteCareTaskParams struct {
@@ -78,13 +79,12 @@ type DeleteCareTaskParams struct {
 	HouseholdID uuid.UUID
 }
 
-// 論理削除にして、記録（care_records.task_id）を履歴として残す（要件8-10）
-func (q *Queries) DeleteCareTask(ctx context.Context, arg DeleteCareTaskParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCareTask, arg.ID, arg.HouseholdID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// 論理削除にして、記録（care_records.task_id）を履歴として残す（要件8-10）。変更イベントに入れるため、植物を返す
+func (q *Queries) DeleteCareTask(ctx context.Context, arg DeleteCareTaskParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteCareTask, arg.ID, arg.HouseholdID)
+	var plant_id uuid.UUID
+	err := row.Scan(&plant_id)
+	return plant_id, err
 }
 
 const getCareTask = `-- name: GetCareTask :one

@@ -20,11 +20,12 @@ ON CONFLICT (household_id, dedupe_key) DO UPDATE SET
 WHERE suggestions.status = 'expired'
 RETURNING *;
 
--- name: RetractSuggestions :exec
+-- name: RetractSuggestions :many
 -- プロバイダの、タスクへの未回答の提案のうち、今回返さなかったもの（キーが keep_keys にないもの）を撤回する
 UPDATE suggestions SET status = 'expired'
 WHERE household_id = sqlc.arg(household_id) AND provider_id = sqlc.arg(provider_id) AND task_id = sqlc.arg(task_id)
-  AND status = 'pending' AND dedupe_key <> ALL(sqlc.arg(keep_keys)::text[]);
+  AND status = 'pending' AND dedupe_key <> ALL(sqlc.arg(keep_keys)::text[])
+RETURNING id, plant_id;
 
 -- name: GetSuggestionHouseholdID :one
 -- 権限を確かめるため、提案が属する世帯を探す

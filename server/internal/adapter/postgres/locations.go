@@ -15,11 +15,12 @@ import (
 
 // LocationRepository は、locations テーブルへのアクセスを提供する。
 type LocationRepository struct {
-	q *sqlcgen.Queries
+	pool *pgxpool.Pool
+	q    *sqlcgen.Queries
 }
 
 func NewLocationRepository(pool *pgxpool.Pool) *LocationRepository {
-	return &LocationRepository{q: sqlcgen.New(pool)}
+	return &LocationRepository{pool: pool, q: sqlcgen.New(pool)}
 }
 
 // List は、世帯のすべての置き場所を、作成の古い順に、植物（アーカイブしたものを除く）の数とともに返す。
@@ -37,18 +38,24 @@ func (r *LocationRepository) List(ctx context.Context, householdID uuid.UUID) ([
 
 // Create は、世帯に置き場所を作る。環境の項目の空文字は、NULL（未設定）にする。
 func (r *LocationRepository) Create(ctx context.Context, householdID uuid.UUID, p domain.LocationProfile) (domain.Location, error) {
-	row, err := r.q.CreateLocation(ctx, sqlcgen.CreateLocationParams{
-		HouseholdID:     householdID,
-		Name:            p.Name,
-		IsIndoor:        p.IsIndoor,
-		WindowDirection: nullIfEmpty(string(p.WindowDirection)),
-		WindowDistance:  nullIfEmpty(string(p.WindowDistance)),
-		Shading:         nullIfEmpty(string(p.Shading)),
+	var out domain.Location
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.CreateLocation(ctx, sqlcgen.CreateLocationParams{
+			HouseholdID:     householdID,
+			Name:            p.Name,
+			IsIndoor:        p.IsIndoor,
+			WindowDirection: nullIfEmpty(string(p.WindowDirection)),
+			WindowDistance:  nullIfEmpty(string(p.WindowDistance)),
+			Shading:         nullIfEmpty(string(p.Shading)),
+		})
+		if err != nil {
+			return fmt.Errorf("create location: %w", err)
+		}
+		out = toDomainLocation(row, 0)
+		ch.add(householdID, domain.ChangeLocation, out.ID, domain.ChangeCreated, uuid.Nil)
+		return nil
 	})
-	if err != nil {
-		return domain.Location{}, fmt.Errorf("create location: %w", err)
-	}
-	return toDomainLocation(row, 0), nil
+	return out, err
 }
 
 // HouseholdOf は、置き場所が属する世帯の ID を返す。置き場所がなければ domain.ErrNotFound を返す。
@@ -75,30 +82,40 @@ func (r *LocationRepository) Update(ctx context.Context, householdID, id uuid.UU
 	if p.Shading != nil {
 		params.SetShading, params.Shading = true, nullIfEmpty(string(*p.Shading))
 	}
-	row, err := r.q.UpdateLocation(ctx, params)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Location{}, domain.ErrNotFound
-	}
-	if err != nil {
-		return domain.Location{}, fmt.Errorf("update location: %w", err)
-	}
-	return toDomainLocation(sqlcgen.Location{
-		ID: row.ID, HouseholdID: row.HouseholdID, Name: row.Name, IsIndoor: row.IsIndoor,
-		WindowDirection: row.WindowDirection, WindowDistance: row.WindowDistance, Shading: row.Shading,
-		Attributes: row.Attributes, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
-	}, row.PlantCount), nil
+	var out domain.Location
+	err := withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		row, err := q.UpdateLocation(ctx, params)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		if err != nil {
+			return fmt.Errorf("update location: %w", err)
+		}
+		out = toDomainLocation(sqlcgen.Location{
+			ID: row.ID, HouseholdID: row.HouseholdID, Name: row.Name, IsIndoor: row.IsIndoor,
+			WindowDirection: row.WindowDirection, WindowDistance: row.WindowDistance, Shading: row.Shading,
+			Attributes: row.Attributes, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		}, row.PlantCount)
+		ch.add(householdID, domain.ChangeLocation, id, domain.ChangeUpdated, uuid.Nil)
+		return nil
+	})
+	return out, err
 }
 
 // Delete は、世帯の置き場所を削除する。紐づく植物の location_id は、外部キーの ON DELETE SET NULL で NULL になる。
+// 変更イベントは置き場所の削除の1件だけにし、植物の変更はアプリが置き場所のイベントから読み取る。
 func (r *LocationRepository) Delete(ctx context.Context, householdID, id uuid.UUID) error {
-	n, err := r.q.DeleteLocation(ctx, sqlcgen.DeleteLocationParams{ID: id, HouseholdID: householdID})
-	if err != nil {
-		return fmt.Errorf("delete location: %w", err)
-	}
-	if n == 0 {
-		return domain.ErrNotFound
-	}
-	return nil
+	return withChanges(ctx, r.pool, func(q *sqlcgen.Queries, ch *changes) error {
+		n, err := q.DeleteLocation(ctx, sqlcgen.DeleteLocationParams{ID: id, HouseholdID: householdID})
+		if err != nil {
+			return fmt.Errorf("delete location: %w", err)
+		}
+		if n == 0 {
+			return domain.ErrNotFound
+		}
+		ch.add(householdID, domain.ChangeLocation, id, domain.ChangeDeleted, uuid.Nil)
+		return nil
+	})
 }
 
 func toDomainLocation(row sqlcgen.Location, plantCount int64) domain.Location {
