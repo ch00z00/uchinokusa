@@ -30,6 +30,7 @@ func (f *fakeTodayService) List(_ context.Context, _, householdID uuid.UUID, dat
 		Suggestions: []domain.Suggestion{{
 			ID: uuid.MustParse("01920000-0000-7000-8000-0000000000b1"), ProviderID: "weather.v1", Kind: domain.SuggestionAvoid, Action: domain.SuggestionSkipToday,
 			MessageKey: "weather.rain", MessageParams: json.RawMessage(`{"mm":10}`), ReasonKey: "weather.rain.reason", ValidFrom: day, ValidUntil: day,
+			Status: domain.SuggestionPending, TaskID: testTask.ID,
 		}},
 	}
 	if householdID != testHousehold.ID {
@@ -71,8 +72,8 @@ func TestGetToday(t *testing.T) {
 		}
 		item := got.Items[0]
 		const wantPlant = `{"id":"01920000-0000-7000-8000-0000000000d1","locationId":"01920000-0000-7000-8000-0000000000c1","locationName":"リビング","name":"モンステラ"}`
-		const wantSuggestion = `{"action":"skip_today","id":"01920000-0000-7000-8000-0000000000b1","kind":"avoid","messageKey":"weather.rain","messageParams":{"mm":10},` +
-			`"providerId":"weather.v1","reasonKey":"weather.rain.reason","reasonParams":{},"validFrom":"2026-11-04","validUntil":"2026-11-04"}`
+		wantSuggestion := `{"action":"skip_today","id":"01920000-0000-7000-8000-0000000000b1","kind":"avoid","messageKey":"weather.rain","messageParams":{"mm":10},` +
+			`"providerId":"weather.v1","reasonKey":"weather.rain.reason","reasonParams":{},"status":"pending","taskId":"` + testTask.ID.String() + `","validFrom":"2026-11-04","validUntil":"2026-11-04"}`
 		if item.Task.Id != testTask.ID || string(item.Plant) != wantPlant || item.OverdueDays != 2 || len(item.Suggestions) != 1 || string(item.Suggestions[0]) != wantSuggestion {
 			t.Errorf("item = %s\n%s", item.Plant, item.Suggestions)
 		}

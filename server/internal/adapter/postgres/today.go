@@ -70,11 +70,7 @@ func (r *TodayRepository) TaskSuggestions(ctx context.Context, householdID uuid.
 	if err != nil {
 		return nil, fmt.Errorf("list active task suggestions: %w", err)
 	}
-	out := make([]domain.Suggestion, len(rows))
-	for i, row := range rows {
-		out[i] = toDomainSuggestion(row)
-	}
-	return out, nil
+	return toDomainSuggestions(rows)
 }
 
 func toTodayTask(t sqlcgen.CareTask, plantName string, locationID uuid.NullUUID, locationName *string) (domain.TodayTask, error) {
@@ -83,22 +79,4 @@ func toTodayTask(t sqlcgen.CareTask, plantName string, locationID uuid.NullUUID,
 		return domain.TodayTask{}, err
 	}
 	return domain.TodayTask{Task: task, PlantName: plantName, LocationID: locationID.UUID, LocationName: emptyIfNull(locationName)}, nil
-}
-
-func toDomainSuggestion(row sqlcgen.Suggestion) domain.Suggestion {
-	return domain.Suggestion{
-		ID:            row.ID,
-		PlantID:       row.PlantID.UUID,
-		TaskID:        row.TaskID.UUID,
-		ProviderID:    row.ProviderID,
-		Kind:          domain.SuggestionKind(row.Kind),
-		Action:        domain.SuggestionAction(row.Action),
-		ConditionText: emptyIfNull(row.ConditionText),
-		MessageKey:    row.MessageKey,
-		MessageParams: row.MessageParams,
-		ReasonKey:     row.ReasonKey,
-		ReasonParams:  row.ReasonParams,
-		ValidFrom:     civilDate(row.ValidFrom),
-		ValidUntil:    civilDate(row.ValidUntil),
-	}
 }

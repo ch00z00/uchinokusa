@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -88,6 +89,7 @@ func (e CompleteCareTasksItemResultStatus) Valid() bool {
 const (
 	ErrorCodeAlreadyCompleted  ErrorCode = "already_completed"
 	ErrorCodeAlreadyMember     ErrorCode = "already_member"
+	ErrorCodeAlreadyResponded  ErrorCode = "already_responded"
 	ErrorCodeBadRequest        ErrorCode = "bad_request"
 	ErrorCodeConflict          ErrorCode = "conflict"
 	ErrorCodeForbidden         ErrorCode = "forbidden"
@@ -97,6 +99,7 @@ const (
 	ErrorCodeNotFound          ErrorCode = "not_found"
 	ErrorCodeRateLimited       ErrorCode = "rate_limited"
 	ErrorCodeStaleCycle        ErrorCode = "stale_cycle"
+	ErrorCodeSuggestionExpired ErrorCode = "suggestion_expired"
 	ErrorCodeUnauthenticated   ErrorCode = "unauthenticated"
 	ErrorCodeUndoExpired       ErrorCode = "undo_expired"
 	ErrorCodeValidationFailed  ErrorCode = "validation_failed"
@@ -108,6 +111,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeAlreadyCompleted:
 		return true
 	case ErrorCodeAlreadyMember:
+		return true
+	case ErrorCodeAlreadyResponded:
 		return true
 	case ErrorCodeBadRequest:
 		return true
@@ -126,6 +131,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeRateLimited:
 		return true
 	case ErrorCodeStaleCycle:
+		return true
+	case ErrorCodeSuggestionExpired:
 		return true
 	case ErrorCodeUnauthenticated:
 		return true
@@ -321,6 +328,27 @@ func (e SuggestionKind) Valid() bool {
 	}
 }
 
+// Defines values for SuggestionStatus.
+const (
+	SuggestionStatusAccepted  SuggestionStatus = "accepted"
+	SuggestionStatusDismissed SuggestionStatus = "dismissed"
+	SuggestionStatusPending   SuggestionStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the SuggestionStatus enum.
+func (e SuggestionStatus) Valid() bool {
+	switch e {
+	case SuggestionStatusAccepted:
+		return true
+	case SuggestionStatusDismissed:
+		return true
+	case SuggestionStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskStatus.
 const (
 	TaskStatusActive TaskStatus = "active"
@@ -415,6 +443,12 @@ func (e WindowDistance) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// AcceptSuggestionRequest defines model for AcceptSuggestionRequest.
+type AcceptSuggestionRequest struct {
+	// Date 任意。提案日を変えて採用するときの予定日（`YYYY-MM-DD`）。形式の誤りと、`create_task` 以外の提案に送った場合は `fields.date = invalid`
+	Date *string `json:"date,omitempty"`
 }
 
 // CalendarNote defines model for CalendarNote.
@@ -684,6 +718,8 @@ type CompletionConflict struct {
 	// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
 	// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
 	// | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
+	// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
+	// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
 	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
@@ -844,6 +880,8 @@ type Error struct {
 	// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
 	// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
 	// | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
+	// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
+	// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
 	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
@@ -874,6 +912,8 @@ type Error struct {
 // | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
 // | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
 // | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
+// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
+// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
 // | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 // | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 // | `internal` | 500 | サーバーの障害 |
@@ -1247,10 +1287,32 @@ type Suggestion struct {
 	MessageKey    string                 `json:"messageKey"`
 	MessageParams map[string]interface{} `json:"messageParams"`
 
+	// PlantId 対象の植物。植物への提案でなければ、項目がない
+	PlantId *openapi_types.UUID `json:"plantId,omitempty"`
+
+	// ProposedDate `create_task` で作るタスクの予定日
+	//
+	// Examples: 2026-10-26
+	ProposedDate *Date `json:"proposedDate,omitempty"`
+
 	// ProviderId 提案元（例：`repotting.v1`）
 	ProviderId   string                 `json:"providerId"`
 	ReasonKey    string                 `json:"reasonKey"`
 	ReasonParams map[string]interface{} `json:"reasonParams"`
+
+	// RespondedAt 採用・見送りした日時。未回答なら、項目がない
+	//
+	// Examples: 2026-10-26T09:30:00Z
+	RespondedAt *DateTime `json:"respondedAt,omitempty"`
+
+	// Status ユーザーの対応（`pending`：未回答、`accepted`：採用、`dismissed`：見送り）。値は今後も追加されうる
+	Status SuggestionStatus `json:"status"`
+
+	// TaskId 対象のタスク。タスクへの提案でなければ、項目がない
+	TaskId *openapi_types.UUID `json:"taskId,omitempty"`
+
+	// TaskKind `create_task` で作るタスクの作業の種類
+	TaskKind *CareKind `json:"taskKind,omitempty"`
 
 	// ValidFrom 日付（`YYYY-MM-DD`）。世帯の地域や端末のタイムゾーンにおける暦の日付を表す
 	//
@@ -1263,11 +1325,23 @@ type Suggestion struct {
 	ValidUntil *Date `json:"validUntil,omitempty"`
 }
 
+// SuggestionAcceptResult defines model for SuggestionAcceptResult.
+type SuggestionAcceptResult struct {
+	// Suggestion 助言プロバイダの提案。本文と理由は i18n のキーとパラメーターで、文言はアプリが引く
+	Suggestion Suggestion `json:"suggestion"`
+
+	// Task 作ったタスク。タスクを作らない提案では、項目がない
+	Task *CareTask `json:"task,omitempty"`
+}
+
 // SuggestionAction 提案に対してアプリが取れる行動（`create_task`：タスクを作る、`skip_today`：今日はスキップする、`info`：知らせるだけ）。値は今後も追加されうる
 type SuggestionAction string
 
 // SuggestionKind 提案の種類（`do`：実施をすすめる、`avoid`：やらない方がよい、`conditional`：条件つき）。値は今後も追加されうる
 type SuggestionKind string
+
+// SuggestionStatus ユーザーの対応（`pending`：未回答、`accepted`：採用、`dismissed`：見送り）。値は今後も追加されうる
+type SuggestionStatus string
 
 // TaskStatus タスクの状態（`active`：有効、`paused`：一時停止中）。値は今後も追加されうるため、アプリは知らない値を「有効」として扱う
 type TaskStatus string
@@ -1418,6 +1492,9 @@ type PlantId = openapi_types.UUID
 // RecordId defines model for RecordId.
 type RecordId = openapi_types.UUID
 
+// SuggestionId defines model for SuggestionId.
+type SuggestionId = openapi_types.UUID
+
 // TaskId defines model for TaskId.
 type TaskId = openapi_types.UUID
 
@@ -1471,6 +1548,12 @@ type ListPlantsParams struct {
 
 	// Archived `true` なら、アーカイブした植物だけを返す（記録やメモを見返すため）
 	Archived *bool `form:"archived,omitempty" json:"archived,omitempty"`
+}
+
+// ListSuggestionsParams defines parameters for ListSuggestions.
+type ListSuggestionsParams struct {
+	// Date 任意。端末での今日（`YYYY-MM-DD`）。省くと世帯のタイムゾーンでの今日。形式の誤りは `fields.date = invalid`
+	Date *string `form:"date,omitempty" json:"date,omitempty"`
 }
 
 // GetTodayParams defines parameters for GetToday.
@@ -1563,6 +1646,9 @@ type CreateCareTaskJSONRequestBody = CreateCareTaskRequest
 // UpdateCareRecordJSONRequestBody defines body for UpdateCareRecord for application/json ContentType.
 type UpdateCareRecordJSONRequestBody = UpdateCareRecordRequest
 
+// AcceptSuggestionJSONRequestBody defines body for AcceptSuggestion for application/json ContentType.
+type AcceptSuggestionJSONRequestBody = AcceptSuggestionRequest
+
 // UpdateCareTaskJSONRequestBody defines body for UpdateCareTask for application/json ContentType.
 type UpdateCareTaskJSONRequestBody = UpdateCareTaskRequest
 
@@ -1628,6 +1714,9 @@ type ServerInterface interface {
 	// CreatePlant 植物を登録する（編集者以上）
 	// (POST /households/{householdId}/plants)
 	CreatePlant(w http.ResponseWriter, r *http.Request, householdId HouseholdId)
+	// ListSuggestions 世帯の有効な提案（閲覧者も）
+	// (GET /households/{householdId}/suggestions)
+	ListSuggestions(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params ListSuggestionsParams)
 	// GetToday 世帯の今日やること一覧（閲覧者も）
 	// (GET /households/{householdId}/today)
 	GetToday(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params GetTodayParams)
@@ -1709,6 +1798,12 @@ type ServerInterface interface {
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(w http.ResponseWriter, r *http.Request, params SearchSpeciesParams)
+	// AcceptSuggestion 提案を採用する（編集者以上）
+	// (POST /suggestions/{suggestionId}/accept)
+	AcceptSuggestion(w http.ResponseWriter, r *http.Request, suggestionId SuggestionId)
+	// DismissSuggestion 提案を見送る（編集者以上）
+	// (POST /suggestions/{suggestionId}/dismiss)
+	DismissSuggestion(w http.ResponseWriter, r *http.Request, suggestionId SuggestionId)
 	// DeleteCareTask お手入れタスクを削除する（編集者以上）
 	// (DELETE /tasks/{taskId})
 	DeleteCareTask(w http.ResponseWriter, r *http.Request, taskId TaskId)
@@ -2242,6 +2337,48 @@ func (siw *ServerInterfaceWrapper) CreatePlant(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreatePlant(w, r, householdId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSuggestions operation middleware
+func (siw *ServerInterfaceWrapper) ListSuggestions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "householdId" -------------
+	var householdId HouseholdId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "householdId", r.PathValue("householdId"), &householdId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "householdId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSuggestionsParams
+
+	// ------------- Optional query parameter "date" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "date", r.URL.Query(), &params.Date, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "date"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSuggestions(w, r, householdId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3027,6 +3164,58 @@ func (siw *ServerInterfaceWrapper) SearchSpecies(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// AcceptSuggestion operation middleware
+func (siw *ServerInterfaceWrapper) AcceptSuggestion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "suggestionId" -------------
+	var suggestionId SuggestionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "suggestionId", r.PathValue("suggestionId"), &suggestionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "suggestionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcceptSuggestion(w, r, suggestionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DismissSuggestion operation middleware
+func (siw *ServerInterfaceWrapper) DismissSuggestion(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "suggestionId" -------------
+	var suggestionId SuggestionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "suggestionId", r.PathValue("suggestionId"), &suggestionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "suggestionId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DismissSuggestion(w, r, suggestionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteCareTask operation middleware
 func (siw *ServerInterfaceWrapper) DeleteCareTask(w http.ResponseWriter, r *http.Request) {
 
@@ -3352,6 +3541,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/plants/{plantId}/notes", wrapper.CreateNote)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/notes/{noteId}", wrapper.DeleteNote)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/notes/{noteId}", wrapper.UpdateNote)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/households/{householdId}/suggestions", wrapper.ListSuggestions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/suggestions/{suggestionId}/accept", wrapper.AcceptSuggestion)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/suggestions/{suggestionId}/dismiss", wrapper.DismissSuggestion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/plants/{plantId}/calendar", wrapper.GetPlantCalendar)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/species", wrapper.SearchSpecies)
 
@@ -5053,6 +5245,101 @@ func (response CreatePlant422JSONResponse) VisitCreatePlantResponse(w http.Respo
 type CreatePlant500JSONResponse struct{ InternalJSONResponse }
 
 func (response CreatePlant500JSONResponse) VisitCreatePlantResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestionsRequestObject struct {
+	HouseholdId HouseholdId `json:"householdId"`
+	Params      ListSuggestionsParams
+}
+
+type ListSuggestionsResponseObject interface {
+	VisitListSuggestionsResponse(w http.ResponseWriter) error
+}
+
+type ListSuggestions200JSONResponse struct {
+	Suggestions []Suggestion `json:"suggestions"`
+}
+
+func (response ListSuggestions200JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestions400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListSuggestions400JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestions401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response ListSuggestions401JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestions404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListSuggestions404JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestions422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response ListSuggestions422JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSuggestions500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListSuggestions500JSONResponse) VisitListSuggestionsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -7461,6 +7748,233 @@ func (response SearchSpecies500JSONResponse) VisitSearchSpeciesResponse(w http.R
 	return err
 }
 
+type AcceptSuggestionRequestObject struct {
+	SuggestionId SuggestionId `json:"suggestionId"`
+	Body         *AcceptSuggestionJSONRequestBody
+}
+
+type AcceptSuggestionResponseObject interface {
+	VisitAcceptSuggestionResponse(w http.ResponseWriter) error
+}
+
+type AcceptSuggestion200JSONResponse SuggestionAcceptResult
+
+func (response AcceptSuggestion200JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response AcceptSuggestion400JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response AcceptSuggestion401JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AcceptSuggestion403JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response AcceptSuggestion404JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion409JSONResponse struct{ ConflictJSONResponse }
+
+func (response AcceptSuggestion409JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response AcceptSuggestion422JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AcceptSuggestion500JSONResponse struct{ InternalJSONResponse }
+
+func (response AcceptSuggestion500JSONResponse) VisitAcceptSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestionRequestObject struct {
+	SuggestionId SuggestionId `json:"suggestionId"`
+}
+
+type DismissSuggestionResponseObject interface {
+	VisitDismissSuggestionResponse(w http.ResponseWriter) error
+}
+
+type DismissSuggestion200JSONResponse Suggestion
+
+func (response DismissSuggestion200JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DismissSuggestion400JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DismissSuggestion401JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DismissSuggestion403JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DismissSuggestion404JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion409JSONResponse struct{ ConflictJSONResponse }
+
+func (response DismissSuggestion409JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DismissSuggestion500JSONResponse struct{ InternalJSONResponse }
+
+func (response DismissSuggestion500JSONResponse) VisitDismissSuggestionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type DeleteCareTaskRequestObject struct {
 	TaskId TaskId `json:"taskId"`
 }
@@ -8136,6 +8650,9 @@ type StrictServerInterface interface {
 	// CreatePlant 植物を登録する（編集者以上）
 	// (POST /households/{householdId}/plants)
 	CreatePlant(ctx context.Context, request CreatePlantRequestObject) (CreatePlantResponseObject, error)
+	// ListSuggestions 世帯の有効な提案（閲覧者も）
+	// (GET /households/{householdId}/suggestions)
+	ListSuggestions(ctx context.Context, request ListSuggestionsRequestObject) (ListSuggestionsResponseObject, error)
 	// GetToday 世帯の今日やること一覧（閲覧者も）
 	// (GET /households/{householdId}/today)
 	GetToday(ctx context.Context, request GetTodayRequestObject) (GetTodayResponseObject, error)
@@ -8217,6 +8734,12 @@ type StrictServerInterface interface {
 	// SearchSpecies 植物マスタを和名・学名・別名で検索する
 	// (GET /species)
 	SearchSpecies(ctx context.Context, request SearchSpeciesRequestObject) (SearchSpeciesResponseObject, error)
+	// AcceptSuggestion 提案を採用する（編集者以上）
+	// (POST /suggestions/{suggestionId}/accept)
+	AcceptSuggestion(ctx context.Context, request AcceptSuggestionRequestObject) (AcceptSuggestionResponseObject, error)
+	// DismissSuggestion 提案を見送る（編集者以上）
+	// (POST /suggestions/{suggestionId}/dismiss)
+	DismissSuggestion(ctx context.Context, request DismissSuggestionRequestObject) (DismissSuggestionResponseObject, error)
 	// DeleteCareTask お手入れタスクを削除する（編集者以上）
 	// (DELETE /tasks/{taskId})
 	DeleteCareTask(ctx context.Context, request DeleteCareTaskRequestObject) (DeleteCareTaskResponseObject, error)
@@ -8800,6 +9323,33 @@ func (sh *strictHandler) CreatePlant(w http.ResponseWriter, r *http.Request, hou
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreatePlantResponseObject); ok {
 		if err := validResponse.VisitCreatePlantResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSuggestions operation middleware
+func (sh *strictHandler) ListSuggestions(w http.ResponseWriter, r *http.Request, householdId HouseholdId, params ListSuggestionsParams) {
+	var request ListSuggestionsRequestObject
+
+	request.HouseholdId = householdId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSuggestions(ctx, request.(ListSuggestionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSuggestions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSuggestionsResponseObject); ok {
+		if err := validResponse.VisitListSuggestionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -9556,6 +10106,68 @@ func (sh *strictHandler) SearchSpecies(w http.ResponseWriter, r *http.Request, p
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchSpeciesResponseObject); ok {
 		if err := validResponse.VisitSearchSpeciesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AcceptSuggestion operation middleware
+func (sh *strictHandler) AcceptSuggestion(w http.ResponseWriter, r *http.Request, suggestionId SuggestionId) {
+	var request AcceptSuggestionRequestObject
+
+	request.SuggestionId = suggestionId
+
+	var body AcceptSuggestionJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AcceptSuggestion(ctx, request.(AcceptSuggestionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AcceptSuggestion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AcceptSuggestionResponseObject); ok {
+		if err := validResponse.VisitAcceptSuggestionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DismissSuggestion operation middleware
+func (sh *strictHandler) DismissSuggestion(w http.ResponseWriter, r *http.Request, suggestionId SuggestionId) {
+	var request DismissSuggestionRequestObject
+
+	request.SuggestionId = suggestionId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DismissSuggestion(ctx, request.(DismissSuggestionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DismissSuggestion")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DismissSuggestionResponseObject); ok {
+		if err := validResponse.VisitDismissSuggestionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

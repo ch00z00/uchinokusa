@@ -171,27 +171,30 @@ type Species struct {
 }
 
 type Suggestion struct {
-	ID            uuid.UUID
-	HouseholdID   uuid.UUID
-	PlantID       uuid.NullUUID
-	TaskID        uuid.NullUUID
-	ProviderID    string
-	Kind          string
-	Action        string
-	TaskKind      *string
-	ProposedDate  pgtype.Date
-	ConditionText *string
-	MessageKey    string
-	MessageParams []byte
-	ReasonKey     string
-	ReasonParams  []byte
-	ValidFrom     pgtype.Date
-	ValidUntil    pgtype.Date
-	Status        string
-	RespondedBy   uuid.NullUUID
-	RespondedAt   *time.Time
-	DedupeKey     string
-	CreatedAt     time.Time
+	ID                    uuid.UUID
+	HouseholdID           uuid.UUID
+	PlantID               uuid.NullUUID
+	TaskID                uuid.NullUUID
+	ProviderID            string
+	Kind                  string
+	Action                string
+	TaskKind              *string
+	ProposedDate          pgtype.Date
+	ConditionText         *string
+	MessageKey            string
+	MessageParams         []byte
+	ReasonKey             string
+	ReasonParams          []byte
+	ValidFrom             pgtype.Date
+	ValidUntil            pgtype.Date
+	Status                string
+	RespondedBy           uuid.NullUUID
+	RespondedAt           *time.Time
+	DedupeKey             string
+	CreatedAt             time.Time
+	TaskIntervalValue     pgtype.Int4
+	TaskIntervalUnit      *string
+	TaskSeasonalIntervals []byte
 }
 
 type User struct {

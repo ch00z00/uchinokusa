@@ -65,11 +65,16 @@ func (r *CareTaskRepository) List(ctx context.Context, householdID, plantID uuid
 
 // Create は、植物にタスクを作る。空文字の作業名・実行条件・メモは NULL（未設定）にする。
 func (r *CareTaskRepository) Create(ctx context.Context, householdID, plantID uuid.UUID, d domain.CareTaskDraft) (domain.CareTask, error) {
+	return createCareTask(ctx, r.q, householdID, plantID, d)
+}
+
+// createCareTask は、タスクを作る。提案の採用（SuggestionRepository.Accept）のトランザクションの中でも使う。
+func createCareTask(ctx context.Context, q *sqlcgen.Queries, householdID, plantID uuid.UUID, d domain.CareTaskDraft) (domain.CareTask, error) {
 	seasonal, err := marshalSeasonal(d.Schedule.Seasonal)
 	if err != nil {
 		return domain.CareTask{}, err
 	}
-	row, err := r.q.CreateCareTask(ctx, sqlcgen.CreateCareTaskParams{
+	row, err := q.CreateCareTask(ctx, sqlcgen.CreateCareTaskParams{
 		HouseholdID:       householdID,
 		PlantID:           plantID,
 		Kind:              string(d.Kind),
@@ -202,14 +207,22 @@ func marshalSeasonal(s domain.SeasonalIntervals) ([]byte, error) {
 	return b, nil
 }
 
-func toDomainCareTask(row sqlcgen.CareTask) (domain.CareTask, error) {
+func unmarshalSeasonal(b []byte) (domain.SeasonalIntervals, error) {
 	var seasonalJSON map[string]intervalJSON
-	if err := json.Unmarshal(row.SeasonalIntervals, &seasonalJSON); err != nil {
-		return domain.CareTask{}, fmt.Errorf("care task %s: unmarshal seasonal intervals: %w", row.ID, err)
+	if err := json.Unmarshal(b, &seasonalJSON); err != nil {
+		return nil, err
 	}
 	seasonal := make(domain.SeasonalIntervals, len(seasonalJSON))
 	for season, i := range seasonalJSON {
 		seasonal[domain.Season(season)] = domain.Interval{Value: i.Value, Unit: domain.IntervalUnit(i.Unit)}
+	}
+	return seasonal, nil
+}
+
+func toDomainCareTask(row sqlcgen.CareTask) (domain.CareTask, error) {
+	seasonal, err := unmarshalSeasonal(row.SeasonalIntervals)
+	if err != nil {
+		return domain.CareTask{}, fmt.Errorf("care task %s: unmarshal seasonal intervals: %w", row.ID, err)
 	}
 	return domain.CareTask{
 		ID:          row.ID,

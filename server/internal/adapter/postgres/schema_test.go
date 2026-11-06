@@ -149,8 +149,8 @@ func TestUniqueConstraints(t *testing.T) {
 				hh := f.household()
 				plant := f.plant(hh, nil)
 				return func() error {
-					return f.try(`INSERT INTO suggestions (household_id, plant_id, provider_id, kind, action, message_key, reason_key, valid_from, dedupe_key)
-						VALUES ($1, $2::uuid, 'repotting.v1', 'do', 'create_task', 'm', 'r', '2026-10-26', 'repotting:initial:' || $2::text)`, hh, plant)
+					return f.try(`INSERT INTO suggestions (household_id, plant_id, provider_id, kind, action, task_kind, task_interval_value, task_interval_unit, message_key, reason_key, valid_from, dedupe_key)
+						VALUES ($1, $2::uuid, 'repotting.v1', 'do', 'create_task', 'repotting', 12, 'month', 'm', 'r', '2026-10-26', 'repotting:initial:' || $2::text)`, hh, plant)
 				}
 			},
 		},
@@ -365,6 +365,9 @@ func TestCheckConstraints(t *testing.T) {
 			`INSERT INTO notes (household_id, plant_id, author_display_name, body) VALUES ($1, $2, 'A', repeat('あ', 2001))`, []any{hh, plant}},
 		{"空のメモは作れない",
 			`INSERT INTO notes (household_id, plant_id, author_display_name, body) VALUES ($1, $2, 'A', '')`, []any{hh, plant}},
+		{"タスクを作る提案は、作るタスクの周期が必須",
+			`INSERT INTO suggestions (household_id, plant_id, provider_id, kind, action, task_kind, message_key, reason_key, valid_from, dedupe_key)
+				VALUES ($1, $2, 'repotting.v1', 'do', 'create_task', 'repotting', 'm', 'r', '2026-10-26', 'k')`, []any{hh, plant}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -505,8 +508,8 @@ func (f *fixture) note(hh, plant string) string {
 
 func (f *fixture) suggestion(hh, plant string) string {
 	f.t.Helper()
-	return f.id(`INSERT INTO suggestions (household_id, plant_id, provider_id, kind, action, message_key, reason_key, valid_from, dedupe_key)
-		VALUES ($1, $2::uuid, 'repotting.v1', 'do', 'create_task', 'm', 'r', '2026-10-26', 'repotting:initial:' || $2::text)`, hh, plant)
+	return f.id(`INSERT INTO suggestions (household_id, plant_id, provider_id, kind, action, task_kind, task_interval_value, task_interval_unit, message_key, reason_key, valid_from, dedupe_key)
+		VALUES ($1, $2::uuid, 'repotting.v1', 'do', 'create_task', 'repotting', 12, 'month', 'm', 'r', '2026-10-26', 'repotting:initial:' || $2::text)`, hh, plant)
 }
 
 // seedHousehold は、householdTables のすべてに1行以上のデータを入れる。

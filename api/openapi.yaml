@@ -1196,6 +1196,92 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "500": { $ref: "#/components/responses/Internal" }
 
+  /households/{householdId}/suggestions:
+    parameters:
+      - $ref: "#/components/parameters/HouseholdId"
+    get:
+      operationId: listSuggestions
+      summary: 世帯の有効な提案（閲覧者も）
+      description: |
+        その日に有効な（未回答で、有効期間の中の）提案を、作った順に返す。種類（実施をすすめる・やらない方がよい・条件つき）を問わず返す。
+        条件つきの提案は、`conditionText` の条件と本文の行動をあわせて示し、あてはまるかの判断はユーザーに委ねる（要件19-4）
+      tags: [suggestion]
+      parameters:
+        - name: date
+          in: query
+          description: 任意。端末での今日（`YYYY-MM-DD`）。省くと世帯のタイムゾーンでの今日。形式の誤りは `fields.date = invalid`
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 有効な提案
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestions]
+                properties:
+                  suggestions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Suggestion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /suggestions/{suggestionId}/accept:
+    parameters:
+      - $ref: "#/components/parameters/SuggestionId"
+    post:
+      operationId: acceptSuggestion
+      summary: 提案を採用する（編集者以上）
+      description: |
+        `create_task` の提案は、提案日（`date` を送れば、その日）を予定日にしたタスクを作る（要件17-4・17-5）。
+        ほかの行動の提案は、採用したことを記録するだけ（`skip_today` のスキップは、アプリが記録の API で行う）。`date` は `create_task` の提案だけで送れる。
+        採用・見送り済みなら `409 already_responded`、有効期間を過ぎていれば `409 suggestion_expired`
+      tags: [suggestion]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptSuggestionRequest" }
+      responses:
+        "200":
+          description: 採用した提案と、作ったタスク（タスクを作らない提案では、項目がない）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuggestionAcceptResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
+
+  /suggestions/{suggestionId}/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/SuggestionId"
+    post:
+      operationId: dismissSuggestion
+      summary: 提案を見送る（編集者以上）
+      description: |
+        同じ提案（重複防止のキーが同じもの）は、このあと作らない（要件17-6）。採用・見送り済みなら `409 already_responded`
+      tags: [suggestion]
+      responses:
+        "200":
+          description: 見送った提案
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Suggestion" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/Internal" }
+
   /plants/{plantId}/calendar:
     parameters:
       - $ref: "#/components/parameters/PlantId"
@@ -1296,6 +1382,14 @@ components:
       in: path
       required: true
       description: 植物の ID。所属していない世帯の植物の場合は 404 を返す（存在を明かさない）
+      schema:
+        type: string
+        format: uuid
+    SuggestionId:
+      name: suggestionId
+      in: path
+      required: true
+      description: 提案の ID。所属していない世帯の提案の場合は 404 を返す（存在を明かさない）
       schema:
         type: string
         format: uuid
@@ -2045,9 +2139,17 @@ components:
     Suggestion:
       description: 助言プロバイダの提案。本文と理由は i18n のキーとパラメーターで、文言はアプリが引く
       type: object
-      required: [id, providerId, kind, action, messageKey, messageParams, reasonKey, reasonParams, validFrom]
+      required: [id, providerId, kind, action, messageKey, messageParams, reasonKey, reasonParams, validFrom, status]
       properties:
         id:
+          type: string
+          format: uuid
+        plantId:
+          description: 対象の植物。植物への提案でなければ、項目がない
+          type: string
+          format: uuid
+        taskId:
+          description: 対象のタスク。タスクへの提案でなければ、項目がない
           type: string
           format: uuid
         providerId:
@@ -2057,6 +2159,12 @@ components:
           $ref: "#/components/schemas/SuggestionKind"
         action:
           $ref: "#/components/schemas/SuggestionAction"
+        taskKind:
+          description: "`create_task` で作るタスクの作業の種類"
+          $ref: "#/components/schemas/CareKind"
+        proposedDate:
+          description: "`create_task` で作るタスクの予定日"
+          $ref: "#/components/schemas/Date"
         conditionText:
           description: 条件つきの提案の「もし〜なら」
           type: string
@@ -2075,6 +2183,33 @@ components:
         validUntil:
           description: 有効期間の最後の日。期限がなければ、項目がない
           $ref: "#/components/schemas/Date"
+        status:
+          $ref: "#/components/schemas/SuggestionStatus"
+        respondedAt:
+          description: 採用・見送りした日時。未回答なら、項目がない
+          $ref: "#/components/schemas/DateTime"
+
+    SuggestionStatus:
+      description: ユーザーの対応（`pending`：未回答、`accepted`：採用、`dismissed`：見送り）。値は今後も追加されうる
+      type: string
+      enum: [pending, accepted, dismissed]
+
+    AcceptSuggestionRequest:
+      type: object
+      properties:
+        date:
+          description: 任意。提案日を変えて採用するときの予定日（`YYYY-MM-DD`）。形式の誤りと、`create_task` 以外の提案に送った場合は `fields.date = invalid`
+          type: string
+
+    SuggestionAcceptResult:
+      type: object
+      required: [suggestion]
+      properties:
+        suggestion:
+          $ref: "#/components/schemas/Suggestion"
+        task:
+          description: 作ったタスク。タスクを作らない提案では、項目がない
+          $ref: "#/components/schemas/CareTask"
 
     Note:
       description: 植物のメモ。作成者の名前は、作成の時点の値
@@ -2369,6 +2504,8 @@ components:
         | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
         | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
         | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
+        | `already_responded` | 409 | 提案はすでに採用・見送りされている |
+        | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
         | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
         | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
         | `internal` | 500 | サーバーの障害 |
@@ -2385,6 +2522,8 @@ components:
         - already_completed
         - stale_cycle
         - undo_expired
+        - already_responded
+        - suggestion_expired
         - invitation_invalid
         - rate_limited
         - internal

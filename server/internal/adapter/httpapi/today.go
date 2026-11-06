@@ -49,26 +49,6 @@ func toTodayItem(item domain.TodayItem) oapi.TodayItem {
 	return out
 }
 
-func toSuggestion(sg domain.Suggestion) oapi.Suggestion {
-	out := oapi.Suggestion{
-		Id:            sg.ID,
-		ProviderId:    sg.ProviderID,
-		Kind:          oapi.SuggestionKind(sg.Kind),
-		Action:        oapi.SuggestionAction(sg.Action),
-		ConditionText: omitEmptyAs[string](sg.ConditionText),
-		MessageKey:    sg.MessageKey,
-		MessageParams: toParams(sg.MessageParams),
-		ReasonKey:     sg.ReasonKey,
-		ReasonParams:  toParams(sg.ReasonParams),
-		ValidFrom:     toDate(sg.ValidFrom),
-	}
-	if !sg.ValidUntil.IsZero() {
-		until := toDate(sg.ValidUntil)
-		out.ValidUntil = &until
-	}
-	return out
-}
-
 // toParams は、i18n のパラメーター（DB の jsonb）を、レスポンスのオブジェクトにする。空や読めない値は {} にする。
 func toParams(raw json.RawMessage) map[string]any {
 	params := map[string]any{}

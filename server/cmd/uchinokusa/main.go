@@ -28,6 +28,7 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/seedfile"
+	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
@@ -133,6 +134,11 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	taskRepo := postgres.NewCareTaskRepository(pool)
 	plantRepo := postgres.NewPlantRepository(pool)
+	// 助言プロバイダ。植え替えのプロバイダはタスク 10.2 で登録する
+	advisors, err := advisor.NewRegistry()
+	if err != nil {
+		return err
+	}
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,
@@ -148,6 +154,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Today:       app.NewTodayService(postgres.NewTodayRepository(pool), authz, time.Now),
 		Notes:       app.NewNoteService(postgres.NewNoteRepository(pool), plantRepo, authz),
 		Calendar:    app.NewCalendarService(postgres.NewCalendarRepository(pool), authz, time.Now),
+		Suggestions: app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger),
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

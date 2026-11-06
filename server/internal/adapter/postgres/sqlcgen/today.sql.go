@@ -65,7 +65,7 @@ func (q *Queries) GetNextTask(ctx context.Context, arg GetNextTaskParams) (GetNe
 }
 
 const listActiveTaskSuggestions = `-- name: ListActiveTaskSuggestions :many
-SELECT id, household_id, plant_id, task_id, provider_id, kind, action, task_kind, proposed_date, condition_text, message_key, message_params, reason_key, reason_params, valid_from, valid_until, status, responded_by, responded_at, dedupe_key, created_at FROM suggestions
+SELECT id, household_id, plant_id, task_id, provider_id, kind, action, task_kind, proposed_date, condition_text, message_key, message_params, reason_key, reason_params, valid_from, valid_until, status, responded_by, responded_at, dedupe_key, created_at, task_interval_value, task_interval_unit, task_seasonal_intervals FROM suggestions
 WHERE household_id = $1 AND task_id = ANY($2::uuid[])
   AND status = 'pending' AND kind IN ('avoid', 'conditional')
   AND valid_from <= $3::date AND (valid_until IS NULL OR valid_until >= $3::date)
@@ -110,6 +110,9 @@ func (q *Queries) ListActiveTaskSuggestions(ctx context.Context, arg ListActiveT
 			&i.RespondedAt,
 			&i.DedupeKey,
 			&i.CreatedAt,
+			&i.TaskIntervalValue,
+			&i.TaskIntervalUnit,
+			&i.TaskSeasonalIntervals,
 		); err != nil {
 			return nil, err
 		}

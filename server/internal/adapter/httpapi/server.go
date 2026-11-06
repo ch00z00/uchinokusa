@@ -24,6 +24,7 @@ type server struct {
 	today       TodayService
 	notes       NoteService
 	calendar    CalendarService
+	suggestions SuggestionService
 }
 
 var _ oapi.StrictServerInterface = (*server)(nil)
