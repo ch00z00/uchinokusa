@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ch00z00/uchinokusa/server/db"
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/apple"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/firebase"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/gcp"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
@@ -148,6 +149,22 @@ func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger 
 	return runner, verifier, nil
 }
 
+// newAppleRevoker は、Sign in with Apple のトークンを失効させる仕組みを作る。設定（APPLE_*）がなければ nil を返す
+// （Apple でサインインしたユーザーのアカウントは削除できない。ローカルの開発）。
+// 型のある nil をインターフェースに入れると nil と比べられなくなるので、インターフェースの型で返す。
+func newAppleRevoker(cfg config.Config, logger *slog.Logger) (app.AppleRevoker, error) {
+	if cfg.Apple == nil {
+		logger.Warn("apple token revocation is disabled (APPLE_* is not set); apple users cannot delete their accounts")
+		return nil, nil
+	}
+	key, err := apple.ParsePrivateKey([]byte(cfg.Apple.PrivateKey))
+	if err != nil {
+		return nil, err
+	}
+	return apple.NewRevoker(apple.Config{TeamID: cfg.Apple.TeamID, KeyID: cfg.Apple.KeyID, ClientID: cfg.Apple.ClientID, PrivateKey: key},
+		&http.Client{Timeout: 10 * time.Second}, time.Now), nil
+}
+
 // serve は、HTTP サーバーを起動し、ctx が終わったらグレースフルに停止する。
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if cfg.InviteBaseURL == nil {
@@ -165,6 +182,10 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
+	appleRevoker, err := newAppleRevoker(cfg, logger)
+	if err != nil {
+		return err
+	}
 	authz := app.NewAuthorizer(postgres.NewMembershipRepository(pool))
 	taskRepo := postgres.NewCareTaskRepository(pool)
 	plantRepo := postgres.NewPlantRepository(pool)
@@ -182,7 +203,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,
-		Accounts:    app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool)),
+		Accounts:    app.NewAccountService(postgres.NewUserRepository(pool), postgres.NewDeviceRepository(pool), verifier, appleRevoker),
 		Households:  app.NewHouseholdService(postgres.NewHouseholdRepository(pool), authz),
 		Members:     app.NewMembershipService(postgres.NewMemberRepository(pool), authz),
 		Invitations: app.NewInvitationService(postgres.NewInvitationRepository(pool), authz, cfg.InviteBaseURL),

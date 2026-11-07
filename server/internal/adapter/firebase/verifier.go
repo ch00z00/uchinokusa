@@ -54,3 +54,12 @@ func (v *Verifier) Verify(ctx context.Context, idToken string) (domain.Identity,
 		Provider: token.Firebase.SignInProvider,
 	}, nil
 }
+
+// DeleteUser は、Firebase Auth のユーザーを削除する（アカウントの削除。要件1-6）。
+// すでに消えていればエラーにしない（削除のやり直しで呼ばれても失敗しないように）。
+func (v *Verifier) DeleteUser(ctx context.Context, uid string) error {
+	if err := v.client.DeleteUser(ctx, uid); err != nil && !auth.IsUserNotFound(err) {
+		return fmt.Errorf("firebase: delete user: %w", err)
+	}
+	return nil
+}

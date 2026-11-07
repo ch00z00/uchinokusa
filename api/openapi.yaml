@@ -59,6 +59,35 @@ paths:
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "422": { $ref: "#/components/responses/ValidationFailed" }
         "500": { $ref: "#/components/responses/Internal" }
+    delete:
+      operationId: deleteMe
+      summary: アカウントを削除する
+      description: |
+        アカウントと個人情報を削除し、所属するすべての世帯から外す（要件1-6）。
+        - 自分だけがメンバーの世帯は、植物・記録などを含めて削除する。ほかの世帯からは外し、その世帯の記録とメモの作業者名は「退会したユーザー」にする
+        - ほかにメンバーのいる世帯の唯一のオーナーなら、何も消さずに `409 owner_transfer_required` と、オーナー権限を移すべき世帯を返す（要件1-7）
+        - Apple でサインインしたユーザーは、削除の直前に Apple で再認証し、受け取った認可コード（authorizationCode）を送る。
+          ないときは `fields.appleAuthorizationCode = required`、期限切れ・使用済みのときは `invalid`（再認証し直す）
+        - Firebase Auth のユーザーもサーバーで削除する。アプリは、成功したら端末のサインイン情報を破棄する
+        - ほかのメンバーには、メンバーの削除の変更イベントが届く。作業者名の変更のイベントは出ないので、アプリはメンバーの削除を受けたら世帯のデータを取り直す
+      tags: [account]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteMeRequest" }
+      responses:
+        "204":
+          description: 削除した
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: ほかにメンバーのいる世帯の唯一のオーナーである（`owner_transfer_required`）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OwnerTransferRequired" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "500": { $ref: "#/components/responses/Internal" }
 
   /me/devices:
     post:
@@ -1431,6 +1460,35 @@ components:
           description: 前後の空白を除いて1〜30文字。空の場合は `fields.displayName = required`、長すぎる場合は `too_long`
           type: string
 
+    DeleteMeRequest:
+      type: object
+      properties:
+        appleAuthorizationCode:
+          description: Apple でサインインしたユーザーだけ必須。削除の直前に Apple で再認証して受け取った認可コード（有効期限は5分、1回だけ使える）
+          type: string
+
+    OwnerTransferRequired:
+      description: |
+        オーナー権限を移さないとアカウントを削除できない。アプリは、世帯ごとにオーナー権限を移す画面へ案内する（要件1-7）
+      type: object
+      required: [code, message, households]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+        households:
+          description: ほかにメンバーがいて、自分が唯一のオーナーの世帯
+          type: array
+          items: { $ref: "#/components/schemas/HouseholdSummary" }
+
+    HouseholdSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
     Role:
       description: 世帯でのロール。値は今後も追加されうるため、アプリは知らない値を「閲覧者」として扱う
       type: string
@@ -2506,6 +2564,7 @@ components:
         | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
         | `already_responded` | 409 | 提案はすでに採用・見送りされている |
         | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
+        | `owner_transfer_required` | 409 | ほかにメンバーのいる世帯の唯一のオーナーなので、アカウントを削除できない（先にオーナー権限を移す） |
         | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
         | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
         | `internal` | 500 | サーバーの障害 |
@@ -2524,6 +2583,7 @@ components:
         - undo_expired
         - already_responded
         - suggestion_expired
+        - owner_transfer_required
         - invitation_invalid
         - rate_limited
         - internal

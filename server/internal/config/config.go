@@ -33,6 +33,17 @@ type Config struct {
 	// 両方そろったときだけ、ジョブのエンドポイントを登録する。
 	JobAudience       string
 	JobServiceAccount string
+	// Apple は、Sign in with Apple のトークンの失効に使う鍵とアプリの情報である（APPLE_TEAM_ID・APPLE_KEY_ID・APPLE_CLIENT_ID・APPLE_PRIVATE_KEY）。
+	// すべてそろったときだけ設定し、なければ nil（Apple でサインインしたユーザーのアカウントは削除できない）。
+	Apple *Apple
+}
+
+// Apple は、Sign in with Apple の REST API の設定である。
+type Apple struct {
+	TeamID     string
+	KeyID      string
+	ClientID   string // アプリの Bundle ID
+	PrivateKey string // .p8 ファイルの中身（PEM）。Cloud Run では Secret Manager から渡す
 }
 
 // Load は、getenv（通常は os.Getenv）から設定を読み込む。
@@ -84,6 +95,25 @@ func Load(getenv func(string) string) (Config, error) {
 		errs = append(errs, errors.New("JOB_SERVICE_ACCOUNT is required when JOB_AUDIENCE is set"))
 	case cfg.JobAudience == "" && cfg.JobServiceAccount != "":
 		errs = append(errs, errors.New("JOB_AUDIENCE is required when JOB_SERVICE_ACCOUNT is set"))
+	}
+
+	apple := map[string]string{
+		"APPLE_TEAM_ID": getenv("APPLE_TEAM_ID"), "APPLE_KEY_ID": getenv("APPLE_KEY_ID"),
+		"APPLE_CLIENT_ID": getenv("APPLE_CLIENT_ID"), "APPLE_PRIVATE_KEY": getenv("APPLE_PRIVATE_KEY"),
+	}
+	var missing []string
+	for _, key := range []string{"APPLE_TEAM_ID", "APPLE_KEY_ID", "APPLE_CLIENT_ID", "APPLE_PRIVATE_KEY"} {
+		if apple[key] == "" {
+			missing = append(missing, key)
+		}
+	}
+	switch len(missing) {
+	case 0:
+		cfg.Apple = &Apple{TeamID: apple["APPLE_TEAM_ID"], KeyID: apple["APPLE_KEY_ID"], ClientID: apple["APPLE_CLIENT_ID"], PrivateKey: apple["APPLE_PRIVATE_KEY"]}
+	case len(apple):
+		// すべて未設定なら、Apple を使わない
+	default:
+		errs = append(errs, fmt.Errorf("%s are required when any APPLE_* is set", strings.Join(missing, ", ")))
 	}
 
 	if err := errors.Join(errs...); err != nil {

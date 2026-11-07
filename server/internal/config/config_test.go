@@ -42,6 +42,10 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.JobAudience != "" || cfg.JobServiceAccount != "" {
 		t.Errorf("Job = %q, %q, want empty", cfg.JobAudience, cfg.JobServiceAccount)
 	}
+	// Apple の設定がなければ、Apple でサインインしたユーザーのアカウントは削除できない（ローカルの開発）
+	if cfg.Apple != nil {
+		t.Errorf("Apple = %+v, want nil", cfg.Apple)
+	}
 }
 
 func TestLoad_AllValues(t *testing.T) {
@@ -57,6 +61,10 @@ func TestLoad_AllValues(t *testing.T) {
 		"INVITE_BASE_URL":                "https://invite.uchinokusa.app",
 		"JOB_AUDIENCE":                   "https://api.uchinokusa.app",
 		"JOB_SERVICE_ACCOUNT":            "scheduler@uchinokusa.iam.gserviceaccount.com",
+		"APPLE_TEAM_ID":                  "TEAM123",
+		"APPLE_KEY_ID":                   "KEY123",
+		"APPLE_CLIENT_ID":                "app.uchinokusa",
+		"APPLE_PRIVATE_KEY":              "-----BEGIN PRIVATE KEY-----",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -72,6 +80,7 @@ func TestLoad_AllValues(t *testing.T) {
 		InviteBaseURL:           &url.URL{Scheme: "https", Host: "invite.uchinokusa.app"},
 		JobAudience:             "https://api.uchinokusa.app",
 		JobServiceAccount:       "scheduler@uchinokusa.iam.gserviceaccount.com",
+		Apple:                   &config.Apple{TeamID: "TEAM123", KeyID: "KEY123", ClientID: "app.uchinokusa", PrivateKey: "-----BEGIN PRIVATE KEY-----"},
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -131,6 +140,12 @@ func TestLoad_Errors(t *testing.T) {
 			name:    "JOB_SERVICE_ACCOUNT だけがある",
 			env:     map[string]string{"DATABASE_URL": "postgres://x", "JOB_SERVICE_ACCOUNT": "scheduler@uchinokusa.iam.gserviceaccount.com"},
 			wantMsg: []string{"JOB_AUDIENCE"},
+		},
+		{
+			// Apple の設定は、すべてそろえる
+			name:    "Apple の設定が一部だけ",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "APPLE_TEAM_ID": "TEAM123", "APPLE_CLIENT_ID": "app.uchinokusa"},
+			wantMsg: []string{"APPLE_KEY_ID", "APPLE_PRIVATE_KEY"},
 		},
 		{
 			// 複数の誤りは、1回でまとめて知らせる

@@ -41,6 +41,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/me
 | `INVITE_BASE_URL` | `serve` のみ ○ | — | 招待リンクのドメイン（例：`https://invite.example.com`）。招待の URL は `<この値>/i/<トークン>` になる |
 | `JOB_AUDIENCE` | | — | Cloud Scheduler がジョブ（`POST /internal/jobs/{name}`）を呼ぶときの OIDC トークンの宛先（例：`https://api.example.com`）。Cloud Scheduler のジョブの「対象」にも同じ値を設定する |
 | `JOB_SERVICE_ACCOUNT` | `JOB_AUDIENCE` があれば ○ | — | ジョブを呼んでよいサービスアカウントのメールアドレス。2つとも未設定なら、ジョブのエンドポイントは登録しない |
+| `APPLE_TEAM_ID`・`APPLE_KEY_ID`・`APPLE_CLIENT_ID`・`APPLE_PRIVATE_KEY` | どれかがあれば4つとも ○ | — | Sign in with Apple のトークンの失効（アカウントの削除）に使う。チームの ID・鍵の ID・アプリの Bundle ID・鍵（.p8）の中身。4つとも未設定なら、Apple でサインインしたユーザーはアカウントを削除できない |
 
 ## API 定義からのコードの生成
 API 定義は `api/openapi.yaml` が唯一の正である（`docs/decisions/0001`）。定義を変えたら、リポジトリのルートで生成し直す。

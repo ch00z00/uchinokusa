@@ -24,6 +24,8 @@ type AccountService interface {
 	UpdateDisplayName(ctx context.Context, userID uuid.UUID, name string) (domain.User, error)
 	RegisterDevice(ctx context.Context, userID uuid.UUID, fcmToken, platform, timeZone string) (domain.Device, error)
 	UnregisterDevice(ctx context.Context, userID, deviceID uuid.UUID) error
+	// DeleteAccount は、アカウントを削除する。Apple でサインインしたユーザーは、Apple の認可コードが要る
+	DeleteAccount(ctx context.Context, userID uuid.UUID, appleAuthorizationCode string) error
 }
 
 type userKey struct{}

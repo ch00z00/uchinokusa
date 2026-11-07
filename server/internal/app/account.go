@@ -17,6 +17,19 @@ type UserRepository interface {
 	GetOrCreate(ctx context.Context, id domain.Identity) (domain.User, error)
 	// UpdateDisplayName は、表示名を変更する。ユーザーがいなければ domain.ErrNotFound を返す。
 	UpdateDisplayName(ctx context.Context, userID uuid.UUID, name string) (domain.User, error)
+	// Delete は、1つのトランザクションでアカウントを削除し、コミットの直前に beforeCommit を呼ぶ（失敗したらロールバックする）。
+	// ほかにメンバーのいる世帯の唯一のオーナーなら、*domain.OwnerTransferRequiredError を返す。
+	Delete(ctx context.Context, userID uuid.UUID, beforeCommit func(context.Context, domain.User) error) error
+}
+
+// IdentityDeleter は、認証プロバイダ（Firebase Auth）のユーザーを削除する（実装は adapter/firebase）。
+type IdentityDeleter interface {
+	DeleteUser(ctx context.Context, uid string) error
+}
+
+// AppleRevoker は、Sign in with Apple のトークンを失効させる（実装は adapter/apple）。
+type AppleRevoker interface {
+	Revoke(ctx context.Context, authorizationCode string) error
 }
 
 // DeviceRepository は、プッシュ通知の送信先となる端末の保存先である（実装は adapter/postgres）。
@@ -29,12 +42,40 @@ type DeviceRepository interface {
 
 // AccountService は、サインインしたユーザーの特定と、プロフィール・端末の変更を扱う（要件1）。
 type AccountService struct {
-	users   UserRepository
-	devices DeviceRepository
+	users      UserRepository
+	devices    DeviceRepository
+	identities IdentityDeleter
+	apple      AppleRevoker // nil なら、Apple でサインインしたユーザーは削除できない
 }
 
-func NewAccountService(users UserRepository, devices DeviceRepository) *AccountService {
-	return &AccountService{users: users, devices: devices}
+func NewAccountService(users UserRepository, devices DeviceRepository, identities IdentityDeleter, apple AppleRevoker) *AccountService {
+	return &AccountService{users: users, devices: devices, identities: identities, apple: apple}
+}
+
+// appleProvider は、Sign in with Apple でサインインしたユーザーの認証プロバイダ（Firebase の sign_in_provider）である。
+const appleProvider = "apple.com"
+
+// DeleteAccount は、アカウントを削除する（要件1-6・1-7、docs/decisions/0035）。
+// Apple でサインインしたユーザーは、アプリが削除の直前に Apple で受け取った認可コードで、Apple のトークンを失効させる。
+// Apple の失効と Firebase のユーザーの削除は、取り消せないので、データベースの処理が済んだあと、コミットの直前に行う。
+// どちらかが失敗したら、何も消さずにエラーを返す（やり直せる）。
+func (s *AccountService) DeleteAccount(ctx context.Context, userID uuid.UUID, appleAuthorizationCode string) error {
+	code := strings.TrimSpace(appleAuthorizationCode)
+	return s.users.Delete(ctx, userID, func(ctx context.Context, u domain.User) error {
+		if u.AuthProvider == appleProvider {
+			if code == "" {
+				return &domain.ValidationError{Fields: map[string]string{"appleAuthorizationCode": "required"}}
+			}
+			if s.apple == nil {
+				// 消してから失効を忘れると取り返しがつかないので、設定がなければ消さない（App Store の審査の要件）
+				return errors.New("account: apple token revocation is not configured")
+			}
+			if err := s.apple.Revoke(ctx, code); err != nil {
+				return err
+			}
+		}
+		return s.identities.DeleteUser(ctx, u.FirebaseUID)
+	})
 }
 
 // SignIn は、認証済みの Identity に対応するユーザーを返す。初めてのユーザーなら作る（要件1-2）。

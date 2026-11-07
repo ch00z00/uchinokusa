@@ -87,22 +87,23 @@ func (e CompleteCareTasksItemResultStatus) Valid() bool {
 
 // Defines values for ErrorCode.
 const (
-	ErrorCodeAlreadyCompleted  ErrorCode = "already_completed"
-	ErrorCodeAlreadyMember     ErrorCode = "already_member"
-	ErrorCodeAlreadyResponded  ErrorCode = "already_responded"
-	ErrorCodeBadRequest        ErrorCode = "bad_request"
-	ErrorCodeConflict          ErrorCode = "conflict"
-	ErrorCodeForbidden         ErrorCode = "forbidden"
-	ErrorCodeInternal          ErrorCode = "internal"
-	ErrorCodeInvitationInvalid ErrorCode = "invitation_invalid"
-	ErrorCodeLastOwner         ErrorCode = "last_owner"
-	ErrorCodeNotFound          ErrorCode = "not_found"
-	ErrorCodeRateLimited       ErrorCode = "rate_limited"
-	ErrorCodeStaleCycle        ErrorCode = "stale_cycle"
-	ErrorCodeSuggestionExpired ErrorCode = "suggestion_expired"
-	ErrorCodeUnauthenticated   ErrorCode = "unauthenticated"
-	ErrorCodeUndoExpired       ErrorCode = "undo_expired"
-	ErrorCodeValidationFailed  ErrorCode = "validation_failed"
+	ErrorCodeAlreadyCompleted      ErrorCode = "already_completed"
+	ErrorCodeAlreadyMember         ErrorCode = "already_member"
+	ErrorCodeAlreadyResponded      ErrorCode = "already_responded"
+	ErrorCodeBadRequest            ErrorCode = "bad_request"
+	ErrorCodeConflict              ErrorCode = "conflict"
+	ErrorCodeForbidden             ErrorCode = "forbidden"
+	ErrorCodeInternal              ErrorCode = "internal"
+	ErrorCodeInvitationInvalid     ErrorCode = "invitation_invalid"
+	ErrorCodeLastOwner             ErrorCode = "last_owner"
+	ErrorCodeNotFound              ErrorCode = "not_found"
+	ErrorCodeOwnerTransferRequired ErrorCode = "owner_transfer_required"
+	ErrorCodeRateLimited           ErrorCode = "rate_limited"
+	ErrorCodeStaleCycle            ErrorCode = "stale_cycle"
+	ErrorCodeSuggestionExpired     ErrorCode = "suggestion_expired"
+	ErrorCodeUnauthenticated       ErrorCode = "unauthenticated"
+	ErrorCodeUndoExpired           ErrorCode = "undo_expired"
+	ErrorCodeValidationFailed      ErrorCode = "validation_failed"
 )
 
 // Valid indicates whether the value is a known member of the ErrorCode enum.
@@ -127,6 +128,8 @@ func (e ErrorCode) Valid() bool {
 	case ErrorCodeLastOwner:
 		return true
 	case ErrorCodeNotFound:
+		return true
+	case ErrorCodeOwnerTransferRequired:
 		return true
 	case ErrorCodeRateLimited:
 		return true
@@ -720,6 +723,7 @@ type CompletionConflict struct {
 	// | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
 	// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
 	// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
+	// | `owner_transfer_required` | 409 | ほかにメンバーのいる世帯の唯一のオーナーなので、アカウントを削除できない（先にオーナー権限を移す） |
 	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
@@ -848,6 +852,12 @@ type Date = openapi_types.Date
 // Examples: 2026-10-26T09:30:00Z
 type DateTime = time.Time
 
+// DeleteMeRequest defines model for DeleteMeRequest.
+type DeleteMeRequest struct {
+	// AppleAuthorizationCode Apple でサインインしたユーザーだけ必須。削除の直前に Apple で再認証して受け取った認可コード（有効期限は5分、1回だけ使える）
+	AppleAuthorizationCode *string `json:"appleAuthorizationCode,omitempty"`
+}
+
 // Device プッシュ通知の送信先となる端末
 type Device struct {
 	Id openapi_types.UUID `json:"id"`
@@ -882,6 +892,7 @@ type Error struct {
 	// | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
 	// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
 	// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
+	// | `owner_transfer_required` | 409 | ほかにメンバーのいる世帯の唯一のオーナーなので、アカウントを削除できない（先にオーナー権限を移す） |
 	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 	// | `internal` | 500 | サーバーの障害 |
@@ -914,6 +925,7 @@ type Error struct {
 // | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
 // | `already_responded` | 409 | 提案はすでに採用・見送りされている |
 // | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
+// | `owner_transfer_required` | 409 | ほかにメンバーのいる世帯の唯一のオーナーなので、アカウントを削除できない（先にオーナー権限を移す） |
 // | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
 // | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
 // | `internal` | 500 | サーバーの障害 |
@@ -943,6 +955,12 @@ type Household struct {
 
 	// TimeZone 世帯の IANA タイムゾーン（現在は `Asia/Tokyo` 固定）
 	TimeZone string `json:"timeZone"`
+}
+
+// HouseholdSummary defines model for HouseholdSummary.
+type HouseholdSummary struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
 }
 
 // Interval お手入れの周期（例：`{"value": 2, "unit": "week"}` は2週に1回）
@@ -1113,6 +1131,36 @@ type NotificationSettings struct {
 	//
 	// Examples: 08:00
 	ReminderTime string `json:"reminderTime"`
+}
+
+// OwnerTransferRequired オーナー権限を移さないとアカウントを削除できない。アプリは、世帯ごとにオーナー権限を移す画面へ案内する（要件1-7）
+type OwnerTransferRequired struct {
+	// Code エラーの種類。アプリはこの値で分岐する。値は今後も追加されるため、知らない値は「不明なエラー」として扱う。
+	//
+	// | code | HTTP | 意味 |
+	// |---|---|---|
+	// | `bad_request` | 400 | リクエストの形式の誤り（JSON として読めない、パラメーターの型が違う、など） |
+	// | `validation_failed` | 422 | 入力の内容の誤り。`fields` に入力欄ごとの理由が入る |
+	// | `unauthenticated` | 401 | ID トークンがない・無効・期限切れ |
+	// | `forbidden` | 403 | 世帯のメンバーだが、ロールが操作を許可していない |
+	// | `not_found` | 404 | 存在しない、または所属していない世帯のデータ（存在を明かさない） |
+	// | `conflict` | 409 | 状態の衝突（個別の code がない場合） |
+	// | `last_owner` | 409 | 唯一のオーナーのため、退出・ロールの変更ができない（先にオーナー権限を移す） |
+	// | `already_member` | 409 | すでに世帯のメンバーである（招待の参加） |
+	// | `already_completed` | 409 | 送った予定の回は、すでに完了している（先に完了した記録が入る） |
+	// | `stale_cycle` | 409 | 送った予定の回が、タスクの今の回と合わない（タスクを取り直す） |
+	// | `undo_expired` | 409 | 記録を取り消せない（記録してから10分を過ぎた、またはあとに記録がある） |
+	// | `already_responded` | 409 | 提案はすでに採用・見送りされている |
+	// | `suggestion_expired` | 409 | 提案の有効期間が過ぎている |
+	// | `owner_transfer_required` | 409 | ほかにメンバーのいる世帯の唯一のオーナーなので、アカウントを削除できない（先にオーナー権限を移す） |
+	// | `invitation_invalid` | 410 | 招待が期限切れ・取り消し済み・存在しない |
+	// | `rate_limited` | 429 | 短い時間にリクエストが多すぎる。`Retry-After` ヘッダーの秒数だけ待ってから送り直す |
+	// | `internal` | 500 | サーバーの障害 |
+	Code ErrorCode `json:"code"`
+
+	// Households ほかにメンバーがいて、自分が唯一のオーナーの世帯
+	Households []HouseholdSummary `json:"households"`
+	Message    string             `json:"message"`
 }
 
 // Plant 世帯の植物。未設定の項目は、項目がない。
@@ -1625,6 +1673,9 @@ type CreatePlantJSONRequestBody = CreatePlantRequest
 // UpdateLocationJSONRequestBody defines body for UpdateLocation for application/json ContentType.
 type UpdateLocationJSONRequestBody = UpdateLocationRequest
 
+// DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
+type DeleteMeJSONRequestBody = DeleteMeRequest
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
@@ -1732,6 +1783,9 @@ type ServerInterface interface {
 	// UpdateLocation 置き場所を変更する（編集者以上）
 	// (PATCH /locations/{locationId})
 	UpdateLocation(w http.ResponseWriter, r *http.Request, locationId openapi_types.UUID)
+	// DeleteMe アカウントを削除する
+	// (DELETE /me)
+	DeleteMe(w http.ResponseWriter, r *http.Request)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -2525,6 +2579,20 @@ func (siw *ServerInterfaceWrapper) UpdateLocation(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateLocation(w, r, locationId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMe operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3492,6 +3560,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me", wrapper.DeleteMe)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me", wrapper.UpdateMe)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/devices", wrapper.RegisterDevice)
@@ -5802,6 +5871,92 @@ func (response UpdateLocation422JSONResponse) VisitUpdateLocationResponse(w http
 type UpdateLocation500JSONResponse struct{ InternalJSONResponse }
 
 func (response UpdateLocation500JSONResponse) VisitUpdateLocationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeRequestObject struct {
+	Body *DeleteMeJSONRequestBody
+}
+
+type DeleteMeResponseObject interface {
+	VisitDeleteMeResponse(w http.ResponseWriter) error
+}
+
+type DeleteMe204Response struct {
+}
+
+func (response DeleteMe204Response) VisitDeleteMeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMe400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeleteMe400JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteMe401JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe409JSONResponse OwnerTransferRequired
+
+func (response DeleteMe409JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe422JSONResponse struct{ ValidationFailedJSONResponse }
+
+func (response DeleteMe422JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe500JSONResponse struct{ InternalJSONResponse }
+
+func (response DeleteMe500JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -8668,6 +8823,9 @@ type StrictServerInterface interface {
 	// UpdateLocation 置き場所を変更する（編集者以上）
 	// (PATCH /locations/{locationId})
 	UpdateLocation(ctx context.Context, request UpdateLocationRequestObject) (UpdateLocationResponseObject, error)
+	// DeleteMe アカウントを削除する
+	// (DELETE /me)
+	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
 	// GetMe 自分のプロフィールを取得する
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
@@ -9488,6 +9646,40 @@ func (sh *strictHandler) UpdateLocation(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateLocationResponseObject); ok {
 		if err := validResponse.VisitUpdateLocationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMe operation middleware
+func (sh *strictHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
+	var request DeleteMeRequestObject
+
+	var body DeleteMeJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMe(ctx, request.(DeleteMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMeResponseObject); ok {
+		if err := validResponse.VisitDeleteMeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

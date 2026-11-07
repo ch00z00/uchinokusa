@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi/oapi"
@@ -31,6 +32,27 @@ var _ oapi.StrictServerInterface = (*server)(nil)
 
 func (s *server) GetMe(ctx context.Context, _ oapi.GetMeRequestObject) (oapi.GetMeResponseObject, error) {
 	return oapi.GetMe200JSONResponse(toMe(currentUser(ctx))), nil
+}
+
+// DeleteMe は、アカウントを削除する（要件1-6・1-7）。オーナー権限を移す必要があれば、移すべき世帯の一覧を 409 で返す。
+func (s *server) DeleteMe(ctx context.Context, req oapi.DeleteMeRequestObject) (oapi.DeleteMeResponseObject, error) {
+	var code string
+	if req.Body != nil && req.Body.AppleAuthorizationCode != nil {
+		code = *req.Body.AppleAuthorizationCode
+	}
+	err := s.accounts.DeleteAccount(ctx, currentUser(ctx).ID, code)
+	var transfer *domain.OwnerTransferRequiredError
+	if errors.As(err, &transfer) {
+		households := make([]oapi.HouseholdSummary, 0, len(transfer.Households))
+		for _, h := range transfer.Households {
+			households = append(households, oapi.HouseholdSummary{Id: h.ID, Name: h.Name})
+		}
+		return oapi.DeleteMe409JSONResponse{Code: oapi.ErrorCodeOwnerTransferRequired, Message: transfer.Error(), Households: households}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return oapi.DeleteMe204Response{}, nil
 }
 
 func (s *server) UpdateMe(ctx context.Context, req oapi.UpdateMeRequestObject) (oapi.UpdateMeResponseObject, error) {

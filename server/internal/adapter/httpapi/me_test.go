@@ -43,6 +43,19 @@ type fakeAccounts struct {
 	signInErr    error
 	signedIn     []domain.Identity
 	unregistered []uuid.UUID
+	deleteErr    error
+	deleted      []string // 削除したときの Apple の認可コード
+}
+
+func (f *fakeAccounts) DeleteAccount(_ context.Context, userID uuid.UUID, appleCode string) error {
+	if userID != testUser.ID {
+		return errors.New("unexpected user")
+	}
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleted = append(f.deleted, appleCode)
+	return nil
 }
 
 func (f *fakeAccounts) SignIn(_ context.Context, id domain.Identity) (domain.User, error) {

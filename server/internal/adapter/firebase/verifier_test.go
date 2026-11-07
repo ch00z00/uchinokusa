@@ -112,3 +112,22 @@ func unsignedToken(uid, projectID string, issuedAt, expiresAt time.Time) string 
 	})
 	return strings.Join([]string{header, claims, ""}, ".")
 }
+
+func TestVerifier_DeleteUser(t *testing.T) {
+	t.Parallel()
+	v := newVerifier(t)
+	_, uid := fbtest.SignUp(t, "leaving@example.com", "退会する人")
+
+	if err := v.DeleteUser(t.Context(), uid); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	// 消えているので、同じメールアドレスでもう一度登録できる（残っていれば、Emulator が EMAIL_EXISTS で断る）
+	_, again := fbtest.SignUp(t, "leaving@example.com", "戻ってきた人")
+	if again == uid {
+		t.Errorf("uid = %s, want a new user", again)
+	}
+	// すでに消えていても、エラーにしない（削除のやり直しで呼ばれても失敗しないように）
+	if err := v.DeleteUser(t.Context(), uid); err != nil {
+		t.Errorf("DeleteUser again: %v", err)
+	}
+}
