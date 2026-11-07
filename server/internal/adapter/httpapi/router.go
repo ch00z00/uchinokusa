@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi/oapi"
@@ -32,6 +33,13 @@ type Deps struct {
 	Notes       NoteService
 	Calendar    CalendarService
 	Suggestions SuggestionService
+	// Realtime は、WebSocket でのリアルタイム同期である（nil なら /v1/ws を登録しない）。
+	Realtime RealtimeServer
+}
+
+// RealtimeServer は、WebSocket の接続を受け付ける（実装は adapter/ws の Hub）。
+type RealtimeServer interface {
+	Serve(w http.ResponseWriter, r *http.Request, userID uuid.UUID)
 }
 
 // NewRouter は、API のすべてのエンドポイントを登録したハンドラーを返す。
@@ -61,6 +69,13 @@ func NewRouter(d Deps) http.Handler {
 		// /v1 のすべてのエンドポイントで、ID トークンを検証する（/healthz は対象外）
 		Middlewares: []oapi.MiddlewareFunc{withAuth(logger, d.Verifier, d.Accounts)},
 	})
+
+	// WebSocket は、API 定義（OpenAPI）では表せないので、ここで直接登録する。認証は、ほかの API と同じ Authorization ヘッダーで行う
+	if d.Realtime != nil {
+		mux.Handle("GET "+basePath+"/ws", withAuth(logger, d.Verifier, d.Accounts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			d.Realtime.Serve(w, r, currentUser(r.Context()).ID)
+		})))
+	}
 
 	// 外側から順に実行される：リクエスト ID の付与 → アクセスログ → 各ハンドラー
 	return withRequestID(withAccessLog(logger, mux))

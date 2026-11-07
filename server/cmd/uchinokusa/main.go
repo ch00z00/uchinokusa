@@ -28,10 +28,10 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/seedfile"
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/ws"
 	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
-	"github.com/ch00z00/uchinokusa/server/internal/domain"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
 
@@ -140,6 +140,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	hub := ws.NewHub(authz, logger)
 	suggestions := app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
@@ -157,6 +158,7 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Notes:       app.NewNoteService(postgres.NewNoteRepository(pool), plantRepo, authz),
 		Calendar:    app.NewCalendarService(postgres.NewCalendarRepository(pool), authz, time.Now),
 		Suggestions: suggestions,
+		Realtime:    hub,
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),
@@ -165,14 +167,14 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
-	// 変更イベントを受け取る（どのインスタンスで起きた変更も届く）。WebSocket への配信はタスク 11.2 でつなぐ
+	// 変更イベントを受け取り（どのインスタンスで起きた変更も届く）、WebSocket の接続に配る。
+	// LISTEN をつなぎ直したときは、切れていた間のイベントを取りこぼしているので、すべての接続をつなぎ直させる（docs/decisions/0030）
 	listenerCtx, stopListener := context.WithCancel(ctx)
 	defer stopListener()
+	listener := postgres.NewChangeListener(pool, logger)
+	listener.OnListen = hub.Reset
 	go func() {
-		_ = postgres.NewChangeListener(pool, logger).Run(listenerCtx, func(e domain.ChangeEvent) {
-			logger.Debug("household changed", slog.String("household_id", e.HouseholdID.String()), slog.Int64("version", e.Version),
-				slog.String("entity", string(e.Entity)), slog.String("op", string(e.Op)))
-		})
+		_ = listener.Run(listenerCtx, hub.Publish)
 	}()
 
 	errCh := make(chan error, 1)
@@ -189,6 +191,8 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	}
 
 	logger.Info("shutting down")
+	// WebSocket の接続は srv.Shutdown が待たないので、先に閉じて、アプリにほかのインスタンスへつなぎ直させる
+	hub.Shutdown()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

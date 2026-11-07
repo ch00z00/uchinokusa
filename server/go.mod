@@ -10,6 +10,7 @@ tool (
 require (
 	cloud.google.com/go v0.123.0
 	firebase.google.com/go/v4 v4.22.0
+	github.com/coder/websocket v1.8.15
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oapi-codegen/runtime v1.8.0
