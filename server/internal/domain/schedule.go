@@ -117,3 +117,27 @@ func (s Schedule) NextDueAfterCompletion(performedOn civil.Date, h Hemisphere) c
 	}
 	return next
 }
+
+// IsSeasonStart は、日付が季節の初日（3/1・6/1・9/1・12/1）かを返す。
+// 南半球は季節が6か月ずれるが、初日の日付は北半球と同じになる（12/1 は北半球では冬、南半球では夏の初日）ので、半球によらない。
+func IsSeasonStart(d civil.Date) bool {
+	if d.Day != 1 {
+		return false
+	}
+	switch d.Month {
+	case time.March, time.June, time.September, time.December:
+		return true
+	}
+	return false
+}
+
+// NextDueAtSeasonStart は、季節が変わったときの次回予定を返す（要件8-7）。
+// 最後に完了した日に、新しい季節（seasonStart の季節）の周期を足す。季節の初日より前になるなら、季節の初日にする。
+// 「今日」ではなく季節の初日を使うので、初日のうちに何度計算しても同じ結果になる。
+func (s Schedule) NextDueAtSeasonStart(lastPerformedOn, seasonStart civil.Date, h Hemisphere) civil.Date {
+	next := s.EffectiveInterval(seasonStart, h).AddTo(lastPerformedOn)
+	if next.Before(seasonStart) {
+		return seasonStart
+	}
+	return next
+}

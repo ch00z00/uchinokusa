@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"cloud.google.com/go/civil"
@@ -354,3 +355,26 @@ func TestPlantRepository_SetArchived(t *testing.T) {
 }
 
 func ptrOf[T any](v T) *T { return &v }
+
+func TestPlantRepository_ActiveIDs(t *testing.T) {
+	t.Parallel()
+	f := newPlantFixture(t)
+	pachira := f.create("パキラ", domain.PlantProfile{})
+	archived := f.create("枯れたシダ", domain.PlantProfile{})
+	if _, err := f.repo.SetArchived(f.ctx, f.home, archived.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	other, err := f.repo.Create(f.ctx, f.other, domain.PlantProfile{Name: "ポトス"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.repo.ActiveIDs(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// すべての世帯の、アーカイブしていない植物
+	want := sortedIDs(pachira.ID, other.ID)
+	if !slices.Equal(got, want) {
+		t.Errorf("ids = %v, want %v", got, want)
+	}
+}

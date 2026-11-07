@@ -223,3 +223,12 @@ func civilDate(d pgtype.Date) civil.Date {
 	}
 	return civil.DateOf(d.Time)
 }
+
+// ActiveIDs は、すべての世帯の、アーカイブしていない植物の ID を、ID の順に返す（日次の助言のジョブで使う）。
+func (r *PlantRepository) ActiveIDs(ctx context.Context) ([]uuid.UUID, error) {
+	ids, err := r.q.ListActivePlantIDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list active plant ids: %w", err)
+	}
+	return ids, nil
+}

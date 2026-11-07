@@ -146,6 +146,17 @@ func TestChanges_EveryWrite(t *testing.T) {
 		})
 	})
 
+	t.Run("季節の切り替え", func(t *testing.T) {
+		t.Parallel()
+		f := newSeasonFixture(t)
+		w := watchChanges(t, f.pool)
+		assertChanges(t, w, func() []change {
+			_, err := f.seasons.Recalculate(f.ctx, f.home, dec1, domain.HemisphereNorth)
+			must(t, err)
+			return []change{{f.home, domain.ChangeTask, f.task.ID, domain.ChangeUpdated, f.monsteraPlant}}
+		})
+	})
+
 	t.Run("完了済みの回への重複は、何も変えないのでイベントも出さない", func(t *testing.T) {
 		t.Parallel()
 		f := newRecordFixture(t)

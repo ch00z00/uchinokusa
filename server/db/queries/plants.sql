@@ -54,3 +54,7 @@ RETURNING id;
 -- name: DeletePlant :execrows
 -- タスク・記録・メモ・提案は、外部キーの ON DELETE CASCADE でいっしょに消える（要件5-7）
 DELETE FROM plants WHERE id = $1 AND household_id = $2;
+
+-- name: ListActivePlantIDs :many
+-- すべての世帯の、アーカイブしていない植物（日次の助言の対象。ID の順）
+SELECT id FROM plants WHERE archived_at IS NULL ORDER BY id;

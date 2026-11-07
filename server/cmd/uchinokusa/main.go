@@ -121,7 +121,7 @@ func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error 
 
 // newJobs は、定期ジョブの実行の仕組みを作る。ジョブの設定（JOB_AUDIENCE・JOB_SERVICE_ACCOUNT）がなければ、
 // エンドポイントを登録しないよう nil を返す（ローカルの開発）。
-func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (httpapi.JobRunner, httpapi.JobTokenVerifier, error) {
+func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger, advisors *advisor.Registry, advice app.AdviceEvaluator) (httpapi.JobRunner, httpapi.JobTokenVerifier, error) {
 	if cfg.JobAudience == "" {
 		logger.Warn("job endpoints are disabled (JOB_AUDIENCE is not set)")
 		return nil, nil, nil
@@ -139,6 +139,8 @@ func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger 
 	runner, err := job.NewRunner(postgres.NewJobLocker(pool, logger), logger, time.Now,
 		job.NewNotifications(postgres.NewOutboxRepository(pool), push, time.Now, logger), // 1分ごと（docs/decisions/0032）
 		job.NewReminders(postgres.NewReminderRepository(pool), push, time.Now, logger),   // 5分ごと（docs/decisions/0033）
+		job.NewSeasons(postgres.NewSeasonRepository(pool), time.Now),                     // 1時間ごと（docs/decisions/0034）
+		job.NewDailyAdvice(advisors, postgres.NewPlantRepository(pool), advice),          // 1日1回（docs/decisions/0034）
 	)
 	if err != nil {
 		return nil, nil, err
@@ -172,11 +174,11 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 	hub := ws.NewHub(authz, logger)
-	jobs, jobAuth, err := newJobs(ctx, cfg, pool, logger)
+	suggestions := app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger)
+	jobs, jobAuth, err := newJobs(ctx, cfg, pool, logger, advisors, suggestions)
 	if err != nil {
 		return err
 	}
-	suggestions := app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
 		Verifier:    verifier,

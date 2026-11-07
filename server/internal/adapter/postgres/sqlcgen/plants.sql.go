@@ -117,6 +117,31 @@ func (q *Queries) GetPlantHouseholdID(ctx context.Context, id uuid.UUID) (uuid.U
 	return household_id, err
 }
 
+const listActivePlantIDs = `-- name: ListActivePlantIDs :many
+SELECT id FROM plants WHERE archived_at IS NULL ORDER BY id
+`
+
+// すべての世帯の、アーカイブしていない植物（日次の助言の対象。ID の順）
+func (q *Queries) ListActivePlantIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listActivePlantIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlants = `-- name: ListPlants :many
 SELECT plants.id, plants.household_id, plants.name, plants.species_id, plants.species_free_text, plants.location_id, plants.acquired_on, plants.archived_at, plants.attributes, plants.created_at, plants.updated_at, plants.name_search, species.name_ja AS species_name,
   (SELECT min(care_tasks.next_due_on) FROM care_tasks
