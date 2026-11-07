@@ -6,7 +6,8 @@
 ```
 uchinokusa/
 ├── CLAUDE.md                 Claude Code 向けの開発ルール
-├── HANDOFF.md                作業の引き継ぎメモ（現在の状況と次にやること）
+├── HANDOFF.md                作業の引き継ぎメモ（バックエンド担当：現在の状況と次にやること）
+├── HANDOFF-mobile.md         作業の引き継ぎメモ（アプリ担当）
 ├── .kiro/
 │   ├── steering/             プロダクト・技術・構成の方針（このファイルを含む）
 │   └── specs/                機能ごとの仕様（要件・設計・タスク）

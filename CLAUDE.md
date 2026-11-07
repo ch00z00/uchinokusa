@@ -21,7 +21,11 @@ Kiro-style Spec Driven Development implementation using claude code slash comman
 
 ## Development Guidelines
 - Think in English, but generate responses in Japanese (思考は英語、回答の生成は日本語で行うように)
-- 作業を再開するときは、まず `HANDOFF.md` を読み、現在の状況と次にやることを確認する
+- バックエンドとアプリは、別々のエージェントが並行して進める。自分の担当（バックエンド／アプリ）がユーザーの指示からわからないときは、作業の前にユーザーに聞く
+  - バックエンド担当：作業を再開するときは、まず `HANDOFF.md` を読む
+  - アプリ（`mobile/`）担当：作業を再開するときは、まず `HANDOFF-mobile.md` を読む
+  - コミットとpushは、自分の担当のファイルだけをパスで指定して行う（`git add -A` や `git add .` は使わない）。担当のファイルは各 HANDOFF に書いてある
+  - API の仕様は `api/openapi.yaml` が唯一の正で、変えるのはバックエンド担当だけ。アプリ担当は、問題があれば `HANDOFF-mobile.md` の「バックエンドへの依頼」に書く
 - 実装は `/kiro:spec-impl household-plant-care-mvp <タスク番号>` で1タスクずつ進め、各タスクで「何を・なぜ」を説明し、ユーザーの確認をもらってから次へ進む（ユーザーはバックエンドの実装経験を積みたい）
 - デザイン（Figma での作業を含む）と、モバイルアプリ（`mobile/`）の画面・部品の実装では、必ず `.kiro/steering/design.md` を読んで従う（OS の標準部品とアプリのデザインシステムの使い分け、Figma とコードの名前のそろえ方）
 
