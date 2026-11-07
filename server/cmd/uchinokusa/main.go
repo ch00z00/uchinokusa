@@ -130,8 +130,15 @@ func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger 
 	if err != nil {
 		return nil, nil, err
 	}
-	// ジョブは、ここに登録する（タスク 12.2 から）
-	runner, err := job.NewRunner(postgres.NewJobLocker(pool, logger), logger, time.Now)
+	messenger, err := firebase.NewMessenger(ctx, cfg.FirebaseProjectID, cfg.FirebaseCredentialsFile, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	push := app.NewPushService(postgres.NewDeviceRepository(pool), messenger, logger)
+	// ジョブは、ここに登録する。Cloud Scheduler からの呼び出しは POST /internal/jobs/<Name()>（docs/decisions/0031）
+	runner, err := job.NewRunner(postgres.NewJobLocker(pool, logger), logger, time.Now,
+		job.NewNotifications(postgres.NewOutboxRepository(pool), push, time.Now, logger), // 1分ごと（docs/decisions/0032）
+	)
 	if err != nil {
 		return nil, nil, err
 	}
