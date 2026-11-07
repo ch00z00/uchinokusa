@@ -42,3 +42,4 @@
 | [0030](0030-websocket-hub.md) | WebSocket は Authorization ヘッダーで認証し、購読と配信を1つずつ順に行う | 採用 | 2026-11-07 |
 | [0031](0031-job-endpoint-and-push.md) | ジョブは Cloud Scheduler の OIDC トークンで呼び、同じジョブを advisory lock で同時に1つにする | 採用 | 2026-11-07 |
 | [0032](0032-completion-notifications.md) | 完了通知は「最後の完了から60秒」でまとめ、送信と送信済みへの更新を同じトランザクションで行う | 採用 | 2026-11-07 |
+| [0033](0033-reminders.md) | リマインダーは最後に使った端末のタイムゾーンで、時刻から1時間の間に1日1回送る | 採用 | 2026-11-08 |

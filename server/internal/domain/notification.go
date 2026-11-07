@@ -13,6 +13,7 @@ type NoticeKind string
 const (
 	NoticeCompletion   NoticeKind = "completion"    // 植物の詳細（plantId があるとき）、なければ今日やること一覧
 	NoticeMemberJoined NoticeKind = "member_joined" // 世帯のメンバー一覧
+	NoticeReminder     NoticeKind = "reminder"      // 今日やること一覧（リマインダー。アウトボックスには入らない）
 )
 
 // MaxNoticeAttempts は、FCM に送れなかった通知を送り直す回数の上限である。超えたら failed にして諦める。
@@ -51,9 +52,9 @@ type CompletionItem struct {
 	CustomName string // 種類が「その他」のときの作業名
 }
 
-// label は、内訳に使う作業の名前である。「その他」は作業名を使う。
-func (i CompletionItem) label() string {
-	switch i.Kind {
+// careLabel は、内訳に使う作業の名前である。「その他」は作業名を使う。
+func careLabel(kind CareKind, customName string) string {
+	switch kind {
 	case CareWatering:
 		return "水やり"
 	case CareFertilizing:
@@ -63,7 +64,24 @@ func (i CompletionItem) label() string {
 	case CarePruning:
 		return "剪定"
 	}
-	return i.CustomName
+	return customName
+}
+
+// breakdown は、作業の名前ごとの件数を、出てきた順に「水やり2件、肥料1件」の形にする。
+func breakdown(labels []string) string {
+	var order []string
+	counts := map[string]int{}
+	for _, l := range labels {
+		if counts[l] == 0 {
+			order = append(order, l)
+		}
+		counts[l]++
+	}
+	parts := make([]string, 0, len(order))
+	for _, l := range order {
+		parts = append(parts, fmt.Sprintf("%s%d件", l, counts[l]))
+	}
+	return strings.Join(parts, "、")
 }
 
 // sentence は、1件だけのときの文の述語（「〇〇さんが」に続く部分）である。
@@ -93,21 +111,11 @@ func CompletionNotice(householdID uuid.UUID, householdName, actorName string, it
 		return PushMessage{Title: householdName, Body: actorName + "さんが" + items[0].sentence(), Data: data}
 	}
 
-	// 内訳は、作業の名前ごとに、出てきた順に数える
-	var labels []string
-	counts := map[string]int{}
+	labels := make([]string, 0, len(items))
 	for _, it := range items {
-		l := it.label()
-		if counts[l] == 0 {
-			labels = append(labels, l)
-		}
-		counts[l]++
+		labels = append(labels, careLabel(it.Kind, it.CustomName))
 	}
-	parts := make([]string, 0, len(labels))
-	for _, l := range labels {
-		parts = append(parts, fmt.Sprintf("%s%d件", l, counts[l]))
-	}
-	body := fmt.Sprintf("%sさんが%d件のお手入れをしました（%s）", actorName, len(items), strings.Join(parts, "、"))
+	body := fmt.Sprintf("%sさんが%d件のお手入れをしました（%s）", actorName, len(items), breakdown(labels))
 	return PushMessage{Title: householdName, Body: body, Data: data}
 }
 

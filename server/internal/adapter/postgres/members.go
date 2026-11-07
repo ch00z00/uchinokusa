@@ -175,11 +175,15 @@ func toPgTime(t civil.Time) pgtype.Time {
 	return pgtype.Time{Microseconds: d.Microseconds(), Valid: true}
 }
 
+func fromPgTime(t pgtype.Time) civil.Time {
+	d := time.Duration(t.Microseconds) * time.Microsecond
+	return civil.Time{Hour: int(d / time.Hour), Minute: int(d % time.Hour / time.Minute)}
+}
+
 func toNotificationSettings(reminderEnabled bool, reminderTime pgtype.Time, completionNotifyEnabled bool) domain.NotificationSettings {
-	d := time.Duration(reminderTime.Microseconds) * time.Microsecond
 	return domain.NotificationSettings{
 		ReminderEnabled:         reminderEnabled,
-		ReminderTime:            civil.Time{Hour: int(d / time.Hour), Minute: int(d % time.Hour / time.Minute)},
+		ReminderTime:            fromPgTime(reminderTime),
 		CompletionNotifyEnabled: completionNotifyEnabled,
 	}
 }

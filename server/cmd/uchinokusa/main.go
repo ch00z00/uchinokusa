@@ -138,6 +138,7 @@ func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger 
 	// ジョブは、ここに登録する。Cloud Scheduler からの呼び出しは POST /internal/jobs/<Name()>（docs/decisions/0031）
 	runner, err := job.NewRunner(postgres.NewJobLocker(pool, logger), logger, time.Now,
 		job.NewNotifications(postgres.NewOutboxRepository(pool), push, time.Now, logger), // 1分ごと（docs/decisions/0032）
+		job.NewReminders(postgres.NewReminderRepository(pool), push, time.Now, logger),   // 5分ごと（docs/decisions/0033）
 	)
 	if err != nil {
 		return nil, nil, err
