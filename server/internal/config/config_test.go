@@ -38,6 +38,10 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.InviteBaseURL != nil {
 		t.Errorf("InviteBaseURL = %v, want nil", cfg.InviteBaseURL)
 	}
+	// ジョブの設定がなければ、ジョブのエンドポイントを登録しない（ローカルの開発）
+	if cfg.JobAudience != "" || cfg.JobServiceAccount != "" {
+		t.Errorf("Job = %q, %q, want empty", cfg.JobAudience, cfg.JobServiceAccount)
+	}
 }
 
 func TestLoad_AllValues(t *testing.T) {
@@ -51,6 +55,8 @@ func TestLoad_AllValues(t *testing.T) {
 		"ALLOWED_ORIGINS":                " https://uchinokusa.app , ,https://dev.uchinokusa.app",
 		"LOG_LEVEL":                      "debug",
 		"INVITE_BASE_URL":                "https://invite.uchinokusa.app",
+		"JOB_AUDIENCE":                   "https://api.uchinokusa.app",
+		"JOB_SERVICE_ACCOUNT":            "scheduler@uchinokusa.iam.gserviceaccount.com",
 	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -64,6 +70,8 @@ func TestLoad_AllValues(t *testing.T) {
 		AllowedOrigins:          []string{"https://uchinokusa.app", "https://dev.uchinokusa.app"},
 		LogLevel:                slog.LevelDebug,
 		InviteBaseURL:           &url.URL{Scheme: "https", Host: "invite.uchinokusa.app"},
+		JobAudience:             "https://api.uchinokusa.app",
+		JobServiceAccount:       "scheduler@uchinokusa.iam.gserviceaccount.com",
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load() = %+v, want %+v", cfg, want)
@@ -112,6 +120,17 @@ func TestLoad_Errors(t *testing.T) {
 			name:    "INVITE_BASE_URL にクエリがある",
 			env:     map[string]string{"DATABASE_URL": "postgres://x", "INVITE_BASE_URL": "https://invite.uchinokusa.app?ref=1"},
 			wantMsg: []string{"INVITE_BASE_URL"},
+		},
+		{
+			// 片方だけでは、ジョブのトークンを確かめられない
+			name:    "JOB_AUDIENCE だけがある",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "JOB_AUDIENCE": "https://api.uchinokusa.app"},
+			wantMsg: []string{"JOB_SERVICE_ACCOUNT"},
+		},
+		{
+			name:    "JOB_SERVICE_ACCOUNT だけがある",
+			env:     map[string]string{"DATABASE_URL": "postgres://x", "JOB_SERVICE_ACCOUNT": "scheduler@uchinokusa.iam.gserviceaccount.com"},
+			wantMsg: []string{"JOB_AUDIENCE"},
 		},
 		{
 			// 複数の誤りは、1回でまとめて知らせる

@@ -35,6 +35,9 @@ type Deps struct {
 	Suggestions SuggestionService
 	// Realtime は、WebSocket でのリアルタイム同期である（nil なら /v1/ws を登録しない）。
 	Realtime RealtimeServer
+	// Jobs と JobAuth は、定期ジョブの実行と、その呼び出し元の確認である（どちらかが nil なら /internal/jobs を登録しない）。
+	Jobs    JobRunner
+	JobAuth JobTokenVerifier
 }
 
 // RealtimeServer は、WebSocket の接続を受け付ける（実装は adapter/ws の Hub）。
@@ -75,6 +78,11 @@ func NewRouter(d Deps) http.Handler {
 		mux.Handle("GET "+basePath+"/ws", withAuth(logger, d.Verifier, d.Accounts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			d.Realtime.Serve(w, r, currentUser(r.Context()).ID)
 		})))
+	}
+
+	// 定期ジョブは、アプリの API ではないので /v1 の外に置き、Cloud Scheduler の OIDC トークンで認証する（docs/decisions/0031）
+	if d.Jobs != nil && d.JobAuth != nil {
+		mux.Handle("POST /internal/jobs/{name}", withJobAuth(logger, d.JobAuth)(handleJob(logger, d.Jobs)))
 	}
 
 	// 外側から順に実行される：リクエスト ID の付与 → アクセスログ → 各ハンドラー

@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -115,5 +116,41 @@ func TestDeviceRepository_Delete(t *testing.T) {
 	// すでに消えている端末を消しても、エラーにしない（サインアウトを止めない）
 	if err := repo.Delete(ctx, userID, d.ID); err != nil {
 		t.Errorf("second Delete: %v", err)
+	}
+}
+
+func TestDeviceRepository_Tokens(t *testing.T) {
+	t.Parallel()
+	pool := pgtest.New(t)
+	repo := postgres.NewDeviceRepository(pool)
+	alice, bob, carol := createUser(t, pool, "uid-a"), createUser(t, pool, "uid-b"), createUser(t, pool, "uid-c")
+	for _, d := range []struct {
+		user  uuid.UUID
+		token string
+	}{{alice, "a-phone"}, {alice, "a-tablet"}, {bob, "b-phone"}, {carol, "c-phone"}} {
+		reg, err := domain.NewDeviceRegistration(d.token, "ios", "Asia/Tokyo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.Upsert(t.Context(), d.user, reg); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := repo.TokensOf(t.Context(), []uuid.UUID{alice, bob})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"a-phone", "a-tablet", "b-phone"}) {
+		t.Errorf("tokens = %v", got)
+	}
+
+	if err := repo.DeleteTokens(t.Context(), []string{"a-tablet", "c-phone", "unknown"}); err != nil {
+		t.Fatal(err)
+	}
+	for token, want := range map[string]int{"a-phone": 1, "a-tablet": 0, "b-phone": 1, "c-phone": 0} {
+		if n := countDevices(t, pool, token); n != want {
+			t.Errorf("%s: count = %d, want %d", token, n, want)
+		}
 	}
 }

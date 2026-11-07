@@ -39,6 +39,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/me
 | `GOOGLE_APPLICATION_CREDENTIALS` | | — | サービスアカウントの鍵ファイル（Cloud Run では不要） |
 | `ALLOWED_ORIGINS` | | — | 許可するオリジン（カンマ区切り） |
 | `INVITE_BASE_URL` | `serve` のみ ○ | — | 招待リンクのドメイン（例：`https://invite.example.com`）。招待の URL は `<この値>/i/<トークン>` になる |
+| `JOB_AUDIENCE` | | — | Cloud Scheduler がジョブ（`POST /internal/jobs/{name}`）を呼ぶときの OIDC トークンの宛先（例：`https://api.example.com`）。Cloud Scheduler のジョブの「対象」にも同じ値を設定する |
+| `JOB_SERVICE_ACCOUNT` | `JOB_AUDIENCE` があれば ○ | — | ジョブを呼んでよいサービスアカウントのメールアドレス。2つとも未設定なら、ジョブのエンドポイントは登録しない |
 
 ## API 定義からのコードの生成
 API 定義は `api/openapi.yaml` が唯一の正である（`docs/decisions/0001`）。定義を変えたら、リポジトリのルートで生成し直す。

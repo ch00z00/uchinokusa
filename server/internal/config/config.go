@@ -28,6 +28,11 @@ type Config struct {
 	// InviteBaseURL は、招待リンクのドメイン（INVITE_BASE_URL、例：https://invite.example.com）。
 	// serve でだけ使うため、Load では必須にせず、未設定なら nil にする。
 	InviteBaseURL *url.URL
+	// JobAudience は、Cloud Scheduler がジョブを呼ぶときの OIDC トークンの宛先（JOB_AUDIENCE、例：https://api.example.com）。
+	// JobServiceAccount は、ジョブを呼んでよいサービスアカウントのメールアドレス（JOB_SERVICE_ACCOUNT）。
+	// 両方そろったときだけ、ジョブのエンドポイントを登録する。
+	JobAudience       string
+	JobServiceAccount string
 }
 
 // Load は、getenv（通常は os.Getenv）から設定を読み込む。
@@ -40,6 +45,8 @@ func Load(getenv func(string) string) (Config, error) {
 		FirebaseCredentialsFile: getenv("GOOGLE_APPLICATION_CREDENTIALS"),
 		AllowedOrigins:          splitList(getenv("ALLOWED_ORIGINS")),
 		LogLevel:                slog.LevelInfo,
+		JobAudience:             getenv("JOB_AUDIENCE"),
+		JobServiceAccount:       getenv("JOB_SERVICE_ACCOUNT"),
 	}
 
 	var errs []error
@@ -70,6 +77,13 @@ func Load(getenv func(string) string) (Config, error) {
 		} else {
 			cfg.InviteBaseURL = u
 		}
+	}
+
+	switch {
+	case cfg.JobAudience != "" && cfg.JobServiceAccount == "":
+		errs = append(errs, errors.New("JOB_SERVICE_ACCOUNT is required when JOB_AUDIENCE is set"))
+	case cfg.JobAudience == "" && cfg.JobServiceAccount != "":
+		errs = append(errs, errors.New("JOB_AUDIENCE is required when JOB_SERVICE_ACCOUNT is set"))
 	}
 
 	if err := errors.Join(errs...); err != nil {

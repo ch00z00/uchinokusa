@@ -27,6 +27,44 @@ func (q *Queries) DeleteUserDevice(ctx context.Context, arg DeleteUserDevicePara
 	return err
 }
 
+const deleteUserDevicesByToken = `-- name: DeleteUserDevicesByToken :exec
+DELETE FROM user_devices
+WHERE fcm_token = ANY($1::text[])
+`
+
+// FCM が無効と答えたトークンの端末を消す（どのユーザーの端末でも消す）
+func (q *Queries) DeleteUserDevicesByToken(ctx context.Context, tokens []string) error {
+	_, err := q.db.Exec(ctx, deleteUserDevicesByToken, tokens)
+	return err
+}
+
+const listUserDeviceTokens = `-- name: ListUserDeviceTokens :many
+SELECT fcm_token FROM user_devices
+WHERE user_id = ANY($1::uuid[])
+ORDER BY fcm_token
+`
+
+// ユーザーたちの端末の FCM トークン（プッシュ通知の宛先）
+func (q *Queries) ListUserDeviceTokens(ctx context.Context, userIds []uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserDeviceTokens, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var fcm_token string
+		if err := rows.Scan(&fcm_token); err != nil {
+			return nil, err
+		}
+		items = append(items, fcm_token)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertUserDevice = `-- name: UpsertUserDevice :one
 INSERT INTO user_devices (user_id, fcm_token, platform, time_zone)
 VALUES ($1, $2, $3, $4)

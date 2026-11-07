@@ -23,8 +23,11 @@ import (
 	// 端末のタイムゾーンの検証とリマインダーの判定ができるようにする
 	_ "time/tzdata"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/ch00z00/uchinokusa/server/db"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/firebase"
+	"github.com/ch00z00/uchinokusa/server/internal/adapter/gcp"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/httpapi"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/postgres"
 	"github.com/ch00z00/uchinokusa/server/internal/adapter/seedfile"
@@ -32,6 +35,7 @@ import (
 	"github.com/ch00z00/uchinokusa/server/internal/advisor"
 	"github.com/ch00z00/uchinokusa/server/internal/app"
 	"github.com/ch00z00/uchinokusa/server/internal/config"
+	"github.com/ch00z00/uchinokusa/server/internal/job"
 	"github.com/ch00z00/uchinokusa/server/internal/logging"
 )
 
@@ -115,6 +119,25 @@ func migrate(ctx context.Context, cfg config.Config, logger *slog.Logger) error 
 	return nil
 }
 
+// newJobs は、定期ジョブの実行の仕組みを作る。ジョブの設定（JOB_AUDIENCE・JOB_SERVICE_ACCOUNT）がなければ、
+// エンドポイントを登録しないよう nil を返す（ローカルの開発）。
+func newJobs(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, logger *slog.Logger) (httpapi.JobRunner, httpapi.JobTokenVerifier, error) {
+	if cfg.JobAudience == "" {
+		logger.Warn("job endpoints are disabled (JOB_AUDIENCE is not set)")
+		return nil, nil, nil
+	}
+	verifier, err := gcp.NewJobVerifier(ctx, cfg.JobAudience, cfg.JobServiceAccount)
+	if err != nil {
+		return nil, nil, err
+	}
+	// ジョブは、ここに登録する（タスク 12.2 から）
+	runner, err := job.NewRunner(postgres.NewJobLocker(pool, logger), logger, time.Now)
+	if err != nil {
+		return nil, nil, err
+	}
+	return runner, verifier, nil
+}
+
 // serve は、HTTP サーバーを起動し、ctx が終わったらグレースフルに停止する。
 func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if cfg.InviteBaseURL == nil {
@@ -141,6 +164,10 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 	hub := ws.NewHub(authz, logger)
+	jobs, jobAuth, err := newJobs(ctx, cfg, pool, logger)
+	if err != nil {
+		return err
+	}
 	suggestions := app.NewSuggestionService(postgres.NewSuggestionRepository(pool), advisors, authz, time.Now, logger)
 	router := httpapi.NewRouter(httpapi.Deps{
 		Logger:      logger,
@@ -159,6 +186,8 @@ func serve(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		Calendar:    app.NewCalendarService(postgres.NewCalendarRepository(pool), authz, time.Now),
 		Suggestions: suggestions,
 		Realtime:    hub,
+		Jobs:        jobs,
+		JobAuth:     jobAuth,
 	})
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.Port)),

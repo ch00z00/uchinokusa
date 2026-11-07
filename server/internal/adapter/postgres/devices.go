@@ -49,3 +49,20 @@ func (r *DeviceRepository) Delete(ctx context.Context, userID, deviceID uuid.UUI
 	}
 	return nil
 }
+
+// TokensOf は、ユーザーたちの端末の FCM トークンを返す。
+func (r *DeviceRepository) TokensOf(ctx context.Context, userIDs []uuid.UUID) ([]string, error) {
+	tokens, err := r.q.ListUserDeviceTokens(ctx, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list device tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+// DeleteTokens は、トークンの端末を消す。ない端末は無視する。
+func (r *DeviceRepository) DeleteTokens(ctx context.Context, tokens []string) error {
+	if err := r.q.DeleteUserDevicesByToken(ctx, tokens); err != nil {
+		return fmt.Errorf("delete device tokens: %w", err)
+	}
+	return nil
+}
