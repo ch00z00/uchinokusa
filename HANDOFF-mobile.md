@@ -4,14 +4,25 @@
 
 ## 現在の状況（2026-11-08 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- アプリのタスクは未着手。`mobile/` はまだない
-- アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）
+- 14.1（Expo のプロジェクトと共通の基盤）が完了。起動・構成・API の呼び方は `mobile/README.md`
+- アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 14.1
+/kiro:spec-impl household-plant-care-mvp 14.2
 ```
-- 始める前に、ユーザーと決める：デザイントークン（`docs/design/foundations.md` の値を `mobile/src/theme/` に写す作業）を `tasks.md` に足すか（14.1 に含める、または 14.3 を作る）
+- 14.3（デザイントークンをテーマに写す）を `tasks.md` に足した。14.2 と 14.3 のどちらを先にするかは、始める前にユーザーと決める
+- Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
+
+## 14.1 でわかったこと・決めたこと
+- 画面は `mobile/src/app/` に置く（Expo SDK 58 の標準。`structure.md` の予定の `mobile/app/` とは違う。steering の更新はユーザーに確認する）
+- サインインの前後の振り分けは、`(auth)` と `(app)` のグループのレイアウトで `Redirect` する。`Stack.Protected` は、試したときに更新の繰り返し（Maximum update depth）が出たので使っていない（原因の切り分けの途中で開発サーバーが古い状態だったため、`Stack.Protected` が原因だったかは確かめきれていない）
+- 設定は、タブにせず、各タブのヘッダーの右のボタンから開く（画面一覧の【未決】。仕様のルーティングのとおり）
+- タブバーは `expo-router/native-tabs`（OS の標準のタブバー）。アイコンは `foundations.md` の 4.3 の名前（`checklist`・`leaf` / `potted_plant`）で型チェックが通った
+- ブラウザでスマホの幅の枠をアプリの中に作ると、web のヘッダーが更新を繰り返して止まる。幅は Chrome の側で合わせる
+- iOS / Android のネイティブのビルドは、この Mac に Xcode・Android SDK がないため、まだ確かめていない（設定は `app.json`・`eas.json` まで）
+- iOS / Android の認証も、14.2 まではブラウザと同じ Firebase の JS SDK（`src/auth/authClient.ts`）。サインインの状態は再起動で消える
+- TypeScript 6 では `@types/*` を自動で読まないので、`tsconfig.json` の `types` に足す
 
 ## ユーザーと決めたこと（2026-11-08）
 - **テストの進め方**：TDD にはしない。サクサク実装する
@@ -51,7 +62,15 @@
 ## バックエンドへの依頼
 バックエンド担当は、対応したら「対応済み」とコミットを書き添える。
 
-（まだなし）
+### 1. CORS に対応してほしい（2026-11-08）
+- ブラウザ（Expo の web、`http://localhost:8081`）から API（`http://localhost:8080`）を呼ぶと、事前確認の `OPTIONS /v1/me` が **405** になり、ブラウザがリクエストを止める（アプリには「通信できませんでした」と出る）
+- ブラウザで画面を確かめながら進める方針（「ユーザーと決めたこと」）のため、REST API で CORS に対応してほしい
+  - 許可するオリジンは、すでにある `ALLOWED_ORIGINS` を使う案（ローカルは `http://localhost:8081`）
+  - 必要なヘッダー：`Authorization`、`Content-Type`。メソッド：`GET`・`POST`・`PUT`・`PATCH`・`DELETE`
+  - 本番のアプリ（iOS / Android）はブラウザではないので CORS は関係しない。`ALLOWED_ORIGINS` が空なら、今までどおり何も許可しない、で足りるはず
+
+### 2. `mobile/src/api/schema.d.ts` をコミットしてほしい（2026-11-08）
+- `mobile/` ができたので、`make gen-api` でアプリの型が生成されるようになった。生成したファイルはバックエンド担当がコミットする決まりなので、生成してコミットしてほしい（アプリ担当は、手元で生成したものを使っていて、コミットしていない）
 
 ## デザイン
 - 画面と部品の実装では、必ず `.kiro/steering/design.md` を読んで従う

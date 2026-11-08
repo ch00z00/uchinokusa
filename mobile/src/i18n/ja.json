@@ -1,0 +1,54 @@
+{
+  "common": {
+    "retry": "もう一度試す"
+  },
+  "auth": {
+    "signIn": {
+      "title": "サインイン",
+      "lead": "家族で植物のお世話を記録しましょう",
+      "development": "開発用のユーザーでサインイン"
+    }
+  },
+  "tabs": {
+    "today": "今日",
+    "plants": "植物"
+  },
+  "today": {
+    "title": "今日"
+  },
+  "plants": {
+    "title": "植物"
+  },
+  "plantDetail": {
+    "title": "植物の詳細"
+  },
+  "settings": {
+    "title": "設定",
+    "open": "設定",
+    "signOut": "サインアウト"
+  },
+  "invite": {
+    "title": "招待"
+  },
+  "errors": {
+    "bad_request": "送った内容を読み取れませんでした。アプリを最新にしてお試しください",
+    "validation_failed": "入力の内容を確認してください",
+    "unauthenticated": "もう一度サインインしてください",
+    "forbidden": "この操作には編集権限が必要です",
+    "not_found": "見つかりませんでした。削除されたか、世帯から外れた可能性があります",
+    "conflict": "ほかの人が先に変更しました。最新の内容を確認してください",
+    "last_owner": "オーナーがほかにいないため、この操作はできません。先にオーナー権限を移してください",
+    "already_member": "すでにこの世帯のメンバーです",
+    "already_completed": "すでに完了しています",
+    "stale_cycle": "ほかの人が先に記録しました。最新の内容を確認してください",
+    "undo_expired": "この記録は、もう取り消せません",
+    "already_responded": "この提案には、すでに回答しています",
+    "suggestion_expired": "この提案は期限が過ぎました",
+    "owner_transfer_required": "ほかのメンバーがいる世帯のオーナーです。先にオーナー権限を移してください",
+    "invitation_invalid": "この招待は無効です。期限が切れたか、取り消されました",
+    "rate_limited": "操作が多すぎます。少し待ってからお試しください",
+    "internal": "サーバーで問題が起きました。少し待ってからお試しください",
+    "network": "通信できませんでした。通信が戻ったら、もう一度お試しください",
+    "unknown": "問題が起きました。もう一度お試しください"
+  }
+}
