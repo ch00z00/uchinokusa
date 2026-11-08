@@ -12,6 +12,7 @@
 | デザインの判断の記録 | `docs/design/decisions/`（このファイルの方針の理由） |
 | 主な画面のおおまかな見た目 | `docs/design/screens/<画面 ID>.png`（Figma から書き出した画像） |
 | オリジナルのアイコン | `docs/design/icons/*.svg` |
+| ユーザーのデザインの好み（デザインの作業の前に読む） | `docs/design/preferences.md`（`/retro` で試行錯誤から育てる。回ごとの記録は `docs/design/retro/`） |
 
 ## UI の2つの層（`docs/design/decisions/0001`）
 - **OS の層**：OS の標準部品を使い、見た目を自作しない。iOS では HIG に従う

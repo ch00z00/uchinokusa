@@ -16,7 +16,9 @@ uchinokusa/
 │   ├── design/               デザインのための資料（画面の洗い出し、デザインから実装までの流れ）
 │   │   ├── decisions/        デザインの判断の記録（ADR。番号は docs/decisions/ とは別）
 │   │   ├── screens/          Figma から書き出した主な画面の画像（画面 ID の名前）
-│   │   └── icons/            オリジナルのアイコンの SVG
+│   │   ├── icons/            オリジナルのアイコンの SVG
+│   │   ├── retro/            デザインの振り返りの記録（/retro で1回ごとに残す）
+│   │   └── preferences.md    ユーザーのデザインの好み（デザインの作業の前に読む）
 │   └── learning/             学習ノート（開発中の技術的な疑問と答え）
 ├── compose.yaml              ローカル開発用の PostgreSQL と Firebase Auth Emulator
 ├── dev/
