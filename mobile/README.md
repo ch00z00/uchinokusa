@@ -16,7 +16,8 @@ npm run web   # http://localhost:8081
   - アプリの中でスマホの幅の枠を作らない。web のヘッダーはウィンドウの幅で計算するため、枠があると表示が崩れる
 - ブラウザでは `@react-native-firebase` が動かないので、Firebase の JS SDK を使う（`src/auth/authClient.web.ts`）
 - iOS の標準部品は、ブラウザでは見た目が変わる。形と流れはブラウザで試し、最後の見た目は iOS シミュレーターで確かめる
-- ルートや設定（`app.json`）を変えて表示がおかしいときは、キャッシュを消して起動し直す：`npx expo start --web -c`
+- `CI=1` をつけて起動しない（Expo は CI のとき、ファイルの変更の監視と再読み込みを切るので、古い画面のままになる）
+- `app.json` を変えたときは、キャッシュを消して起動し直す：`npx expo start --web -c`
 
 ## iOS / Android のビルド
 
@@ -49,6 +50,7 @@ npm run format  # 書式を直す
 | `src/query/`           | TanStack Query（サーバーの状態のキャッシュ）の設定                                                                            |
 | `src/i18n/`            | 文言（`ja.json`）。画面の文言は直書きせず、`t('...')` で引く                                                                  |
 | `src/features/<機能>/` | 機能ごとの部品と、TanStack Query のフック                                                                                     |
+| `src/theme/`           | デザイントークン（`foundations.md` の値）。画面では `useTheme()` から使い、生の値を書かない                                   |
 | `src/components/`      | 共通の部品（デザインシステムの部品は `.kiro/steering/design.md` の名前にそろえる）                                            |
 
 ## API の呼び方

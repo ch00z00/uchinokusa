@@ -4,25 +4,37 @@
 
 ## 現在の状況（2026-11-08 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- 14.1（Expo のプロジェクトと共通の基盤）が完了。起動・構成・API の呼び方は `mobile/README.md`
+- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。起動・構成・API の呼び方は `mobile/README.md`
 - アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
 /kiro:spec-impl household-plant-care-mvp 14.2
 ```
-- 14.3（デザイントークンをテーマに写す）を `tasks.md` に足した。14.2 と 14.3 のどちらを先にするかは、始める前にユーザーと決める
+- 14.2 の画面も、`AppText`・`Button`・`useTheme()` でトークンを使う（14.3 の「14.2 の画面にトークンを当てる」は、14.2 で行う）
+- iOS のビルド（`npm run ios`）には、Xcode のほかに CocoaPods が要る（2026-11-09 時点で未インストール）。`xcode-select` は Command Line Tools を指しているので、`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` か、環境変数 `DEVELOPER_DIR` で Xcode を指す
 - Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
 
 ## 14.1 でわかったこと・決めたこと
 - 画面は `mobile/src/app/` に置く（Expo SDK 58 の標準。`structure.md` の予定の `mobile/app/` とは違う。steering の更新はユーザーに確認する）
-- サインインの前後の振り分けは、`(auth)` と `(app)` のグループのレイアウトで `Redirect` する。`Stack.Protected` は、試したときに更新の繰り返し（Maximum update depth）が出たので使っていない（原因の切り分けの途中で開発サーバーが古い状態だったため、`Stack.Protected` が原因だったかは確かめきれていない）
+- サインインの前後の振り分けは、`(auth)` と `(app)` のグループのレイアウトで `Redirect` する。`Stack.Protected` は、試したときに更新の繰り返し（Maximum update depth）が出たので使っていない。ただし、そのときは開発サーバーを `CI=1` で起動していて変更が反映されていなかったため、`Stack.Protected` が原因だったかはわからない
 - 設定は、タブにせず、各タブのヘッダーの右のボタンから開く（画面一覧の【未決】。仕様のルーティングのとおり）
 - タブバーは `expo-router/native-tabs`（OS の標準のタブバー）。アイコンは `foundations.md` の 4.3 の名前（`checklist`・`leaf` / `potted_plant`）で型チェックが通った
 - ブラウザでスマホの幅の枠をアプリの中に作ると、web のヘッダーが更新を繰り返して止まる。幅は Chrome の側で合わせる
 - iOS / Android のネイティブのビルドは、この Mac に Xcode・Android SDK がないため、まだ確かめていない（設定は `app.json`・`eas.json` まで）
 - iOS / Android の認証も、14.2 まではブラウザと同じ Firebase の JS SDK（`src/auth/authClient.ts`）。サインインの状態は再起動で消える
 - TypeScript 6 では `@types/*` を自動で読まないので、`tsconfig.json` の `types` に足す
+- 開発サーバーを `CI=1` で起動すると、ファイルの変更が反映されない（14.1 で古い画面が出ていた原因）
+
+## 14.3 で決めたこと
+- トークンは `mobile/src/theme/tokens.ts`。画面では `useTheme()` から使う。文字は `AppText`（`variant`・`color`）、アプリの層のボタンは `Button`（`primary`・`secondary`）
+- 名前の読み替えの追加の決まり（design.md の「名前をそろえる」の補足。steering に入れるかはユーザーに確認する）：
+  - 子を持つトークンは、自身の値を `default` に置く：`color/accent` ⇔ `theme.color.accent.default`、`color/accent/subtle` ⇔ `theme.color.accent.subtle`
+  - ハイフンはキャメルケース：`color/on-accent` ⇔ `theme.color.onAccent`、`text/large-title` ⇔ `theme.text.largeTitle`、`size/tap-min` ⇔ `theme.size.tapMin`
+  - `color/care/<種類>/subtle` を足すときは、`care.watering` などを `{ default, subtle }` に変える
+- `foundations.md` にないものとして、`borderWidth.hairline`（1pt。`shadow/card` の「1pt の枠」）と、ボタンを押している間・無効のときの不透明度 0.6 を使った
+- foundations.md の「比」の列（コントラスト比）は、`src/theme/__tests__/tokens.test.ts` でトークンの値から確かめている
+- ライトモードの見た目は、まだ確かめていない（この Mac がダークモードのため）。iOS シミュレーターで確かめる
 
 ## ユーザーと決めたこと（2026-11-08）
 - **テストの進め方**：TDD にはしない。サクサク実装する

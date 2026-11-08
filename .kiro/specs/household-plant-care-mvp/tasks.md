@@ -260,7 +260,7 @@
   - 本番のビルド（iOS / Android）では、スマホ専用の `@react-native-firebase/auth` でサインインする（ブラウザの開発用の JS SDK から切り替える。リリースの前提）
   - _Requirements: 1.1, 1.2, 1.4, 1.5_
 
-- [ ] 14.3 デザイントークンをテーマに写す
+- [x] 14.3 デザイントークンをテーマに写す
   - `docs/design/foundations.md` の色（ライト・ダーク）・文字・余白・角丸・大きさを `mobile/src/theme/` に写し、`theme.color.care.watering` のように名前をそろえる
   - 端末のライト・ダークの設定に追従し、文字は端末の文字の大きさの設定（Dynamic Type）に追従させる
   - 14.1 で作った画面の骨組みと、14.2 の画面に、テーマのトークンを当てる
