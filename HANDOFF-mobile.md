@@ -46,7 +46,7 @@
 
 ## 担当の分け方
 - バックエンドとアプリは、別々のエージェントが同じ作業フォルダ・同じブランチ（`main`）で並行して進める
-- **アプリ担当がコミットしてよいファイル**：`mobile/`（ただし `mobile/src/api/schema.d.ts` を除く）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）
+- **アプリ担当がコミットしてよいファイル**：`mobile/`（`openapi.yaml` から生成した `mobile/src/api/schema.d.ts` を含む。2026-11-08 にユーザーと決めた）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）
 - コミットは、自分のファイルのパスを指定して行う。`git add -A` や `git add .` は使わない（もう片方の作りかけの変更が入るため）
   ```
   git add <自分のファイル>
@@ -56,7 +56,7 @@
 
 ## API の決まり
 - **API の仕様は `api/openapi.yaml` が唯一の正（SSoT）**。アプリ担当は変えない
-- 型は `make gen-api` で `mobile/src/api/schema.d.ts` に生成する。生成したファイルは、`openapi.yaml` を変えたバックエンド担当が一緒にコミットする
+- 型は `make gen-api` で `mobile/src/api/schema.d.ts` に生成する。`openapi.yaml` を変えたバックエンド担当が一緒にコミットするのが基本だが、アプリ担当が生成してコミットしてもよい（生成の結果は同じになる）
 - 実装していて API に問題があったら（足りない項目、使いにくい形など）、下の「バックエンドへの依頼」に書き、ユーザーに伝える。アプリ側で回避の作り込みはしない
 
 ## バックエンドへの依頼
@@ -68,9 +68,6 @@
   - 許可するオリジンは、すでにある `ALLOWED_ORIGINS` を使う案（ローカルは `http://localhost:8081`）
   - 必要なヘッダー：`Authorization`、`Content-Type`。メソッド：`GET`・`POST`・`PUT`・`PATCH`・`DELETE`
   - 本番のアプリ（iOS / Android）はブラウザではないので CORS は関係しない。`ALLOWED_ORIGINS` が空なら、今までどおり何も許可しない、で足りるはず
-
-### 2. `mobile/src/api/schema.d.ts` をコミットしてほしい（2026-11-08）
-- `mobile/` ができたので、`make gen-api` でアプリの型が生成されるようになった。生成したファイルはバックエンド担当がコミットする決まりなので、生成してコミットしてほしい（アプリ担当は、手元で生成したものを使っていて、コミットしていない）
 
 ## デザイン
 - 画面と部品の実装では、必ず `.kiro/steering/design.md` を読んで従う
