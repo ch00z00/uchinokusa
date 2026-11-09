@@ -28,7 +28,7 @@
 
 ## 14.3 で決めたこと
 - トークンは `mobile/src/theme/tokens.ts`。画面では `useTheme()` から使う。文字は `AppText`（`variant`・`color`）、アプリの層のボタンは `Button`（`primary`・`secondary`）
-- 名前の読み替えの追加の決まり（design.md の「名前をそろえる」の補足。steering に入れるかはユーザーに確認する）：
+- 名前の読み替えの追加の決まり（2026-11-09 にユーザーと決め、`.kiro/steering/design.md` の「名前をそろえる」に入れた）：
   - 子を持つトークンは、自身の値を `default` に置く：`color/accent` ⇔ `theme.color.accent.default`、`color/accent/subtle` ⇔ `theme.color.accent.subtle`
   - ハイフンはキャメルケース：`color/on-accent` ⇔ `theme.color.onAccent`、`text/large-title` ⇔ `theme.text.largeTitle`、`size/tap-min` ⇔ `theme.size.tapMin`
   - `color/care/<種類>/subtle` を足すときは、`care.watering` などを `{ default, subtle }` に変える

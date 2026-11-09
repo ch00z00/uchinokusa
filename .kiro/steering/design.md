@@ -35,6 +35,9 @@
 
 ## 名前をそろえる（Figma・リポジトリ・コード）
 - トークン：`foundations.md` の `color/care/watering` ⇔ Figma の変数 ⇔ コードの `theme.color.care.watering`（`/` を `.` に読み替える）
+  - 子を持つトークンは、自身の値を `default` に置く：`color/accent` ⇔ `theme.color.accent.default`、`color/accent/subtle` ⇔ `theme.color.accent.subtle`（あとから子を足すときは、そのトークンを `{ default, ... }` に変える）
+  - ハイフンはキャメルケースにする：`color/on-accent` ⇔ `theme.color.onAccent`、`text/large-title` ⇔ `theme.text.largeTitle`
+  - コードのトークンは `mobile/src/theme/tokens.ts`。画面では `useTheme()` から使う
 - トークンの名前は役割でつけ、OS に依存させない（`color/accent` は可、`color/ios/systemBlue` は不可）
 - 部品：Figma のコンポーネント名 ⇔ `mobile/src/components/` の部品名を同じにする
 - 部品の状態：Figma のバリアントのプロパティ（`state=overdue`）⇔ props（`state="overdue"`）を同じにする
