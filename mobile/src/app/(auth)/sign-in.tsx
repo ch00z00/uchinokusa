@@ -3,18 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { authClient } from '@/auth/authClient';
+import { useSignIn } from '@/auth/AuthProvider';
+import type { AuthProviderId } from '@/auth/types';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { useTheme } from '@/theme';
 
-// AUTH-01 サインイン。Apple / Google のサインインはタスク 14.2 で作る
+// AUTH-01 サインイン
 export default function SignInScreen() {
   const { t } = useTranslation();
   const theme = useTheme();
-  const devSignIn = useMutation({
-    mutationFn: async () => authClient.signInForDevelopment?.(),
-  });
+  const signIn = useSignIn();
+  const mutation = useMutation({ mutationFn: (provider: AuthProviderId) => signIn(provider) });
+  const pendingProvider = mutation.isPending ? mutation.variables : null;
 
   return (
     <SafeAreaView style={[styles.container, { padding: theme.space.lg, gap: theme.space['2xl'] }]}>
@@ -24,14 +25,30 @@ export default function SignInScreen() {
           {t('auth.signIn.lead')}
         </AppText>
       </View>
-      {authClient.signInForDevelopment && (
+      {/* Apple と Google は、同じ大きさ・同じ目立ち方にする（App Store の審査のルール）。
+          Apple のガイドラインどおりのボタンにするのは、タスク 14.4 */}
+      <View style={{ gap: theme.space.md }}>
         <Button
-          title={t('auth.signIn.development')}
+          title={t('auth.signIn.apple')}
           variant="secondary"
-          onPress={() => devSignIn.mutate()}
-          loading={devSignIn.isPending}
+          loading={pendingProvider === 'apple'}
+          disabled={mutation.isPending}
+          onPress={() => mutation.mutate('apple')}
         />
-      )}
+        <Button
+          title={t('auth.signIn.google')}
+          variant="secondary"
+          loading={pendingProvider === 'google'}
+          disabled={mutation.isPending}
+          onPress={() => mutation.mutate('google')}
+        />
+        {/* キャンセルは失敗にしない（SignInResult の cancelled）ので、ここには出ない */}
+        {mutation.isError && (
+          <AppText variant="footnote" color="danger" style={styles.center}>
+            {t('auth.signIn.failed')}
+          </AppText>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -39,4 +56,5 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center' },
   heading: { alignItems: 'center' },
+  center: { textAlign: 'center' },
 });

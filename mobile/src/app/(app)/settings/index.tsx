@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, ScrollView } from 'react-native';
 
 import { errorMessageKey } from '@/api/errorMessage';
-import { authClient } from '@/auth/authClient';
+import { useSignOut } from '@/auth/useSignOut';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { useMe } from '@/features/account/useMe';
@@ -13,6 +13,7 @@ export default function SettingsScreen() {
   const { t } = useTranslation();
   const theme = useTheme();
   const me = useMe();
+  const signOut = useSignOut();
 
   return (
     <ScrollView
@@ -27,8 +28,12 @@ export default function SettingsScreen() {
         </>
       )}
       {me.data && <AppText variant="headline">{me.data.displayName}</AppText>}
-      {/* TODO(14.2)：端末の情報の破棄と、通知の送信先からの削除をあわせて行う */}
-      <Button title={t('settings.signOut')} variant="secondary" onPress={() => void authClient.signOut()} />
+      <Button
+        title={t('settings.signOut')}
+        variant="secondary"
+        loading={signOut.isPending}
+        onPress={() => signOut.mutate()}
+      />
     </ScrollView>
   );
 }

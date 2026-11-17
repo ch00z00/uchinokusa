@@ -2,17 +2,20 @@
 
 アプリ（`mobile/`）の担当のエージェントは、作業を再開するときにまずこのファイルを読むこと。バックエンドの担当は `HANDOFF.md` を読む（このファイルの「バックエンドへの依頼」だけは見る）。
 
-## 現在の状況（2026-11-08 時点）
+## 現在の状況（2026-11-17 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。起動・構成・API の呼び方は `mobile/README.md`
+- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。14.2（サインイン・表示名・サインアウト）はコミット済みで、iOS シミュレーターでの確認待ち。起動・構成・API の呼び方は `mobile/README.md`
 - アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 14.2
+/kiro:spec-impl household-plant-care-mvp 15.1
 ```
-- 14.2 の画面も、`AppText`・`Button`・`useTheme()` でトークンを使う（14.3 の「14.2 の画面にトークンを当てる」は、14.2 で行う）
-- iOS のビルド（`npm run ios`）には、Xcode のほかに CocoaPods が要る（2026-11-09 時点で未インストール）。`xcode-select` は Command Line Tools を指しているので、`sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` か、環境変数 `DEVELOPER_DIR` で Xcode を指す
+- **14.2 は確認待ち（コードはコミット済み、タスクは未完了）**。iOS シミュレーターで、次を通しで確かめてから `[x]` にする（ブラウザでは CORS で `GET /me` が届かないため）
+  - Apple（名前なし）でサインイン → 表示名の画面 → 入力チェック（空・31文字・前後の空白）→ 保存 → 今日
+  - Google（名前あり）でサインイン → 表示名の画面に名前が入っている
+  - アプリを再起動してもサインインが続く。設定からサインアウトして、サインインの画面に戻る
+- iOS のビルド（`npm run ios`）：CocoaPods 1.17 と `xcode-select` の切り替えは済み（2026-11-17）。Xcode 26.6 の「iOS 26.5 のプラットフォーム」（Xcode > Settings > Components）をダウンロード中。シミュレーターのランタイムだけでは、ビルドの宛先にシミュレーターが出ない
 - Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
 
 ## 14.1 でわかったこと・決めたこと
@@ -22,9 +25,17 @@
 - タブバーは `expo-router/native-tabs`（OS の標準のタブバー）。アイコンは `foundations.md` の 4.3 の名前（`checklist`・`leaf` / `potted_plant`）で型チェックが通った
 - ブラウザでスマホの幅の枠をアプリの中に作ると、web のヘッダーが更新を繰り返して止まる。幅は Chrome の側で合わせる
 - iOS / Android のネイティブのビルドは、この Mac に Xcode・Android SDK がないため、まだ確かめていない（設定は `app.json`・`eas.json` まで）
-- iOS / Android の認証も、14.2 まではブラウザと同じ Firebase の JS SDK（`src/auth/authClient.ts`）。サインインの状態は再起動で消える
+- iOS / Android の認証も、14.4 まではブラウザと同じ Firebase の JS SDK（`src/auth/authClient.ts`）。サインインの状態は AsyncStorage に保存し、再起動後も保つ
 - TypeScript 6 では `@types/*` を自動で読まないので、`tsconfig.json` の `types` に足す
 - 開発サーバーを `CI=1` で起動すると、ファイルの変更が反映されない（14.1 で古い画面が出ていた原因）
+
+## 14.2 で決めたこと
+- 認証は `AuthClient`（`src/auth/types.ts`）の取り決めで、ブラウザ（`authClient.web.ts`）と iOS / Android（`authClient.ts`）に分ける。14.4 で iOS / Android の実装だけを `@react-native-firebase/auth` に差し替える
+- iOS / Android は、JS SDK でポップアップを開けないため、Emulator の偽のトークンでサインインする。Apple は名前なし・Google は名前ありの決まったユーザー（`firebaseJsAuth.ts` の `emulatorCredential`）
+- 表示名の画面は、初めてのサインイン（`isNewUser`）のあと、または表示名が空のときに出す。初めての印はメモリにしか持たないので、表示名の画面でアプリを閉じると、Google のユーザー（名前あり）は次の起動で画面が出ない（許容した）
+- 表示名の入力チェックは、サーバー（`domain.NormalizeDisplayName`）と同じく、前後の空白を除いてコードポイントで 1〜30 文字
+- サインアウトは `performSignOut`（`src/auth/signOut.ts`）：端末を通知の送信先から外す（失敗しても続ける）→ サインアウト → キャッシュと、端末に保存した値（接頭辞 `uchinokusa:`）を消す
+- `getReactNativePersistence` は `firebase/auth` の型にないので、`src/auth/firebase-auth-rn.d.ts` で型を補う
 
 ## 14.3 で決めたこと
 - トークンは `mobile/src/theme/tokens.ts`。画面では `useTheme()` から使う。文字は `AppText`（`variant`・`color`）、アプリの層のボタンは `Button`（`primary`・`secondary`）
@@ -47,7 +58,7 @@
 - **デザインの振り返り（`/retro`）**：デザインの作業の区切り（1画面が終わったときなど）で `/retro` を呼ぶ。試行錯誤から好みを抜き出して `docs/design/preferences.md` を育て、デザインの作業の前に読む（`.claude/skills/retro/SKILL.md`）
 
 ## リリースの前に必ずやること
-- 本番のビルド（iOS / Android）の認証を、ブラウザの開発用の Firebase の JS SDK から、スマホ専用の `@react-native-firebase/auth` に切り替える（`tasks.md` の 14.2 に入れてある）
+- 本番のビルド（iOS / Android）の認証を、ブラウザの開発用の Firebase の JS SDK から、スマホ専用の `@react-native-firebase/auth` に切り替える（`tasks.md` の 14.4）
 
 ## バックエンドからの申し送り
 - アカウントの削除（`DELETE /v1/me`、19.2 の画面）：

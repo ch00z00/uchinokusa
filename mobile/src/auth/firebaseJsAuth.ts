@@ -1,53 +1,75 @@
-import { FirebaseError, initializeApp } from 'firebase/app';
+import { FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   connectAuthEmulator,
-  createUserWithEmailAndPassword,
-  getAuth,
+  getAdditionalUserInfo,
+  GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithEmailAndPassword,
+  OAuthProvider,
   signOut,
-  updateProfile,
+  type Auth,
+  type AuthCredential,
+  type AuthProvider,
+  type UserCredential,
 } from 'firebase/auth';
 
 import { config } from '@/config';
 
-import type { AuthClient } from './types';
+import type { AuthClient, AuthProviderId, SignInResult } from './types';
 
-// Auth Emulator のテストユーザー（server/README.md の例と同じ）
-const devUser = { email: 'dev@example.com', password: 'password', displayName: '開発者' };
+/** プロバイダでのサインインのしかた（ブラウザはポップアップ、スマホは Emulator の偽のトークン） */
+export type ProviderSignIn = (auth: Auth, provider: AuthProviderId) => Promise<UserCredential>;
 
-/** Firebase の JS SDK で認証する（ブラウザでの開発用） */
-export function createFirebaseJsAuthClient(): AuthClient {
+// 利用者がサインインの画面を閉じたときのエラー
+const cancelledCodes = new Set(['auth/popup-closed-by-user', 'auth/cancelled-popup-request']);
+
+export function providerFor(provider: AuthProviderId): AuthProvider {
+  return provider === 'apple' ? new OAuthProvider('apple.com') : new GoogleAuthProvider();
+}
+
+/**
+ * Auth Emulator の偽のトークン。Emulator は署名を確かめないので、JSON の文字列をトークンとして受け付ける。
+ * プロバイダごとに、決まった開発用のユーザーになる
+ */
+export function emulatorCredential(provider: AuthProviderId): AuthCredential {
+  const idToken = JSON.stringify(
+    provider === 'apple'
+      ? // Apple は ID トークンに名前を含めない（表示名の入力を試せる）
+        { sub: 'dev-apple', email: 'dev-apple@example.com', email_verified: true }
+      : { sub: 'dev-google', email: 'dev-google@example.com', email_verified: true, name: '開発者（Google）' },
+  );
+  return provider === 'apple'
+    ? new OAuthProvider('apple.com').credential({ idToken })
+    : GoogleAuthProvider.credential(idToken);
+}
+
+/** Firebase の JS SDK で認証する（ブラウザと、14.4 までの iOS / Android） */
+export function createFirebaseJsAuthClient(params: {
+  createAuth: (app: FirebaseApp) => Auth;
+  signInWithProvider: ProviderSignIn;
+}): AuthClient {
   const app = initializeApp({
     apiKey: config.firebase.apiKey,
     projectId: config.firebase.projectId,
     authDomain: `${config.firebase.projectId}.firebaseapp.com`,
   });
-  const auth = getAuth(app);
-  const emulatorHost = config.firebase.authEmulatorHost;
-  if (emulatorHost) {
-    connectAuthEmulator(auth, `http://${emulatorHost}`, { disableWarnings: true });
+  const auth = params.createAuth(app);
+  if (config.firebase.authEmulatorHost) {
+    connectAuthEmulator(auth, `http://${config.firebase.authEmulatorHost}`, { disableWarnings: true });
   }
 
   return {
     onAuthStateChanged: (listener) =>
       onAuthStateChanged(auth, (user) => listener(user ? { uid: user.uid, displayName: user.displayName } : null)),
     getIdToken: async (forceRefresh) => (auth.currentUser ? auth.currentUser.getIdToken(forceRefresh) : null),
+    signIn: async (provider): Promise<SignInResult> => {
+      try {
+        const credential = await params.signInWithProvider(auth, provider);
+        return { status: 'signedIn', isNewUser: getAdditionalUserInfo(credential)?.isNewUser ?? false };
+      } catch (error) {
+        if (error instanceof FirebaseError && cancelledCodes.has(error.code)) return { status: 'cancelled' };
+        throw error;
+      }
+    },
     signOut: () => signOut(auth),
-    signInForDevelopment: emulatorHost
-      ? async () => {
-          try {
-            await signInWithEmailAndPassword(auth, devUser.email, devUser.password);
-          } catch (error) {
-            const notFound =
-              error instanceof FirebaseError &&
-              (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential');
-            if (!notFound) throw error;
-            // Emulator のデータは再起動で消えるので、いなければ作る
-            const { user } = await createUserWithEmailAndPassword(auth, devUser.email, devUser.password);
-            await updateProfile(user, { displayName: devUser.displayName });
-          }
-        }
-      : null,
   };
 }

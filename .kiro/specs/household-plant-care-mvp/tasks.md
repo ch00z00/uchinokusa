@@ -257,7 +257,7 @@
   - Apple ID と Google でのサインインを Firebase Auth につなぎ、サインイン状態を再起動後も保つ
   - 初回のサインインのあとに、表示名を確認・設定する画面を出す
   - サインアウトで端末上の情報を破棄し、端末を通知の送信先から外す
-  - 本番のビルド（iOS / Android）では、スマホ専用の `@react-native-firebase/auth` でサインインする（ブラウザの開発用の JS SDK から切り替える。リリースの前提）
+  - まずは Firebase の JS SDK と Auth Emulator で作り、ブラウザと iOS シミュレーターで確かめる（本番の SDK への切り替えは 14.4）
   - _Requirements: 1.1, 1.2, 1.4, 1.5_
 
 - [x] 14.3 デザイントークンをテーマに写す
@@ -265,6 +265,12 @@
   - 端末のライト・ダークの設定に追従し、文字は端末の文字の大きさの設定（Dynamic Type）に追従させる
   - 14.1 で作った画面の骨組みと、14.2 の画面に、テーマのトークンを当てる
   - _Requirements: 20.6_
+
+- [ ] 14.4 本番のサインインに切り替える
+  - 前提：本物の Firebase のプロジェクト（iOS / Android のアプリの登録と設定ファイル）、Apple Developer Program への登録、Bundle ID / パッケージ名の決定
+  - iOS / Android では、スマホ専用の `@react-native-firebase/auth` と、Apple / Google の OS のサインイン画面でサインインする（ブラウザの開発用の JS SDK から切り替える。リリースの前提）
+  - 「Apple でサインイン」のボタンを、Apple のガイドラインどおりの OS の部品にする
+  - _Requirements: 1.1, 1.4_
 
 - [ ] 15. 世帯と招待の画面を作る
 - [ ] 15.1 世帯の作成・切り替え・設定の画面を作る

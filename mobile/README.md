@@ -11,7 +11,9 @@ npm install
 npm run web   # http://localhost:8081
 ```
 
-- サインインの画面の「開発用のユーザーでサインイン」で、Auth Emulator のテストユーザー（`dev@example.com`）でサインインする（いなければ作る）
+- サインインの画面の「Apple でサインイン」「Google でサインイン」を押すと、Auth Emulator のアカウント選択の画面がポップアップで開く。「Add new account」でユーザーを作ってサインインする
+  - iOS / Android では、ポップアップを開けないため、プロバイダごとに決まった開発用のユーザー（Apple は名前なし、Google は名前あり）でサインインする（`src/auth/firebaseJsAuth.ts` の `emulatorCredential`）
+  - 本物の Apple / Google でのサインインは、タスク 14.4 で作る
 - スマホの幅で見るには、Chrome の DevTools のデバイスのモード（iPhone など）を使う
   - アプリの中でスマホの幅の枠を作らない。web のヘッダーはウィンドウの幅で計算するため、枠があると表示が崩れる
 - ブラウザでは `@react-native-firebase` が動かないので、Firebase の JS SDK を使う（`src/auth/authClient.web.ts`）
