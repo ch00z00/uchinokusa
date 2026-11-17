@@ -77,7 +77,10 @@ function DisplayNameForm({ initialName }: { initialName: string }) {
       <View style={{ gap: theme.space.sm }}>
         <TextInput
           value={name}
-          onChangeText={setName}
+          onChangeText={(value) => {
+            setName(value);
+            setInputError(null);
+          }}
           accessibilityLabel={t('displayName.label')}
           placeholder={t('displayName.label')}
           placeholderTextColor={theme.color.text.tertiary}

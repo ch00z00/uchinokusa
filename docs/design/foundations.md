@@ -203,6 +203,8 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | Badge | `caption`、角丸 `radius/sm`、色は役割の色の subtle を背景に。期限切れ・ロール・一時停止中 |
 | Button（アプリの層） | 主：アクセントの背景＋`on-accent` の文字。副：枠だけ。高さ 44pt 以上、角丸 `radius/md`。危険な操作は OS のアラートに任せる |
 | EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |
+| ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加） |
+| FormField | 見出し `subheadline` の `text/secondary`、入力欄は背景 `bg/subtle`・角丸 `radius/md`・高さ 44pt 以上、エラーのときは枠を `danger` にし、入力欄の下に理由を `footnote` の `danger` で出す（15.1 で追加） |
 
 ---
 

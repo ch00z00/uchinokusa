@@ -1,0 +1,96 @@
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+
+import { useTheme } from '@/theme';
+
+import { AppText } from './AppText';
+
+export type ListRowProps = {
+  title: string;
+  /** 右側の補足（現在の値など） */
+  detail?: string;
+  /** 題名の下の補足 */
+  subtitle?: string;
+  /** 題名の右に置くもの（バッジなど） */
+  accessory?: ReactNode;
+  /** 選択中の印（一覧から1つを選ぶとき） */
+  selected?: boolean;
+  /** 取り消せない操作（削除・退出など）。文字を color/danger にする */
+  destructive?: boolean;
+  /** 押すと別の画面に進むなら true（右に「›」を出す） */
+  navigates?: boolean;
+  onPress?: () => void;
+  disabled?: boolean;
+  accessibilityHint?: string;
+};
+
+/**
+ * 一覧の項目（アプリの層。foundations.md の 5章）。設定の項目、世帯・メンバーの一覧、選択肢の一覧で使う。
+ * 高さは 44pt 以上、背景は color/bg/surface、下に区切り線
+ */
+export function ListRow({
+  title,
+  detail,
+  subtitle,
+  accessory,
+  selected,
+  destructive,
+  navigates,
+  onPress,
+  disabled,
+  accessibilityHint,
+}: ListRowProps) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || !onPress, selected }}
+      accessibilityHint={accessibilityHint}
+      disabled={disabled || !onPress}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          minHeight: theme.size.tapMin,
+          paddingHorizontal: theme.space.lg,
+          paddingVertical: theme.space.md,
+          gap: theme.space.sm,
+          backgroundColor: pressed ? theme.color.bg.subtle : theme.color.bg.surface,
+          borderBottomColor: theme.color.border.subtle,
+          borderBottomWidth: theme.borderWidth.hairline,
+        },
+        disabled && styles.dimmed,
+      ]}
+    >
+      <View style={[styles.main, { gap: theme.space.xs }]}>
+        <View style={[styles.titleLine, { gap: theme.space.sm }]}>
+          <AppText color={destructive ? 'danger' : 'primary'} style={styles.shrink}>
+            {title}
+          </AppText>
+          {accessory}
+        </View>
+        {subtitle && (
+          <AppText variant="footnote" color="secondary">
+            {subtitle}
+          </AppText>
+        )}
+      </View>
+      {detail !== undefined && (
+        <AppText color="secondary" numberOfLines={1} style={styles.shrink}>
+          {detail}
+        </AppText>
+      )}
+      {/* TODO：OS のシンボル（checkmark / chevron.right）にする（SettingsHeaderButton と同じく、アイコンの導入のあと） */}
+      {selected && <AppText color="accent">✓</AppText>}
+      {navigates && <AppText color="tertiary">›</AppText>}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center' },
+  main: { flex: 1 },
+  titleLine: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  shrink: { flexShrink: 1 },
+  dimmed: { opacity: 0.6 },
+});

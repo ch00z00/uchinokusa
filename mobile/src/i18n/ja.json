@@ -1,6 +1,9 @@
 {
   "common": {
-    "retry": "もう一度試す"
+    "retry": "もう一度試す",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saved": "保存しました"
   },
   "auth": {
     "signIn": {
@@ -61,6 +64,88 @@
     "errors": {
       "required": "名前を入力してください",
       "too_long": "30文字以内で入力してください"
+    }
+  },
+  "roles": {
+    "owner": "オーナー",
+    "editor": "編集者",
+    "viewer": "閲覧者",
+    "description": {
+      "editor": "植物・タスクの編集と、お手入れの記録ができます",
+      "viewer": "見ることだけができます"
+    }
+  },
+  "onboarding": {
+    "title": "はじめに",
+    "heading": "世帯を用意しましょう",
+    "lead": "世帯は、植物と家族をまとめる単位です（自分の家、実家など）。新しく作るか、家族から届いた招待で参加します"
+  },
+  "join": {
+    "linkGuide": "家族から届いた招待のリンクを開いてください。招待コードの入力と QR コードの読み取りは、準備中です"
+  },
+  "household": {
+    "create": "世帯を作成する",
+    "join": "招待から参加する",
+    "switcher": {
+      "title": "世帯の切り替え",
+      "hint": "表示する世帯を切り替えます"
+    },
+    "settings": {
+      "title": "世帯の設定"
+    },
+    "form": {
+      "name": "世帯名",
+      "namePlaceholder": "例：自宅、実家",
+      "regionNote": "地域は任意です。あとからでも設定できます",
+      "prefecture": "都道府県",
+      "prefectureHint": "都道府県の一覧を開きます",
+      "unset": "未設定",
+      "city": "市区町村",
+      "cityPlaceholder": "例：世田谷区",
+      "regionUnset": "地域は未設定です",
+      "create": "作成する",
+      "errors": {
+        "name": {
+          "required": "世帯名を入力してください",
+          "too_long": "30文字以内で入力してください"
+        },
+        "region": {
+          "required": "入力してください",
+          "too_long": "50文字以内で入力してください"
+        }
+      }
+    },
+    "members": {
+      "title": "メンバー",
+      "self": "{{name}}（あなた）",
+      "role": "ロール",
+      "rolesHelp": "オーナーは世帯の管理（名前の変更・招待・メンバーの管理・削除）ができます。編集者は植物・タスクの編集と記録ができ、閲覧者は見ることだけができます"
+    },
+    "transfer": {
+      "title": "オーナー権限の移譲",
+      "action": "オーナー権限を移す",
+      "lead": "オーナー権限を移す相手を選んでください",
+      "confirmTitle": "{{name}}さんにオーナー権限を移しますか？",
+      "confirmMessage": "移すと、あなたは編集者になります"
+    },
+    "removeMember": {
+      "action": "世帯から外す",
+      "confirmTitle": "{{name}}さんを世帯から外しますか？",
+      "confirmMessage": "このメンバーの過去の記録は、名前つきで残ります"
+    },
+    "leave": {
+      "action": "この世帯から退出する",
+      "confirmTitle": "「{{name}}」から退出しますか？",
+      "confirmMessage": "退出すると、この世帯の植物を見られなくなります",
+      "transferRequiredTitle": "先にオーナー権限を移してください",
+      "transferRequiredMessage": "ほかにメンバーがいる世帯のオーナーは、退出できません。オーナー権限をほかのメンバーに移してから退出してください",
+      "deleteRequiredTitle": "この世帯のメンバーはあなただけです",
+      "deleteRequiredMessage": "退出の代わりに、世帯を削除してください"
+    },
+    "delete": {
+      "action": "世帯を削除する",
+      "confirmTitle": "「{{name}}」を削除しますか？",
+      "confirmMessage": "植物・タスク・記録・メモがすべて消えます。元に戻せません"
     }
   }
 }

@@ -4,17 +4,16 @@
 
 ## 現在の状況（2026-11-17 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。14.2（サインイン・表示名・サインアウト）はコミット済みで、iOS シミュレーターでの確認待ち。起動・構成・API の呼び方は `mobile/README.md`
+- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。14.2（サインイン・表示名・サインアウト）と 15.1（世帯の作成・切り替え・設定）はコミット済みで、iOS シミュレーターでの確認待ち。起動・構成・API の呼び方は `mobile/README.md`
 - アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 15.1
+/kiro:spec-impl household-plant-care-mvp 15.2
 ```
-- **14.2 は確認待ち（コードはコミット済み、タスクは未完了）**。iOS シミュレーターで、次を通しで確かめてから `[x]` にする（ブラウザでは CORS で `GET /me` が届かないため）
-  - Apple（名前なし）でサインイン → 表示名の画面 → 入力チェック（空・31文字・前後の空白）→ 保存 → 今日
-  - Google（名前あり）でサインイン → 表示名の画面に名前が入っている
-  - アプリを再起動してもサインインが続く。設定からサインアウトして、サインインの画面に戻る
+- **14.2・15.1 は確認待ち（コードはコミット済み、タスクは未完了）**。iOS シミュレーターで、次を通しで確かめてから `[x]` にする（ブラウザでは CORS で API が届かないため）
+  - 14.2：Apple（名前なし）でサインイン → 表示名の画面 → 入力チェック（空・31文字・前後の空白）→ 保存 → 今日。Google（名前あり）は表示名の画面に名前が入っている。再起動してもサインインが続く。設定からサインアウトして、サインインの画面に戻る
+  - 15.1：確認のアラートを出す操作（オーナー権限の移譲、メンバーを外す、退出の3つの分岐、世帯の削除）。世帯の切り替えのシート（formSheet）の見た目。ブラウザでは、作成・切り替え・保存・再読み込み後の選択の保持・ロールの変更まで確かめた（2026-11-17、下の「CORS の中継」で）
 - iOS のビルド（`npm run ios`）：CocoaPods 1.17 と `xcode-select` の切り替えは済み（2026-11-17）。Xcode 26.6 の「iOS 26.5 のプラットフォーム」（Xcode > Settings > Components）をダウンロード中。シミュレーターのランタイムだけでは、ビルドの宛先にシミュレーターが出ない
 - Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
 
@@ -36,6 +35,21 @@
 - 表示名の入力チェックは、サーバー（`domain.NormalizeDisplayName`）と同じく、前後の空白を除いてコードポイントで 1〜30 文字
 - サインアウトは `performSignOut`（`src/auth/signOut.ts`）：端末を通知の送信先から外す（失敗しても続ける）→ サインアウト → キャッシュと、端末に保存した値（接頭辞 `uchinokusa:`）を消す
 - `getReactNativePersistence` は `firebase/auth` の型にないので、`src/auth/firebase-auth-rn.d.ts` で型を補う
+
+## 15.1 で決めたこと
+- 【未決】だった4つは、ユーザーと決めた（2026-11-17。`screen-inventory.md` に反映済み）：作成時にも地域を任意で聞く／都道府県は47の一覧から選ぶ（`features/household/prefectures.ts`、OS の pageSheet のシート）・市区町村は文字／切り替えの入口は世帯が1つでも出す／世帯の削除は OS の確認のアラート
+- 選択中の世帯は `SelectedHouseholdProvider`（`(app)/_layout.tsx` で全体に配る）。`useSelectedHousehold()` の `state`（loading / error / none / selected）と `select()`。保存した世帯から外れていたら、最初の世帯にする（`selection.ts`）
+- **ロールでの出し分けは `useCan('record' | 'edit' | 'manageHousehold')`**（`permissions.ts`、`screen-inventory.md` の 6.1）。16・17 の画面の編集・記録のボタンは、これで閲覧者に出さない。知らないロールは閲覧者として扱う
+- どの世帯にも属していなければ、`(app)/_layout.tsx` が ONB-01（`/onboarding`）に移す。退出・削除で世帯がなくなったときも同じ
+- 確認のアラートは `lib/confirm.ts`（`confirm()`・`notify()`）。ブラウザでは React Native Web の Alert が何もしないので、`confirm.web.ts` でブラウザの確認を使う（Claude in Chrome はダイアログで止まるので、ブラウザでは押さない）
+- メンバーの操作（ロールの変更・移譲・外す）は、メンバーを押して開く画面（`household/members/[userId].tsx`）。アクションシートは Android でボタンの数に制限があるため、画面にした
+- 招待から参加する（`/join`）は案内だけの仮の画面。中身は 15.2
+- 新しい部品：`ListRow`・`FormField`・`RoleBadge`（`components/`）。`ListRow`・`FormField` は `foundations.md` の5章に追記した。チェックや「›」の印は文字で仮置き（アイコンの導入のあとで OS のシンボルにする）
+- 世帯の一覧の取得に失敗したとき（`state.status === 'error'`）の画面は、まだない（ErrorState は 17 の今日の画面で作る）
+
+### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）
+リポジトリには入れない。scratchpad などに次のような Node のスクリプトを置き、`http://localhost:8090` → `8080` に流して CORS のヘッダーを足す。web は `EXPO_PUBLIC_API_BASE_URL=http://localhost:8090/v1 npx expo start --web -c` で起動する
+- OPTIONS には 204 と `Access-Control-Allow-Origin: http://localhost:8081`・`Allow-Headers: Authorization, Content-Type`・`Allow-Methods` を返し、ほかは `http.request` で 8080 に流して同じヘッダーを足す
 
 ## 14.3 で決めたこと
 - トークンは `mobile/src/theme/tokens.ts`。画面では `useTheme()` から使う。文字は `AppText`（`variant`・`color`）、アプリの層のボタンは `Button`（`primary`・`secondary`）
