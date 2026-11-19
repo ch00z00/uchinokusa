@@ -49,3 +49,16 @@ describe.each(['light', 'dark'] as const)('%s の色', (scheme) => {
     expect(c.suggestion.do).toBe(c.accent.default);
   });
 });
+
+describe('QR コードの色', () => {
+  it('ダークでもライトと同じ（明るい地に暗い模様）', () => {
+    expect(colors.dark.qr).toEqual(colors.light.qr);
+    expect(contrastRatio(colors.light.qr.background, '#FFFFFF')).toBeLessThan(
+      contrastRatio(colors.light.qr.foreground, '#FFFFFF'),
+    );
+  });
+
+  it('模様と地のコントラストは 7 以上（カメラで読み取りやすくする）', () => {
+    expect(contrastRatio(colors.light.qr.foreground, colors.light.qr.background)).toBeGreaterThanOrEqual(7);
+  });
+});

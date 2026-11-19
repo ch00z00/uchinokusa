@@ -19,6 +19,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon sf="leaf" md="potted_plant" />
         <NativeTabs.Trigger.Label>{t('tabs.plants')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Icon sf="gearshape" md="settings" />
+        <NativeTabs.Trigger.Label>{t('tabs.settings')}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

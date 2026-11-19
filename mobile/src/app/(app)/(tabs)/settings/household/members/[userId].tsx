@@ -46,7 +46,7 @@ function MemberActions({ household, member }: { household: Household; member: Me
       cancelLabel: t('common.cancel'),
     });
     // 移したあとは編集者になり、メンバーの操作はできなくなるので、世帯の設定に戻る
-    if (ok) transfer.mutate(member.userId, { onSuccess: () => router.dismissTo('/household') });
+    if (ok) transfer.mutate(member.userId, { onSuccess: () => router.dismissTo('/settings/household') });
   };
 
   const removeMember = async () => {

@@ -1,4 +1,5 @@
 import { Link } from 'expo-router';
+import type { NativeStackNavigationOptions } from 'expo-router/build/react-navigation/native-stack/types';
 import { useTranslation } from 'react-i18next';
 import { Pressable } from 'react-native';
 
@@ -32,3 +33,14 @@ export function HouseholdSwitcher() {
     </Link>
   );
 }
+
+/**
+ * タブの画面のヘッダーの左に世帯名を出す設定。
+ * iOS 26 はヘッダーのボタンにガラスの背景を付けるが、世帯名は見出しの一部として見せたいので、背景を消す
+ */
+export const householdSwitcherOptions: NativeStackNavigationOptions = {
+  // Android と iOS 26 より前
+  headerLeft: () => <HouseholdSwitcher />,
+  // iOS では headerLeft の代わりにこちらが使われる
+  unstable_headerLeftItems: () => [{ type: 'custom', element: <HouseholdSwitcher />, hidesSharedBackground: true }],
+};

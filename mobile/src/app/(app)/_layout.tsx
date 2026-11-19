@@ -1,19 +1,25 @@
-import { Redirect, router, Stack, useSegments } from 'expo-router';
+import { Redirect, router, Stack, usePathname, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth, useProfileSetup } from '@/auth/AuthProvider';
 import { useMe } from '@/features/account/useMe';
 import { SelectedHouseholdProvider, useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
+import { rememberPendingInvite } from '@/features/invitation/pendingInvite';
 
 // サインインしてから使う画面。未サインインなら、サインインの画面へ移す
 export default function AppLayout() {
   const auth = useAuth();
+  const pathname = usePathname();
 
   // 状態の確認中も Stack は描く（何も描かないと、開いた URL の画面が失われて先頭の画面になる）。
   // スマホでは、確認中はスプラッシュが画面を隠している
-  // TODO(15.2)：招待リンクから開いた場合は、サインインのあとに同じ画面へ戻す
-  if (auth.status === 'signedOut') return <Redirect href="/sign-in" />;
+  if (auth.status === 'signedOut') {
+    // 招待リンクから開いた場合は、サインインのあとに同じ参加の確認へ戻す（要件3-4）
+    const invite = /^\/invite\/([^/]+)$/.exec(pathname);
+    if (invite?.[1]) rememberPendingInvite(invite[1]);
+    return <Redirect href="/sign-in" />;
+  }
 
   // サインアウトするとこのレイアウトごと外れるので、選択中の世帯の状態も残らない
   return (
@@ -24,7 +30,7 @@ export default function AppLayout() {
 }
 
 // 世帯がなくても開ける画面（はじめての選択・作成・参加）。segments[1] で判定する
-const withoutHouseholdRoutes = new Set(['onboarding', 'households', 'join', 'invite', 'display-name']);
+const withoutHouseholdRoutes = new Set(['onboarding', 'households', 'join', 'invite', 'display-name', 'prefecture']);
 
 function AppStack() {
   const auth = useAuth();
@@ -49,11 +55,11 @@ function AppStack() {
   }, [auth.status, needsDisplayName, onDisplayName, needsOnboarding]);
 
   return (
-    <Stack>
+    // タブの上に重ねる画面の戻るボタンは、矢印だけにする（前の画面の名前が、タブのグループ名「(tabs)」になるため）
+    <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="plants/[id]" options={{ title: t('plantDetail.title') }} />
-      <Stack.Screen name="settings/index" options={{ title: t('settings.title') }} />
       <Stack.Screen name="invite/[token]" options={{ title: t('invite.title') }} />
       {/* 表示名を決めるまでは戻れないようにする */}
       <Stack.Screen
@@ -76,11 +82,10 @@ function AppStack() {
           sheetGrabberVisible: true,
         }}
       />
-      <Stack.Screen name="join" options={{ title: t('household.join') }} />
-      <Stack.Screen name="household/index" options={{ title: t('household.settings.title') }} />
-      <Stack.Screen name="household/members/index" options={{ title: t('household.members.title') }} />
-      <Stack.Screen name="household/members/[userId]" options={{ title: '' }} />
-      <Stack.Screen name="household/transfer" options={{ title: t('household.transfer.title') }} />
+      <Stack.Screen name="prefecture" options={{ title: t('household.form.prefecture'), presentation: 'modal' }} />
+      <Stack.Screen name="join/index" options={{ title: t('join.title') }} />
+      {/* カメラは画面全体に出す */}
+      <Stack.Screen name="join/scan" options={{ title: t('scan.title'), presentation: 'fullScreenModal' }} />
     </Stack>
   );
 }

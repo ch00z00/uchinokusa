@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View } from 'react-native';
+import { Keyboard, View } from 'react-native';
 
 import { ApiError } from '@/api';
 import { errorMessageKey } from '@/api/errorMessage';
@@ -41,6 +41,8 @@ export function HouseholdForm({ initial, submitLabel, onSubmit, pending, error }
       return;
     }
     setInputErrors({});
+    // 送ったら入力欄のフォーカスを外す（キーボードを閉じ、結果を見えるようにする）
+    Keyboard.dismiss();
     onSubmit(result.value);
   };
 

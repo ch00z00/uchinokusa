@@ -10,6 +10,7 @@ import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { validateDisplayName, type DisplayNameError } from '@/features/account/displayName';
 import { useMe, useUpdateDisplayName } from '@/features/account/useMe';
+import { homeHref } from '@/features/invitation/pendingInvite';
 import { useTheme } from '@/theme';
 
 // AUTH-02 表示名の設定（初回）
@@ -52,7 +53,8 @@ function DisplayNameForm({ initialName }: { initialName: string }) {
     update.mutate(result.value, {
       onSuccess: () => {
         completeProfileSetup();
-        router.replace('/today');
+        // 招待リンクから来た場合は、その参加の確認へ（要件3-4）
+        router.replace(homeHref());
       },
     });
   };

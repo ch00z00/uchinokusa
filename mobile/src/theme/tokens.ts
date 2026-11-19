@@ -38,6 +38,11 @@ const light = {
     avoid: '#646E78',
     conditional: '#4F5F8A',
   },
+  // QR コードは、ダークでもライトと同じ値（明るい地に暗い模様。反転した QR を読めないカメラがある）
+  qr: {
+    foreground: '#2B2420',
+    background: '#FFFDF9',
+  },
 };
 
 export type ColorTokens = typeof light & {
@@ -77,6 +82,7 @@ const dark: typeof light = {
     avoid: '#A3ADB7',
     conditional: '#97A6D0',
   },
+  qr: light.qr,
 };
 
 // 別のトークンと同じ値のもの（`= color/accent`）は、参照でつなぐ

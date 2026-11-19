@@ -29,6 +29,14 @@
       "expo-router",
       "expo-localization",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "招待の QR コードを読み取るために、カメラを使います",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#F6F1EA",

@@ -38,10 +38,13 @@
 | `color/danger` | 取り消せない操作だけ（削除・退出） | `#A8231C` | `#F2786F` | 6.4 / 6.5 |
 | `color/success` | 成功の表示（参加しました、など。多用しない） | `#3F7449` | `#86BE91` | 4.9 / 8.2 |
 | `color/status/overdue` | 期限切れの表示（「2日過ぎ」） | = `color/accent` | = `color/accent` | — |
+| `color/qr/foreground` | QR コードの模様 | `#2B2420` | `#2B2420`（ライトと同じ） | — |
+| `color/qr/background` | QR コードの地（周りの余白を含む） | `#FFFDF9` | `#FFFDF9`（ライトと同じ） | — |
 
 - **期限切れはアクセントの色で示す**：エラーではなく「注意を向けてほしい」状態なので、赤（`danger`）は使わない。
 - **アクセントと危険の色が近い**（テラコッタと赤）。削除の確認は OS の標準のアラート（赤い「削除」ボタン）に任せ、アプリの層では赤をほとんど使わないようにして、混同を避ける。
 - `text/tertiary` のライトの値は 3.4 で、本文の基準に届かない。プレースホルダーと無効の表示だけに使う。
+- **QR コードは、ダークでも明るい地に暗い模様にする**：色を反転した QR を読めないカメラのアプリがあるため。`color/qr/*` だけは、ダークでもライトと同じ値にする（15.2 で追加）。
 
 ### 1.2 作業の種類の色
 
@@ -203,8 +206,11 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | Badge | `caption`、角丸 `radius/sm`、色は役割の色の subtle を背景に。期限切れ・ロール・一時停止中 |
 | Button（アプリの層） | 主：アクセントの背景＋`on-accent` の文字。副：枠だけ。高さ 44pt 以上、角丸 `radius/md`。危険な操作は OS のアラートに任せる |
 | EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |
-| ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加） |
+| ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加）。右端に操作のボタン（Button の副）を置ける。置くときは項目そのものを押せなくし、操作はボタンだけにする（15.2 で追加） |
 | FormField | 見出し `subheadline` の `text/secondary`、入力欄は背景 `bg/subtle`・角丸 `radius/md`・高さ 44pt 以上、エラーのときは枠を `danger` にし、入力欄の下に理由を `footnote` の `danger` で出す（15.1 で追加） |
+| Toast | 操作の結果（「保存しました」など）を、タブバーの上に3秒だけ出す。地 `text/primary`・文字 `bg/base`（反転して画面の内容と区別する）、`callout`、角丸 `radius/md`、内側 左右 `space/lg`・上下 `space/md`。押す操作はなく、画面の読み上げにも伝える。取り消しのボタンつきは TODAY-02 のスナックバー（15.2 で追加） |
+| QRCodeView | 模様 `qr/foreground`、地 `qr/background`、周りに `space/lg` の余白（読み取りに必要な余白を兼ねる）、角丸 `radius/lg`。大きさは画面の幅に合わせ、最大 240pt（15.2 で追加） |
+| QRScanner | カメラの映像を画面全体に出し、OS のカメラの許可のダイアログを使う。許可がないときは、説明と「カメラを使う」、拒否されたあとは「設定を開く」のボタンを出す（15.2 で追加） |
 
 ---
 

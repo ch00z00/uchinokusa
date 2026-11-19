@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/api';
+import { clearPendingInvite } from '@/features/invitation/pendingInvite';
 import { clearAppStorage, getDeviceId } from '@/lib/deviceStorage';
 
 import { authClient } from './authClient';
@@ -16,7 +17,11 @@ export function useSignOut() {
           unwrap(api.DELETE('/me/devices/{deviceId}', { params: { path: { deviceId } } })),
         signOut: () => authClient.signOut(),
         clearCache: () => queryClient.clear(),
-        clearStorage: clearAppStorage,
+        // 開いていた招待も忘れる（次にサインインした人を、その招待へ進めない）
+        clearStorage: () => {
+          clearPendingInvite();
+          return clearAppStorage();
+        },
       }),
   });
 }

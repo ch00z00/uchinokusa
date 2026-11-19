@@ -6,6 +6,7 @@ import { errorMessageKey } from '@/api/errorMessage';
 import { AppText } from '@/components/AppText';
 import { ListRow } from '@/components/ListRow';
 import { RoleBadge } from '@/components/RoleBadge';
+import { useToast } from '@/components/Toast';
 import { useMe } from '@/features/account/useMe';
 import { HouseholdForm } from '@/features/household/HouseholdForm';
 import { leaveDecision } from '@/features/household/leave';
@@ -39,6 +40,7 @@ function HouseholdSettings({ household }: { household: Household }) {
   const remove = useRemoveMember(household.id);
   const deleteHousehold = useDeleteHousehold(household.id);
   const isOwner = can(household.role, 'manageHousehold');
+  const toast = useToast();
 
   const leave = async () => {
     if (!members.data || !me.data) return;
@@ -51,7 +53,7 @@ function HouseholdSettings({ household }: { household: Household }) {
         confirmLabel: t('household.transfer.title'),
         cancelLabel: t('common.cancel'),
       });
-      if (go) router.push('/household/transfer');
+      if (go) router.push('/settings/household/transfer');
       return;
     }
     if (decision === 'deleteRequired') {
@@ -65,18 +67,18 @@ function HouseholdSettings({ household }: { household: Household }) {
       cancelLabel: t('common.cancel'),
       destructive: true,
     });
-    if (ok) remove.mutate({ userId: me.data.id, self: true }, { onSuccess: () => router.dismissTo('/today') });
+    if (ok) remove.mutate({ userId: me.data.id, self: true }, { onSuccess: () => router.dismissTo('/settings') });
   };
 
   const destroy = async () => {
     const ok = await confirm({
       title: t('household.delete.confirmTitle', { name: household.name }),
       message: t('household.delete.confirmMessage'),
-      confirmLabel: t('household.delete.action'),
+      confirmLabel: t('household.delete.confirm'),
       cancelLabel: t('common.cancel'),
       destructive: true,
     });
-    if (ok) deleteHousehold.mutate(undefined, { onSuccess: () => router.dismissTo('/today') });
+    if (ok) deleteHousehold.mutate(undefined, { onSuccess: () => router.dismissTo('/settings') });
   };
 
   const actionError = remove.error ?? deleteHousehold.error;
@@ -85,6 +87,7 @@ function HouseholdSettings({ household }: { household: Household }) {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       contentContainerStyle={{ paddingVertical: theme.space.lg, gap: theme.space.xl }}
     >
       <View style={{ paddingHorizontal: theme.space.lg, gap: theme.space.sm }}>
@@ -100,7 +103,7 @@ function HouseholdSettings({ household }: { household: Household }) {
             pending={update.isPending}
             error={update.error}
             // 地域は空文字を送ると未設定に戻る
-            onSubmit={(value) => update.mutate(value)}
+            onSubmit={(value) => update.mutate(value, { onSuccess: () => toast.show(t('common.saved')) })}
           />
         ) : (
           // 世帯の情報の変更はオーナーだけ（要件2-5、4-2）。ほかのロールには見せるだけ
@@ -112,11 +115,6 @@ function HouseholdSettings({ household }: { household: Household }) {
             </AppText>
           </View>
         )}
-        {update.isSuccess && (
-          <AppText variant="footnote" color="secondary">
-            {t('common.saved')}
-          </AppText>
-        )}
       </View>
 
       <View>
@@ -124,9 +122,17 @@ function HouseholdSettings({ household }: { household: Household }) {
           title={t('household.members.title')}
           detail={members.data ? String(members.data.length) : undefined}
           navigates
-          onPress={() => router.push('/household/members')}
+          onPress={() => router.push('/settings/household/members')}
         />
-        {/* TODO(15.2)：招待（INV-01 / INV-03）、TODO(16.1)：置き場所（LOC-01）への入口 */}
+        {/* 招待はオーナーだけ（要件3-1、4-2） */}
+        {isOwner && (
+          <ListRow
+            title={t('invitations.title')}
+            navigates
+            onPress={() => router.push('/settings/household/invitations')}
+          />
+        )}
+        {/* TODO(16.1)：置き場所（LOC-01）への入口 */}
       </View>
 
       <View>

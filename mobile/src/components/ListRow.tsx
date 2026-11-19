@@ -13,6 +13,8 @@ export type ListRowProps = {
   subtitle?: string;
   /** 題名の右に置くもの（バッジなど） */
   accessory?: ReactNode;
+  /** 項目の右端に置く操作（「取り消す」のボタンなど）。置くときは、項目そのものは押せなくする（onPress を渡さない） */
+  trailing?: ReactNode;
   /** 選択中の印（一覧から1つを選ぶとき） */
   selected?: boolean;
   /** 取り消せない操作（削除・退出など）。文字を color/danger にする */
@@ -33,6 +35,7 @@ export function ListRow({
   detail,
   subtitle,
   accessory,
+  trailing,
   selected,
   destructive,
   navigates,
@@ -43,8 +46,9 @@ export function ListRow({
   const theme = useTheme();
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: disabled || !onPress, selected }}
+      // 押せない項目（右端のボタンで操作する項目など）は、読み上げでボタンと伝えない
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityState={onPress ? { disabled, selected } : { selected }}
       accessibilityHint={accessibilityHint}
       disabled={disabled || !onPress}
       onPress={onPress}
@@ -83,6 +87,7 @@ export function ListRow({
       {/* TODO：OS のシンボル（checkmark / chevron.right）にする（SettingsHeaderButton と同じく、アイコンの導入のあと） */}
       {selected && <AppText color="accent">✓</AppText>}
       {navigates && <AppText color="tertiary">›</AppText>}
+      {trailing}
     </Pressable>
   );
 }

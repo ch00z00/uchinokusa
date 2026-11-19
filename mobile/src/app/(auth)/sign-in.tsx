@@ -7,6 +7,7 @@ import { useSignIn } from '@/auth/AuthProvider';
 import type { AuthProviderId } from '@/auth/types';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
+import { hasPendingInvite } from '@/features/invitation/pendingInvite';
 import { useTheme } from '@/theme';
 
 // AUTH-01 サインイン
@@ -25,6 +26,12 @@ export default function SignInScreen() {
           {t('auth.signIn.lead')}
         </AppText>
       </View>
+      {/* 招待リンクから来た場合（AUTH-01、要件3-4） */}
+      {hasPendingInvite() && (
+        <AppText variant="callout" style={styles.center}>
+          {t('auth.signIn.inviteNote')}
+        </AppText>
+      )}
       {/* Apple と Google は、同じ大きさ・同じ目立ち方にする（App Store の審査のルール）。
           Apple のガイドラインどおりのボタンにするのは、タスク 14.4 */}
       <View style={{ gap: theme.space.md }}>

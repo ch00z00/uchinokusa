@@ -39,7 +39,7 @@ export default function SettingsScreen() {
             title={t('household.settings.title')}
             detail={state.household.name}
             navigates
-            onPress={() => router.push('/household')}
+            onPress={() => router.push('/settings/household')}
           />
         </View>
       )}

@@ -17,7 +17,11 @@ export default function SwitchHouseholdScreen() {
   const selectedId = state.status === 'selected' ? state.household.id : null;
 
   return (
-    <ScrollView contentContainerStyle={{ paddingVertical: theme.space.lg, gap: theme.space.xl }}>
+    // シートの見出しの下に一覧がもぐらないように、見出しの分だけ中身を下げる
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{ paddingVertical: theme.space.lg, gap: theme.space.xl }}
+    >
       <View>
         {households.data?.map((household) => (
           <ListRow

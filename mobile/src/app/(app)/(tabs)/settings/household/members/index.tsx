@@ -50,7 +50,11 @@ function Members({ household }: { household: Household }) {
               navigates={isOwner && !self}
               onPress={
                 isOwner && !self
-                  ? () => router.push({ pathname: '/household/members/[userId]', params: { userId: member.userId } })
+                  ? () =>
+                      router.push({
+                        pathname: '/settings/household/members/[userId]',
+                        params: { userId: member.userId },
+                      })
                   : undefined
               }
             />

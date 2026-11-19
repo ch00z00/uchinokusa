@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
+import { ToastProvider } from '@/components/Toast';
 import { createQueryClient } from '@/query/queryClient';
 import { useAppStateFocus } from '@/query/useAppStateFocus';
 import { toNavigationTheme, useTheme } from '@/theme';
@@ -22,9 +23,11 @@ export default function RootLayout() {
     <ThemeProvider value={toNavigationTheme(theme)}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <SplashScreenController />
-          {/* サインインの前後の振り分けは、(app) と (auth) のレイアウトで行う */}
-          <Stack screenOptions={{ headerShown: false }} />
+          <ToastProvider>
+            <SplashScreenController />
+            {/* サインインの前後の振り分けは、(app) と (auth) のレイアウトで行う */}
+            <Stack screenOptions={{ headerShown: false }} />
+          </ToastProvider>
         </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>

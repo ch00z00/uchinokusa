@@ -18,6 +18,7 @@ export default function NewHouseholdScreen() {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       contentContainerStyle={{ padding: theme.space.lg }}
     >
       <HouseholdForm

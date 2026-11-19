@@ -2,25 +2,25 @@
 
 アプリ（`mobile/`）の担当のエージェントは、作業を再開するときにまずこのファイルを読むこと。バックエンドの担当は `HANDOFF.md` を読む（このファイルの「バックエンドへの依頼」だけは見る）。
 
-## 現在の状況（2026-11-17 時点）
+## 現在の状況（2026-11-19 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- 14.1（Expo のプロジェクトと共通の基盤）と 14.3（デザイントークン）が完了。14.2（サインイン・表示名・サインアウト）と 15.1（世帯の作成・切り替え・設定）はコミット済みで、iOS シミュレーターでの確認待ち。起動・構成・API の呼び方は `mobile/README.md`
+- 完了：14.1・14.2・14.3・15.1・15.2（iOS シミュレーターで確認済み）。起動・構成・API の呼び方は `mobile/README.md`
+- 残り：14.4（本番のサインイン）と 15.3（招待用ドメイン）は、本番の Firebase・Apple Developer Program などの前提がそろってから
 - アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 15.2
+/kiro:spec-impl household-plant-care-mvp 16.1
 ```
-- **14.2・15.1 は確認待ち（コードはコミット済み、タスクは未完了）**。iOS シミュレーターで、次を通しで確かめてから `[x]` にする（ブラウザでは CORS で API が届かないため）
-  - 14.2：Apple（名前なし）でサインイン → 表示名の画面 → 入力チェック（空・31文字・前後の空白）→ 保存 → 今日。Google（名前あり）は表示名の画面に名前が入っている。再起動してもサインインが続く。設定からサインアウトして、サインインの画面に戻る
-  - 15.1：確認のアラートを出す操作（オーナー権限の移譲、メンバーを外す、退出の3つの分岐、世帯の削除）。世帯の切り替えのシート（formSheet）の見た目。ブラウザでは、作成・切り替え・保存・再読み込み後の選択の保持・ロールの変更まで確かめた（2026-11-17、下の「CORS の中継」で）
-- iOS のビルド（`npm run ios`）：CocoaPods 1.17 と `xcode-select` の切り替えは済み（2026-11-17）。Xcode 26.6 の「iOS 26.5 のプラットフォーム」（Xcode > Settings > Components）をダウンロード中。シミュレーターのランタイムだけでは、ビルドの宛先にシミュレーターが出ない
+- 16.1 の前に決めること：置き場所の管理を、植物のタブと世帯の設定のどちらに置くか（`screen-inventory.md` の【未決】）
+- iOS のビルド：`npx expo run:ios --device <シミュレーターの ID> --port 8082`（Xcode 26.6、iOS 26.5 のプラットフォームは入れた。2026-11-19）。ネイティブのモジュールを足したら `npx expo prebuild --platform ios --no-install` のあとにビルドし直す
+- シミュレーターは Claude からはタップできない（画面を撮る `xcrun simctl io <ID> screenshot` と、リンクを開く `xcrun simctl openurl` だけできる）。操作の確認はユーザーに頼む
 - Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
 
 ## 14.1 でわかったこと・決めたこと
 - 画面は `mobile/src/app/` に置く（Expo SDK 58 の標準。`structure.md` の予定の `mobile/app/` とは違う。steering の更新はユーザーに確認する）
 - サインインの前後の振り分けは、`(auth)` と `(app)` のグループのレイアウトで `Redirect` する。`Stack.Protected` は、試したときに更新の繰り返し（Maximum update depth）が出たので使っていない。ただし、そのときは開発サーバーを `CI=1` で起動していて変更が反映されていなかったため、`Stack.Protected` が原因だったかはわからない
-- 設定は、タブにせず、各タブのヘッダーの右のボタンから開く（画面一覧の【未決】。仕様のルーティングのとおり）
+- ~~設定は、タブにせず、各タブのヘッダーの右のボタンから開く~~ → 15.1 の確認で、設定はタブにした（下の「15.2 で決めたこと」）
 - タブバーは `expo-router/native-tabs`（OS の標準のタブバー）。アイコンは `foundations.md` の 4.3 の名前（`checklist`・`leaf` / `potted_plant`）で型チェックが通った
 - ブラウザでスマホの幅の枠をアプリの中に作ると、web のヘッダーが更新を繰り返して止まる。幅は Chrome の側で合わせる
 - iOS / Android のネイティブのビルドは、この Mac に Xcode・Android SDK がないため、まだ確かめていない（設定は `app.json`・`eas.json` まで）
@@ -46,6 +46,21 @@
 - 招待から参加する（`/join`）は案内だけの仮の画面。中身は 15.2
 - 新しい部品：`ListRow`・`FormField`・`RoleBadge`（`components/`）。`ListRow`・`FormField` は `foundations.md` の5章に追記した。チェックや「›」の印は文字で仮置き（アイコンの導入のあとで OS のシンボルにする）
 - 世帯の一覧の取得に失敗したとき（`state.status === 'error'`）の画面は、まだない（ErrorState は 17 の今日の画面で作る）
+
+## 15.2 で決めたこと（15.1 の確認での直しを含む）
+- 15.2 はアプリ側だけ。本番の招待用ドメイン・Universal Links / App Links の検証ファイル・WEB-01 は 15.3 に分けた（2026-11-19 にユーザーと決めた）
+- 招待リンク `https://<ドメイン>/i/<トークン>` は、`src/app/+native-intent.tsx` で `/invite/<トークン>` に読み替える。開発中は `xcrun simctl openurl <ID> uchinokusa://invite/<コード>` で開ける
+- 未サインインで招待を開いたら、`features/invitation/pendingInvite.ts` に覚え、サインイン（初回は表示名の設定も）のあとに `homeHref()` で同じ参加の確認へ戻す。忘れるのは、参加・「今日を開く」・サインアウトのとき（参加の確認を開いた時点で忘れると、初回の表示名の設定をはさんだときに戻れないため）
+- 招待コードの入力は、空白・ハイフンを除き、全角を半角・小文字を大文字にしてから確かめる（`inviteCode.ts`）。QR は、ドメインを問わず `/i/<トークン>` の形なら招待とみなす（`inviteLink.ts`。ドメインが決まる 15.3 で見直す）
+- 有効期限は7日で固定（選ばせない）。招待の一覧に作成者は出さない（API になく、作れるのはオーナーだけ）
+- 参加済みのとき、その世帯を開くには世帯の ID が要る → バックエンドに依頼中（下の依頼2）。それまでは「今日を開く」
+- QR：表示は `react-native-qrcode-svg`、読み取りは `expo-camera`（カメラの許可の文言は `app.json` の plugins）。QR はダークでも明るい地にする（`color/qr/*` を `foundations.md` とトークンに足した）。シミュレーターにはカメラがないので、読み取りは実機で確かめる
+- **タブは「今日・植物・設定」の3つ**（2026-11-19 にユーザーと決めた）。世帯の設定・メンバー・招待は `(tabs)/settings/` の中（URL は `/settings/household/...`）。タブの上に重ねる画面の戻るボタンは矢印だけ（前の画面の名前が「(tabs)」になるため）
+- ヘッダーの世帯名は、iOS 26 のヘッダーのボタンのガラスの背景を消す（`householdSwitcherOptions` の `unstable_headerLeftItems` と `hidesSharedBackground`）
+- 都道府県の選択は、RN の `Modal` ではなく、Expo Router の画面（`/prefecture`、`presentation: 'modal'`）。選んだ値は `prefecturePicker.ts` で開いた欄に返す
+- 新しい部品：`Toast`（保存しました、など。`ToastProvider` はルートのレイアウト）、`QRCodeView`、`QRScanner`。`ListRow` に右端の操作を置く `trailing` を足した。どれも `foundations.md` の5章に追記した
+- 日付の表示は `lib/formatDate.ts`（「11月26日(木)」。相対の表現は【未決】）
+- 未確認：表示名の入力で「日本語と英語の変換が逆」になったという報告（2026-11-19）。どの操作でどうなったかをユーザーに確かめている
 
 ### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）
 リポジトリには入れない。scratchpad などに次のような Node のスクリプトを置き、`http://localhost:8090` → `8080` に流して CORS のヘッダーを足す。web は `EXPO_PUBLIC_API_BASE_URL=http://localhost:8090/v1 npx expo start --web -c` で起動する
@@ -83,7 +98,7 @@
 
 ## 担当の分け方
 - バックエンドとアプリは、別々のエージェントが同じ作業フォルダ・同じブランチ（`main`）で並行して進める
-- **アプリ担当がコミットしてよいファイル**：`mobile/`（`openapi.yaml` から生成した `mobile/src/api/schema.d.ts` を含む。2026-11-08 にユーザーと決めた）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）
+- **アプリ担当がコミットしてよいファイル**：`mobile/`（`openapi.yaml` から生成した `mobile/src/api/schema.d.ts` を含む。2026-11-08 にユーザーと決めた）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、`docs/design/screen-inventory.md`・`foundations.md`（`design.md` の決まりで、画面の実装の前に直すため。15.1 から）、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）
 - コミットは、自分のファイルのパスを指定して行う。`git add -A` や `git add .` は使わない（もう片方の作りかけの変更が入るため）
   ```
   git add <自分のファイル>
@@ -105,6 +120,12 @@
   - 許可するオリジンは、すでにある `ALLOWED_ORIGINS` を使う案（ローカルは `http://localhost:8081`）
   - 必要なヘッダー：`Authorization`、`Content-Type`。メソッド：`GET`・`POST`・`PUT`・`PATCH`・`DELETE`
   - 本番のアプリ（iOS / Android）はブラウザではないので CORS は関係しない。`ALLOWED_ORIGINS` が空なら、今までどおり何も許可しない、で足りるはず
+
+### 2. 招待の内容（`InvitationPreview`）に、すでに参加している世帯の ID がほしい（2026-11-19）
+- 参加の確認（INV-12）で `alreadyMember: true` のとき、画面の仕様は「すでにこの世帯に参加しています」と **その世帯を開くボタン** を出す（要件3-6）
+- いまの `GET /invitations/{tokenOrCode}` は世帯名しか返さないので、アプリはどの世帯に切り替えればよいかわからない（同じ名前の世帯もありうる）
+- 案：`InvitationPreview` に `householdId`（`alreadyMember` が true のときだけ。まだメンバーでない人には世帯の ID を見せない）を足す
+- それまでは、アプリは「今日」を開くボタンにしておく
 
 ## デザイン
 - 画面と部品の実装では、必ず `.kiro/steering/design.md` を読んで従う
