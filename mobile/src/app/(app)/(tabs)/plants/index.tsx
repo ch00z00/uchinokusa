@@ -8,13 +8,14 @@ import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { FilterChips } from '@/components/FilterChips';
 import { headerRightTextButton } from '@/components/HeaderTextButton';
+import { ListRow } from '@/components/ListRow';
 import { can } from '@/features/household/permissions';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import type { Household } from '@/features/household/useHouseholds';
 import { useLocations } from '@/features/location/useLocations';
 import { filterPlantsByLocation, sortPlantsByNextDue, type LocationFilter } from '@/features/plant/plantList';
 import { PlantListItem } from '@/features/plant/PlantListItem';
-import { usePlants } from '@/features/plant/usePlants';
+import { useArchivedPlants, usePlants } from '@/features/plant/usePlants';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useTheme } from '@/theme';
 
@@ -37,6 +38,7 @@ function Plants({ household }: { household: Household }) {
   const [filterKey, setFilterKey] = useState('all');
   const plants = usePlants(household.id, q);
   const locations = useLocations(household.id);
+  const archived = useArchivedPlants(household.id);
   const canEdit = can(household.role, 'edit');
 
   const locationNames = new Map(locations.data?.map((l) => [l.id, l.name]));
@@ -111,6 +113,20 @@ function Plants({ household }: { household: Household }) {
               selectedKey={selectedKey}
               onSelect={setFilterKey}
             />
+          ) : undefined
+        }
+        // アーカイブした植物（PLANT-05）の入口。たまにしか使わないので、ヘッダーではなく一覧のいちばん下に置き、
+        // アーカイブした植物があるときだけ出す。検索・絞り込みの結果には混ぜない（2026-11-21 に決定）
+        ListFooterComponent={
+          !narrowed && plants.data && archived.data && archived.data.length > 0 ? (
+            <View style={{ marginTop: theme.space['2xl'] }}>
+              <ListRow
+                title={t('plants.list.archivedEntry')}
+                detail={String(archived.data.length)}
+                navigates
+                onPress={() => router.push('/plants/archived')}
+              />
+            </View>
           ) : undefined
         }
         ListEmptyComponent={<View style={{ padding: theme.space.lg }}>{empty}</View>}

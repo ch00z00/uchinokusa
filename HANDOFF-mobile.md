@@ -12,7 +12,7 @@
 ```
 /kiro:spec-impl household-plant-care-mvp 16.2
 ```
-- 16.2a・16.2b は確認済み。16.2c（植え替えの提案）は実装済みで確認待ち。次は 16.2d（削除・アーカイブ）
+- 16.2a〜16.2c は確認済み。16.2d（削除・アーカイブ・アーカイブした植物）は実装済みで確認待ち。確認できたら tasks.md の 16.2 を `[x]` にし、16.3 へ
 - 16.1 は確認済み（2026-11-20）
 - あとで直す：世帯の設定（HH-01）に、世帯名・地域・メンバー・招待・置き場所・退出・削除が並び、項目が多くなった。ユーザーから「「世帯の設定」の中にまとめるにはデザイン的に微妙になってきた」（2026-11-20）。設定のタブの構成ごと見直す（時期はユーザーと決める）
 - iOS のビルド：`npx expo run:ios --device <シミュレーターの ID> --port 8082`（Xcode 26.6、iOS 26.5 のプラットフォームは入れた。2026-11-19）。ネイティブのモジュールを足したら `npx expo prebuild --platform ios --no-install` のあとにビルドし直す
@@ -78,6 +78,7 @@
 - 16.2b 登録・編集：`(app)/plants/new.tsx`・`plants/[id]/edit.tsx`（モーダル）、種類の検索は `(app)/species.tsx`（`speciesPicker.ts` で値を返す）。置き場所の選択肢の最後の「＋ 新しい置き場所」は `newLocationFlow.ts` で LOC-02 を開き、作ったものを選ぶ
 - 日付は `components/DateField.tsx`（`@expo/ui/community/datetime-picker`。iOS は compact、Android はダイアログ。ネイティブの追加はなし）。購入日は未来を選べない（サーバーはまだ受け付けるが、アプリで止める）
 - 16.2c 植え替えの提案：`(app)/plants/[id]/repotting.tsx`（登録のモーダルを `router.replace` で置き換える）。提案の理由は `features/suggestion/suggestionText.ts` で材料から組み立てる。部品 `SuggestionCard` を足した（今日やること（17.1）でも使う）
+- 16.2d 削除・アーカイブ：編集の画面の下に「アーカイブする」「植物を削除」（OS の確認のアラート → トースト → `router.dismissTo` で元の一覧へ）。アーカイブした植物（PLANT-05）は `(tabs)/plants/archived.tsx`（植物のタブの中）。入口は植物の一覧のいちばん下の行で、アーカイブした植物があり、検索・絞り込みをしていないときだけ出す（ユーザーが選んだ。たまにしか使わない入口をヘッダーに置かない。2026-11-21）。アーカイブの解除は詳細（PLANT-10）の「アーカイブ済み」の表示の中。アーカイブ・削除のあとは、世帯のキャッシュ（`['households', id]`）をまとめて取り直す（提案・今日のタスクも変わるため）
 - ヘッダーの文字のボタンは `components/HeaderTextButton.tsx` の `headerRightTextButton()`（背景なし）
 - 試しのデータ：ローカルの API に、エミュレーター用の署名なしのトークン（`alg: none`、`iss`・`aud` は `demo-uchinokusa`、`user_id` は DB の `users.firebase_uid`）で呼べる。スクリプトはリポジトリに入れない
 

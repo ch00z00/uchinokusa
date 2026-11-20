@@ -16,6 +16,8 @@ export default function PlantsLayout() {
           ...householdSwitcherOptions,
         }}
       />
+      {/* PLANT-05。タブバーを出したまま、植物のタブの中で開く */}
+      <Stack.Screen name="archived" options={{ title: t('plants.archived.title') }} />
     </Stack>
   );
 }

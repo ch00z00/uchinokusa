@@ -1,4 +1,4 @@
-import { filterPlantsByLocation, sortPlantsByNextDue, type PlantListEntry } from '../plantList';
+import { filterPlantsByLocation, sortPlantsByArchivedAt, sortPlantsByNextDue, type PlantListEntry } from '../plantList';
 
 const plant = (name: string, extra: Partial<PlantListEntry> = {}): PlantListEntry => ({ id: name, name, ...extra });
 
@@ -41,5 +41,23 @@ describe('filterPlantsByLocation', () => {
 
   it('location はその置き場所の植物だけ', () => {
     expect(filterPlantsByLocation(plants, { kind: 'location', id: 'L2' }).map((p) => p.name)).toEqual(['c']);
+  });
+});
+
+describe('sortPlantsByArchivedAt', () => {
+  const archived = (name: string, archivedAt?: string) => ({ id: name, name, archivedAt });
+
+  it('アーカイブした日時の新しい順。同じなら名前順', () => {
+    const sorted = sortPlantsByArchivedAt([
+      archived('ポトス', '2026-10-01T09:00:00Z'),
+      archived('モンステラ', '2026-11-20T09:00:00Z'),
+      archived('アイビー', '2026-10-01T09:00:00Z'),
+    ]);
+    expect(sorted.map((p) => p.name)).toEqual(['モンステラ', 'アイビー', 'ポトス']);
+  });
+
+  it('日時がないもの（来ないはずだが）は最後', () => {
+    const sorted = sortPlantsByArchivedAt([archived('ポトス'), archived('アイビー', '2026-10-01T09:00:00Z')]);
+    expect(sorted.map((p) => p.name)).toEqual(['アイビー', 'ポトス']);
   });
 });

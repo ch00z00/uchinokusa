@@ -208,7 +208,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |
 | ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加）。右端に操作のボタン（Button の副）を置ける。置くときは項目そのものを押せなくし、操作はボタンだけにする（15.2 で追加）。一覧の中の操作の項目（「＋ 新しい置き場所」など）は、文字を `accent` にする（16.2b で追加） |
 | FormField | 見出し `subheadline` の `text/secondary`、入力欄は背景 `bg/subtle`・角丸 `radius/md`・高さ 44pt 以上、エラーのときは枠を `danger` にし、入力欄の下に理由を `footnote` の `danger` で出す（15.1 で追加） |
-| PlantListItem | ListRow の形で、題名に植物名、補足に置き場所（未設定なら「置き場所未設定」）と種類、右に次の予定日（なければ「予定なし」）。押すと植物の詳細。状態：通常 / 置き場所未設定 / 予定のタスクなし / アーカイブ済み（16.2a で追加） |
+| PlantListItem | ListRow の形で、題名に植物名、補足に置き場所（未設定なら「置き場所未設定」）と種類、右に次の予定日（なければ「予定なし」）。押すと植物の詳細。状態：通常 / 置き場所未設定 / 予定のタスクなし / アーカイブ済み（右に予定日の代わりに「〇月〇日(曜)にアーカイブ」。`archived`）（16.2a で追加、16.2d でアーカイブ済みを足した） |
 | FilterChips | 横に流れるチップの並び。チップは高さ 36pt（上下に余白を足して、押せる領域を 44pt 以上にする）、角丸 `radius/full`、内側 左右 `space/md`、文字 `subheadline`。選択中は 地 `accent` ＋ 文字 `on-accent`、選択していないものは 地 `bg/subtle` ＋ 文字 `text/primary`（16.2a で追加） |
 | DateField | 見出しは FormField と同じ。未設定なら ListRow（「未設定」、進む印つき）。日付の選択は OS の部品（iOS：compact の DatePicker を `bg/surface` の欄に置く、Android：日付のダイアログ）。色は `accent`。値があれば、下に「未設定に戻す」（Button の副）（16.2b で追加） |
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |

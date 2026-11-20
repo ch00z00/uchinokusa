@@ -36,3 +36,15 @@ export function filterPlantsByLocation<T extends PlantListEntry>(plants: readonl
       return plants.filter((p) => p.locationId === filter.id);
   }
 }
+
+/** アーカイブした植物（PLANT-05）を、アーカイブした日時の新しい順に並べる。同じなら名前順 */
+export function sortPlantsByArchivedAt<T extends Pick<Plant, 'name' | 'archivedAt'>>(plants: readonly T[]): T[] {
+  return [...plants].sort((a, b) => {
+    if (a.archivedAt !== b.archivedAt) {
+      if (a.archivedAt === undefined) return 1;
+      if (b.archivedAt === undefined) return -1;
+      return Date.parse(b.archivedAt) - Date.parse(a.archivedAt);
+    }
+    return a.name.localeCompare(b.name, 'ja');
+  });
+}
