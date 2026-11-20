@@ -2,17 +2,17 @@
 
 アプリ（`mobile/`）の担当のエージェントは、作業を再開するときにまずこのファイルを読むこと。バックエンドの担当は `HANDOFF.md` を読む（このファイルの「バックエンドへの依頼」だけは見る）。
 
-## 現在の状況（2026-11-19 時点）
+## 現在の状況（2026-11-20 時点）
 - 仕様（`.kiro/specs/household-plant-care-mvp/`）の要件・設計・タスクは承認済み。アプリのタスクは 14〜20
-- 完了：14.1・14.2・14.3・15.1・15.2（iOS シミュレーターで確認済み）。起動・構成・API の呼び方は `mobile/README.md`
+- 完了：14.1・14.2・14.3・15.1・15.2（iOS シミュレーターで確認済み）。16.1 は実装済みで、ユーザーの確認待ち。起動・構成・API の呼び方は `mobile/README.md`
 - 残り：14.4（本番のサインイン）と 15.3（招待用ドメイン）は、本番の Firebase・Apple Developer Program などの前提がそろってから
 - アプリが使う API は、すべてできている（バックエンドのタスク 1〜13 は完了）。ただし、ブラウザから呼ぶには CORS が必要（下の「バックエンドへの依頼」）
 
 ## 次にやること
 ```
-/kiro:spec-impl household-plant-care-mvp 16.1
+/kiro:spec-impl household-plant-care-mvp 16.2
 ```
-- 16.1 の前に決めること：置き場所の管理を、植物のタブと世帯の設定のどちらに置くか（`screen-inventory.md` の【未決】）
+- 16.1 の確認（iOS シミュレーター）が終わってから 16.2 へ
 - iOS のビルド：`npx expo run:ios --device <シミュレーターの ID> --port 8082`（Xcode 26.6、iOS 26.5 のプラットフォームは入れた。2026-11-19）。ネイティブのモジュールを足したら `npx expo prebuild --platform ios --no-install` のあとにビルドし直す
 - シミュレーターは Claude からはタップできない（画面を撮る `xcrun simctl io <ID> screenshot` と、リンクを開く `xcrun simctl openurl` だけできる）。操作の確認はユーザーに頼む
 - Bundle ID / パッケージ名は、仮に `app.uchinokusa`（`mobile/app.json`）。ストアに登録する前にユーザーと決める
@@ -57,10 +57,18 @@
 - QR：表示は `react-native-qrcode-svg`、読み取りは `expo-camera`（カメラの許可の文言は `app.json` の plugins）。QR はダークでも明るい地にする（`color/qr/*` を `foundations.md` とトークンに足した）。シミュレーターにはカメラがないので、読み取りは実機で確かめる
 - **タブは「今日・植物・設定」の3つ**（2026-11-19 にユーザーと決めた）。世帯の設定・メンバー・招待は `(tabs)/settings/` の中（URL は `/settings/household/...`）。タブの上に重ねる画面の戻るボタンは矢印だけ（前の画面の名前が「(tabs)」になるため）
 - ヘッダーの世帯名は、iOS 26 のヘッダーのボタンのガラスの背景を消す（`householdSwitcherOptions` の `unstable_headerLeftItems` と `hidesSharedBackground`）
-- 都道府県の選択は、RN の `Modal` ではなく、Expo Router の画面（`/prefecture`、`presentation: 'modal'`）。選んだ値は `prefecturePicker.ts` で開いた欄に返す
+- 都道府県の選択は、RN の `Modal` ではなく、Expo Router の画面（`presentation: 'modal'`）。16.1 で、選択肢のシート全般（`ChoiceField` と `/choice`）にまとめた
 - 新しい部品：`Toast`（保存しました、など。`ToastProvider` はルートのレイアウト）、`QRCodeView`、`QRScanner`。`ListRow` に右端の操作を置く `trailing` を足した。どれも `foundations.md` の5章に追記した
 - 日付の表示は `lib/formatDate.ts`（「11月26日(木)」。相対の表現は【未決】）
 - 未確認：表示名の入力で「日本語と英語の変換が逆」になったという報告（2026-11-19）。どの操作でどうなったかをユーザーに確かめている
+
+## 16.1 で決めたこと
+- **置き場所の管理は植物のタブ**（2026-11-20 にユーザーと決めた）。植物の一覧のヘッダーの右に「置き場所」（背景なし）→ `(tabs)/plants/locations.tsx`（LOC-01）。世帯の設定からの入口は作らない
+- 作成・編集（LOC-02）は `(app)/locations/new.tsx`・`[id].tsx` のモーダル。選択肢のシートを上に重ねるため、タブの中ではなく `(app)` のスタックに置いた
+- 環境の選択肢は API の値のまま（8方位・距離3段階・遮光2種類）。屋外では窓からの距離と遮光の欄を隠し、保存で未設定に戻す。知らない値は未設定として扱う（`features/location/locationValidation.ts`）
+- 選択肢のシートを共通の部品にした：`components/ChoiceField.tsx`（欄）と `(app)/choice.tsx`（シート）、`lib/choicePicker.ts`（開いた欄に値を返す）。都道府県もこれを使う（`/prefecture` と `prefecturePicker.ts` は消した）
+- 削除の確認は、紐づく植物の数（`plantCount`）を出す。0株なら数を出さない。決定のボタンは「削除する」。保存・削除のあとはトーストを出してモーダルを閉じる
+- TODO(16.2)：置き場所の変更・削除のあとに、植物の一覧のキャッシュも取り直す（`useLocations.ts`）
 
 ### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）
 リポジトリには入れない。scratchpad などに次のような Node のスクリプトを置き、`http://localhost:8090` → `8080` に流して CORS のヘッダーを足す。web は `EXPO_PUBLIC_API_BASE_URL=http://localhost:8090/v1 npx expo start --web -c` で起動する

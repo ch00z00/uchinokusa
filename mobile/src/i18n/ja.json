@@ -207,5 +207,72 @@
       "message": "「{{household}}」への招待です。uchinokusa で開いてください。\n{{url}}\n招待コード：{{code}}",
       "done": "完了"
     }
+  },
+  "location": {
+    "list": {
+      "title": "置き場所",
+      "add": "置き場所を追加",
+      "plantCount": "{{n}}株",
+      "separator": "・",
+      "empty": "置き場所はまだありません",
+      "emptyEditor": "置き場所はまだありません。「リビングの南窓」のように、植物を置いている場所を追加しましょう",
+      "note": "置き場所ごとに、植物を絞り込んだり、今日やることをまとめたりできます"
+    },
+    "create": {
+      "title": "置き場所を追加",
+      "submit": "追加する"
+    },
+    "edit": {
+      "title": "置き場所の編集",
+      "notFound": "この置き場所は見つかりませんでした。削除された可能性があります"
+    },
+    "delete": {
+      "action": "この置き場所を削除",
+      "title": "「{{name}}」を削除しますか？",
+      "message": "この操作は取り消せません",
+      "messageWithPlants": "この置き場所の{{n}}株の植物は、「置き場所未設定」になります。植物は削除されません",
+      "confirm": "削除する",
+      "done": "置き場所を削除しました"
+    },
+    "form": {
+      "name": "置き場所名",
+      "namePlaceholder": "例：リビングの南窓",
+      "unset": "未設定",
+      "environmentNote": "ここから下は任意です。あとからでも設定できます",
+      "indoor": "室内か屋外か",
+      "windowDirection": "窓の向き",
+      "direction": "向き",
+      "windowDistance": "窓からの距離",
+      "shading": "遮光",
+      "errors": {
+        "name": {
+          "required": "置き場所名を入力してください",
+          "too_long": "30文字以内で入力してください"
+        }
+      }
+    },
+    "indoor": {
+      "true": "室内",
+      "false": "屋外"
+    },
+    "windowDirection": {
+      "n": "北",
+      "ne": "北東",
+      "e": "東",
+      "se": "南東",
+      "s": "南",
+      "sw": "南西",
+      "w": "西",
+      "nw": "北西"
+    },
+    "windowDistance": {
+      "near": "窓際",
+      "middle": "窓から少し離れた所",
+      "far": "部屋の奥"
+    },
+    "shading": {
+      "none": "遮光なし",
+      "sheer": "レースカーテンなど"
+    }
   }
 }

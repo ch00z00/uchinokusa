@@ -30,7 +30,7 @@ export default function AppLayout() {
 }
 
 // 世帯がなくても開ける画面（はじめての選択・作成・参加）。segments[1] で判定する
-const withoutHouseholdRoutes = new Set(['onboarding', 'households', 'join', 'invite', 'display-name', 'prefecture']);
+const withoutHouseholdRoutes = new Set(['onboarding', 'households', 'join', 'invite', 'display-name', 'choice']);
 
 function AppStack() {
   const auth = useAuth();
@@ -82,7 +82,11 @@ function AppStack() {
           sheetGrabberVisible: true,
         }}
       />
-      <Stack.Screen name="prefecture" options={{ title: t('household.form.prefecture'), presentation: 'modal' }} />
+      {/* 題名は、開いた欄の見出しを画面の中で付ける */}
+      <Stack.Screen name="choice" options={{ presentation: 'modal' }} />
+      {/* LOC-02 置き場所の作成・編集。選択肢のシートを上に重ねるので、タブの外に置く */}
+      <Stack.Screen name="locations/new" options={{ title: t('location.create.title'), presentation: 'modal' }} />
+      <Stack.Screen name="locations/[id]" options={{ title: t('location.edit.title'), presentation: 'modal' }} />
       <Stack.Screen name="join/index" options={{ title: t('join.title') }} />
       {/* カメラは画面全体に出す */}
       <Stack.Screen name="join/scan" options={{ title: t('scan.title'), presentation: 'fullScreenModal' }} />

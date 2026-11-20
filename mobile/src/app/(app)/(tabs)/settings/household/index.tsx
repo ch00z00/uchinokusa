@@ -132,7 +132,6 @@ function HouseholdSettings({ household }: { household: Household }) {
             onPress={() => router.push('/settings/household/invitations')}
           />
         )}
-        {/* TODO(16.1)：置き場所（LOC-01）への入口 */}
       </View>
 
       <View>
