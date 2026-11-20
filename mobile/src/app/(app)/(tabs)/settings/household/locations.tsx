@@ -10,6 +10,7 @@ import { can } from '@/features/household/permissions';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import type { Household } from '@/features/household/useHouseholds';
 import { locationSummaryKeys } from '@/features/location/locationValidation';
+import { openNewLocation } from '@/features/location/newLocationFlow';
 import { useLocations } from '@/features/location/useLocations';
 import { useTheme } from '@/theme';
 
@@ -70,7 +71,7 @@ function Locations({ household }: { household: Household }) {
     >
       {canEdit && (
         <View style={{ paddingHorizontal: theme.space.lg }}>
-          <Button title={t('location.list.add')} onPress={() => router.push('/locations/new')} />
+          <Button title={t('location.list.add')} onPress={() => openNewLocation()} />
         </View>
       )}
       {list}

@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, FlatList, View } from 'react-native';
@@ -7,6 +7,7 @@ import { errorMessageKey } from '@/api/errorMessage';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { FilterChips } from '@/components/FilterChips';
+import { headerRightTextButton } from '@/components/HeaderTextButton';
 import { can } from '@/features/household/permissions';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import type { Household } from '@/features/household/useHouseholds';
@@ -63,8 +64,14 @@ function Plants({ household }: { household: Household }) {
   } else if (narrowed) {
     empty = <AppText color="secondary">{t('plants.list.noMatch')}</AppText>;
   } else {
-    // TODO(16.2b)：編集者以上には、登録のボタンを出す
-    empty = <AppText color="secondary">{t(canEdit ? 'plants.list.emptyEditor' : 'plants.list.empty')}</AppText>;
+    empty = canEdit ? (
+      <View style={{ gap: theme.space.md }}>
+        <AppText color="secondary">{t('plants.list.emptyEditor')}</AppText>
+        <Button title={t('plants.create.title')} onPress={() => router.push('/plants/new')} />
+      </View>
+    ) : (
+      <AppText color="secondary">{t('plants.list.empty')}</AppText>
+    );
   }
 
   return (
@@ -77,6 +84,10 @@ function Plants({ household }: { household: Household }) {
             onChangeText: (e) => setQuery(e.nativeEvent.text),
             onCancelButtonPress: () => setQuery(''),
           },
+          // 登録（PLANT-02）は編集者以上
+          ...(canEdit
+            ? headerRightTextButton({ title: t('plants.create.open'), onPress: () => router.push('/plants/new') })
+            : {}),
         }}
       />
       <FlatList

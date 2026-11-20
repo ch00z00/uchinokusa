@@ -6,10 +6,11 @@ import { useToast } from '@/components/Toast';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import { emptyLocationForm } from '@/features/location/locationValidation';
 import { LocationForm } from '@/features/location/LocationForm';
+import { notifyLocationCreated } from '@/features/location/newLocationFlow';
 import { useCreateLocation } from '@/features/location/useLocations';
 import { useTheme } from '@/theme';
 
-// LOC-02 置き場所の作成（要件7-1、7-2）。置き場所の一覧（LOC-01）から開くモーダル
+// LOC-02 置き場所の作成（要件7-1、7-2）。置き場所の一覧（LOC-01）と、植物の登録・編集の置き場所の欄から開くモーダル
 export default function NewLocationScreen() {
   const { state } = useSelectedHousehold();
   if (state.status !== 'selected') return null;
@@ -36,7 +37,9 @@ function NewLocation({ householdId }: { householdId: string }) {
         error={create.error}
         onSubmit={(value) =>
           create.mutate(value, {
-            onSuccess: () => {
+            onSuccess: (created) => {
+              // 植物の登録・編集から開いたときは、作った置き場所をその植物の欄で選ぶ
+              notifyLocationCreated(created.id);
               toast.show(t('common.saved'));
               router.back();
             },

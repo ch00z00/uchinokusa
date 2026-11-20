@@ -9,6 +9,8 @@ export type ChoiceRequest = {
   options: readonly Choice[];
   value: string;
   onChange: (value: string) => void;
+  /** 選択肢の最後に置く操作（「＋ 新しい置き場所」など）。押すと、シートをその画面に置き換える */
+  action?: { label: string; onPress: () => void };
 };
 
 // 選択肢のシート（/choice）と、開いた欄をつなぐ。

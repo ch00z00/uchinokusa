@@ -59,7 +59,11 @@ function AppStack() {
     <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="plants/[id]" options={{ title: t('plantDetail.title') }} />
+      <Stack.Screen name="plants/[id]/index" options={{ title: t('plantDetail.title') }} />
+      {/* PLANT-02 の登録・編集と、その上に重ねる種類の検索（PLANT-03） */}
+      <Stack.Screen name="plants/new" options={{ title: t('plants.create.title'), presentation: 'modal' }} />
+      <Stack.Screen name="plants/[id]/edit" options={{ title: t('plants.edit.title'), presentation: 'modal' }} />
+      <Stack.Screen name="species" options={{ title: t('species.title'), presentation: 'modal' }} />
       <Stack.Screen name="invite/[token]" options={{ title: t('invite.title') }} />
       {/* 表示名を決めるまでは戻れないようにする */}
       <Stack.Screen

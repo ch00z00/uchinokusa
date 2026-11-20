@@ -19,6 +19,8 @@ export type ListRowProps = {
   selected?: boolean;
   /** 取り消せない操作（削除・退出など）。文字を color/danger にする */
   destructive?: boolean;
+  /** 一覧の中の操作（「＋ 新しい置き場所」など）。文字を color/accent にする */
+  accent?: boolean;
   /** 押すと別の画面に進むなら true（右に「›」を出す） */
   navigates?: boolean;
   onPress?: () => void;
@@ -38,6 +40,7 @@ export function ListRow({
   trailing,
   selected,
   destructive,
+  accent,
   navigates,
   onPress,
   disabled,
@@ -68,7 +71,7 @@ export function ListRow({
     >
       <View style={[styles.main, { gap: theme.space.xs }]}>
         <View style={[styles.titleLine, { gap: theme.space.sm }]}>
-          <AppText color={destructive ? 'danger' : 'primary'} style={styles.shrink}>
+          <AppText color={destructive ? 'danger' : accent ? 'accent' : 'primary'} style={styles.shrink}>
             {title}
           </AppText>
           {accessory}

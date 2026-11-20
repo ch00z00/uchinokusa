@@ -23,3 +23,9 @@ export function parseDay(date: string): Date {
 export function formatDay(date: string): string {
   return dayFormat().format(parseDay(date));
 }
+
+/** 端末のタイムゾーンでの日付を、API の形（`YYYY-MM-DD`）にする */
+export function toDayString(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}

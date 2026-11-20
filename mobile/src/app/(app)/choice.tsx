@@ -34,6 +34,9 @@ export default function ChoiceScreen() {
             }}
           />
         )}
+        ListFooterComponent={
+          request.action ? <ListRow title={request.action.label} accent onPress={request.action.onPress} /> : undefined
+        }
       />
     </>
   );

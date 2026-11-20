@@ -35,6 +35,40 @@
       "empty": "まだ植物が登録されていません",
       "emptyEditor": "まだ植物が登録されていません。お世話している植物を登録しましょう",
       "noMatch": "条件に合う植物はありません。検索の言葉や絞り込みを変えてみてください"
+    },
+    "create": {
+      "open": "追加",
+      "title": "植物を登録",
+      "submit": "登録する",
+      "done": "植物を登録しました"
+    },
+    "edit": {
+      "open": "編集",
+      "title": "植物の編集"
+    },
+    "form": {
+      "name": "名前",
+      "namePlaceholder": "例：リビングのモンステラ",
+      "optionalNote": "ここから下は任意です。あとからでも設定できます",
+      "species": "種類",
+      "speciesHint": "植物の種類を探します",
+      "speciesFree": "一覧にない種類（入力した名前）",
+      "unset": "未設定",
+      "location": "置き場所",
+      "newLocation": "＋ 新しい置き場所",
+      "acquiredOn": "購入日・お迎え日",
+      "errors": {
+        "name": {
+          "required": "名前を入力してください",
+          "too_long": "40文字以内で入力してください"
+        },
+        "species": {
+          "too_long": "50文字以内で入力してください"
+        },
+        "acquiredOn": {
+          "future": "今日より後の日は選べません"
+        }
+      }
     }
   },
   "plantDetail": {
@@ -285,5 +319,18 @@
       "none": "遮光なし",
       "sheer": "レースカーテンなど"
     }
+  },
+  "species": {
+    "title": "種類を選ぶ",
+    "searchPlaceholder": "和名・学名・別名で探す",
+    "useFreeText": "「{{text}}」を種類にする",
+    "clear": "種類を未設定にする",
+    "separator": "・",
+    "noMatch": "見つかりませんでした。入力した名前をそのまま種類にもできます"
+  },
+  "dateField": {
+    "unset": "未設定",
+    "hint": "日付を選びます",
+    "clear": "未設定に戻す"
   }
 }
