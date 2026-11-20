@@ -132,6 +132,12 @@ function HouseholdSettings({ household }: { household: Household }) {
             onPress={() => router.push('/settings/household/invitations')}
           />
         )}
+        {/* 置き場所（LOC-01）。閲覧者も一覧は見られるので、全員に出す（2026-11-20） */}
+        <ListRow
+          title={t('location.list.title')}
+          navigates
+          onPress={() => router.push('/settings/household/locations')}
+        />
       </View>
 
       <View>

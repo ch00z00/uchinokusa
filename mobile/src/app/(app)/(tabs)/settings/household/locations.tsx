@@ -13,7 +13,7 @@ import { locationSummaryKeys } from '@/features/location/locationValidation';
 import { useLocations } from '@/features/location/useLocations';
 import { useTheme } from '@/theme';
 
-// LOC-01 置き場所の一覧（要件7）。植物の一覧（PLANT-01）のヘッダーの「置き場所」から開く
+// LOC-01 置き場所の一覧（要件7）。世帯の設定（HH-01）から開く
 export default function LocationsScreen() {
   const { state } = useSelectedHousehold();
   if (state.status !== 'selected') return null;
