@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, unwrap } from '@/api';
 import type { components } from '@/api/schema';
 
+import { plantKeys } from '@/features/plant/usePlants';
+
 import type { Location } from './locationValidation';
 
 export const locationKeys = {
@@ -30,7 +32,7 @@ export function useCreateLocation(householdId: string) {
   });
 }
 
-/** 置き場所の変更（PATCH。編集者以上）。TODO(16.2)：紐づく植物の表示に反映するため、植物の一覧も取り直す */
+/** 置き場所の変更（PATCH。編集者以上）。紐づく植物の表示（置き場所名）は、置き場所の一覧から引くので取り直さなくてよい */
 export function useUpdateLocation(householdId: string, locationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -48,10 +50,12 @@ export function useDeleteLocation(householdId: string, locationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => unwrap(api.DELETE('/locations/{locationId}', { params: { path: { locationId } } })),
-    // TODO(16.2)：紐づいていた植物が「置き場所未設定」になるので、植物の一覧も取り直す
-    onSuccess: () =>
+    onSuccess: () => {
       queryClient.setQueryData<Location[]>(locationKeys.list(householdId), (list) =>
         list?.filter((l) => l.id !== locationId),
-      ),
+      );
+      // 紐づいていた植物は「置き場所未設定」になるので、植物の一覧も取り直す
+      return queryClient.invalidateQueries({ queryKey: plantKeys.all(householdId) });
+    },
   });
 }

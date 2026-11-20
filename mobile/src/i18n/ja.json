@@ -24,7 +24,18 @@
     "title": "今日"
   },
   "plants": {
-    "title": "植物"
+    "title": "植物",
+    "list": {
+      "searchPlaceholder": "名前で探す",
+      "filterLabel": "置き場所で絞り込む",
+      "filterAll": "すべて",
+      "locationUnset": "置き場所未設定",
+      "separator": "・",
+      "noTask": "予定なし",
+      "empty": "まだ植物が登録されていません",
+      "emptyEditor": "まだ植物が登録されていません。お世話している植物を登録しましょう",
+      "noMatch": "条件に合う植物はありません。検索の言葉や絞り込みを変えてみてください"
+    }
   },
   "plantDetail": {
     "title": "植物の詳細"
