@@ -64,6 +64,11 @@ function AppStack() {
       <Stack.Screen name="plants/new" options={{ title: t('plants.create.title'), presentation: 'modal' }} />
       <Stack.Screen name="plants/[id]/edit" options={{ title: t('plants.edit.title'), presentation: 'modal' }} />
       <Stack.Screen name="species" options={{ title: t('species.title'), presentation: 'modal' }} />
+      {/* PLANT-04 植え替えの提案。登録のモーダルを置き換えて出す。答えずに閉じても、提案は残る */}
+      <Stack.Screen
+        name="plants/[id]/repotting"
+        options={{ title: t('suggestion.repotting.screenTitle'), presentation: 'modal' }}
+      />
       <Stack.Screen name="invite/[token]" options={{ title: t('invite.title') }} />
       {/* 表示名を決めるまでは戻れないようにする */}
       <Stack.Screen

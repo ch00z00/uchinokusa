@@ -9,6 +9,8 @@ export const plantKeys = {
   /** 世帯の植物にかかわる取得すべて（置き場所の変更・削除のあとに取り直す） */
   all: (householdId: string) => ['households', householdId, 'plants'] as const,
   list: (householdId: string, q: string) => ['households', householdId, 'plants', 'list', { q }] as const,
+  /** 植物の詳細すべて */
+  details: ['plants'] as const,
   detail: (plantId: string) => ['plants', plantId] as const,
 };
 

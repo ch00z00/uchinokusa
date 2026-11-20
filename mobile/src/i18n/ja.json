@@ -332,5 +332,36 @@
     "unset": "未設定",
     "hint": "日付を選びます",
     "clear": "未設定に戻す"
+  },
+  "suggestion": {
+    "repotting": {
+      "title": "植え替えにおすすめの日",
+      "message": "{{plantName}}の植え替えは、{{date}}がおすすめです",
+      "reason": {
+        "afterAcclimation": "お迎えから{{days}}日の慣らし期間のあと、",
+        "avoided": "{{periods}}を避けた、",
+        "general": "最初の植え替えの適期です",
+        "species": "{{species}}の植え替えに向いた時期のうち、最初の日です"
+      },
+      "period": {
+        "midsummer": "真夏",
+        "midwinter": "真冬",
+        "avoid": "植え替えに向かない時期"
+      },
+      "and": "と",
+      "accept": "この日で予定に入れる",
+      "changeDate": "日付を変えて入れる",
+      "acceptWithDate": "この日で予定に入れる",
+      "date": "予定日",
+      "dismiss": "今はしない",
+      "dismissNote": "「今はしない」を選ぶと、この植物にこの提案は出なくなります",
+      "accepted": "植え替えの予定を入れました",
+      "screenTitle": "植え替えの提案"
+    },
+    "kind": {
+      "do": "おすすめ",
+      "avoid": "今日は不要",
+      "conditional": "条件つき"
+    }
   }
 }

@@ -202,7 +202,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 |---|---|
 | TaskCard | 背景 `bg/surface`、角丸 `radius/lg`、内側 `space/lg`。左に作業の種類のアイコン（`icon/md`、作業の種類の色）、植物名 `headline`、置き場所と予定日 `subheadline`、実行条件 `callout`。右に完了のボタン（44pt 以上、アクセントの色）。状態：通常 / 期限切れ / 今日は不要 / 条件つき / 閲覧者 / 選択モード / 完了直後 |
 | CareKindIcon | オリジナルのアイコン＋作業の種類の色。線と塗り、大きさ sm / md / lg |
-| SuggestionCard | 提案の種類のアイコンと色、本文 `body`、理由 `callout`、採用・見送りのボタン |
+| SuggestionCard | 提案の種類のアイコンと色、本文 `body`、理由 `callout`、採用・見送りのボタン。地 `bg/surface`、`border/subtle` の枠、角丸 `radius/lg`、内側 `space/lg`。種類は色だけに頼らず、種類の名前（「おすすめ」など、`subheadline`、`suggestion/*` の色）を上に出す。アイコンはオリジナルができてから（16.2c で実装） |
 | Badge | `caption`、角丸 `radius/sm`、色は役割の色の subtle を背景に。期限切れ・ロール・一時停止中 |
 | Button（アプリの層） | 主：アクセントの背景＋`on-accent` の文字。副：枠だけ。高さ 44pt 以上、角丸 `radius/md`。危険な操作は OS のアラートに任せる |
 | EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |

@@ -37,10 +37,12 @@ function NewPlant({ householdId }: { householdId: string }) {
         error={create.error}
         onSubmit={(value) =>
           create.mutate(toPlantRequest(value), {
-            // TODO(16.2c)：購入日があれば、植え替えの提案（PLANT-04）を出す
-            onSuccess: () => {
+            onSuccess: (created) => {
               toast.show(t('plants.create.done'));
-              router.back();
+              // 購入日つきなら、サーバーが植え替えの提案を作るので、登録のモーダルを提案に置き換える（要件17-1）
+              if (created.acquiredOn)
+                router.replace({ pathname: '/plants/[id]/repotting', params: { id: created.id } });
+              else router.back();
             },
           })
         }

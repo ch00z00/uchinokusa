@@ -29,3 +29,13 @@ export function toDayString(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+/** API の日付（`YYYY-MM-DD`）を「2027年4月1日(木)」の形で出す（年をまたぐ予定の提案など） */
+export function formatDayWithYear(date: string): string {
+  return new Intl.DateTimeFormat(i18n.language, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(parseDay(date));
+}

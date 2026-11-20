@@ -19,13 +19,15 @@ type Props = {
   maximumDate?: string;
   /** 入力欄の下に出す理由 */
   error?: string | null;
+  /** 「未設定に戻す」を出すか（任意の項目なら true） */
+  clearable?: boolean;
 };
 
 /**
  * 日付の欄（foundations.md の 5章の DateField）。日付の選択は OS の部品（iOS：compact の DatePicker、Android：日付のダイアログ）。
  * 任意の項目なので、「未設定」から始められ、未設定に戻せる
  */
-export function DateField({ label, value, onChange, maximumDate, error }: Props) {
+export function DateField({ label, value, onChange, maximumDate, error, clearable = true }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   // Android のダイアログを出しているか
@@ -88,7 +90,7 @@ export function DateField({ label, value, onChange, maximumDate, error }: Props)
           onDismiss={() => setDialogOpen(false)}
         />
       )}
-      {value !== '' && (
+      {clearable && value !== '' && (
         <View style={styles.clear}>
           <Button title={t('dateField.clear')} variant="secondary" onPress={() => onChange('')} />
         </View>
