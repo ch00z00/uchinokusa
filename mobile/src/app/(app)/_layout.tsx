@@ -64,6 +64,8 @@ function AppStack() {
       <Stack.Screen name="plants/new" options={{ title: t('plants.create.title'), presentation: 'modal' }} />
       <Stack.Screen name="plants/[id]/edit" options={{ title: t('plants.edit.title'), presentation: 'modal' }} />
       <Stack.Screen name="species" options={{ title: t('species.title'), presentation: 'modal' }} />
+      {/* TASK-01 お手入れタスクの作成・編集 */}
+      <Stack.Screen name="plants/[id]/tasks/new" options={{ title: t('tasks.create.title'), presentation: 'modal' }} />
       {/* PLANT-04 植え替えの提案。登録のモーダルを置き換えて出す。答えずに閉じても、提案は残る */}
       <Stack.Screen
         name="plants/[id]/repotting"

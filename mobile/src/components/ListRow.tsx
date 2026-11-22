@@ -11,6 +11,8 @@ export type ListRowProps = {
   detail?: string;
   /** 題名の下の補足 */
   subtitle?: string;
+  /** 項目の左に置くもの（作業の種類のアイコンなど） */
+  leading?: ReactNode;
   /** 題名の右に置くもの（バッジなど） */
   accessory?: ReactNode;
   /** 項目の右端に置く操作（「取り消す」のボタンなど）。置くときは、項目そのものは押せなくする（onPress を渡さない） */
@@ -36,6 +38,7 @@ export function ListRow({
   title,
   detail,
   subtitle,
+  leading,
   accessory,
   trailing,
   selected,
@@ -69,6 +72,7 @@ export function ListRow({
         disabled && styles.dimmed,
       ]}
     >
+      {leading}
       <View style={[styles.main, { gap: theme.space.xs }]}>
         <View style={[styles.titleLine, { gap: theme.space.sm }]}>
           <AppText color={destructive ? 'danger' : accent ? 'accent' : 'primary'} style={styles.shrink}>

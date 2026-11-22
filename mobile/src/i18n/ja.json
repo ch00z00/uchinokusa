@@ -103,7 +103,19 @@
     }
   },
   "plantDetail": {
-    "title": "植物の詳細"
+    "title": "植物の詳細",
+    "sections": {
+      "overview": "概要",
+      "history": "履歴",
+      "notes": "メモ",
+      "calendar": "カレンダー"
+    },
+    "sectionsLabel": "表示の切り替え",
+    "comingSoon": "この画面は準備中です",
+    "species": "種類",
+    "location": "置き場所",
+    "acquiredOn": "購入日・お迎え日",
+    "unset": "未設定"
   },
   "settings": {
     "title": "設定",
@@ -393,6 +405,95 @@
       "do": "おすすめ",
       "avoid": "今日は不要",
       "conditional": "条件つき"
+    }
+  },
+  "care": {
+    "kind": {
+      "watering": "水やり",
+      "fertilizing": "肥料",
+      "repotting": "植え替え",
+      "pruning": "剪定",
+      "other": "その他"
+    },
+    "unit": {
+      "day": "日",
+      "week": "週",
+      "month": "か月"
+    },
+    "interval": {
+      "day": "{{count}}日ごと",
+      "week": "{{count}}週ごと",
+      "month": "{{count}}か月ごと"
+    },
+    "season": {
+      "spring": "春",
+      "summer": "夏",
+      "autumn": "秋",
+      "winter": "冬"
+    },
+    "seasonMonths": {
+      "spring": "春（3〜5月）",
+      "summer": "夏（6〜8月）",
+      "autumn": "秋（9〜11月）",
+      "winter": "冬（12〜2月）"
+    }
+  },
+  "tasks": {
+    "list": {
+      "title": "お手入れ",
+      "empty": "お手入れの予定はまだありません",
+      "emptyEditor": "お手入れの予定はまだありません。水やりなどの周期を決めておくと、その日に「今日」に出ます",
+      "add": "＋ お手入れを追加",
+      "paused": "一時停止中",
+      "next": "次 {{date}}",
+      "seasonalNow": "今：{{season}} {{interval}}",
+      "separator": "・"
+    },
+    "create": {
+      "title": "お手入れを追加",
+      "submit": "追加する",
+      "done": "お手入れを追加しました"
+    },
+    "form": {
+      "kind": "作業の種類",
+      "customName": "作業名",
+      "customNamePlaceholder": "例：葉水",
+      "interval": "周期",
+      "intervalCount": "周期の数",
+      "intervalUnit": "周期の単位",
+      "every": "ごと",
+      "seasonal": "季節ごとに変える",
+      "seasonalHint": "季節で周期を変えるときに。季節が変わると、次の予定日をその季節の周期で計算し直します",
+      "firstDueOn": "初回の予定日",
+      "optionalNote": "ここから下は任意です",
+      "conditionText": "実行条件",
+      "conditionPlaceholder": "例：土の表面が乾いていたら",
+      "recommended": "植物の種類に合わせたおすすめです",
+      "note": "メモ",
+      "notePlaceholder": "例：底から流れるまでたっぷり",
+      "errors": {
+        "kind": {
+          "required": "作業の種類を選んでください"
+        },
+        "customName": {
+          "required": "作業名を入力してください",
+          "too_long": "20文字以内で入力してください"
+        },
+        "interval": {
+          "required": "周期を入力してください",
+          "invalid": "日は365、週は52、か月は24までの数で入力してください"
+        },
+        "nextDueOn": {
+          "required": "予定日を選んでください",
+          "past": "今日より前の日は選べません"
+        },
+        "conditionText": {
+          "too_long": "100文字以内で入力してください"
+        },
+        "note": {
+          "too_long": "200文字以内で入力してください"
+        }
+      }
     }
   }
 }

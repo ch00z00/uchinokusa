@@ -17,6 +17,8 @@ type Props = {
   onChange: (value: string) => void;
   /** 選べる最後の日（`YYYY-MM-DD`）。購入日なら今日 */
   maximumDate?: string;
+  /** 選べる最初の日（`YYYY-MM-DD`）。タスクの初回の予定日なら今日 */
+  minimumDate?: string;
   /** 入力欄の下に出す理由 */
   error?: string | null;
   /** 「未設定に戻す」を出すか（任意の項目なら true） */
@@ -27,12 +29,13 @@ type Props = {
  * 日付の欄（foundations.md の 5章の DateField）。日付の選択は OS の部品（iOS：compact の DatePicker、Android：日付のダイアログ）。
  * 任意の項目なので、「未設定」から始められ、未設定に戻せる
  */
-export function DateField({ label, value, onChange, maximumDate, error, clearable = true }: Props) {
-  const { t } = useTranslation();
+export function DateField({ label, value, onChange, maximumDate, minimumDate, error, clearable = true }: Props) {
+  const { t, i18n } = useTranslation();
   const theme = useTheme();
   // Android のダイアログを出しているか
   const [dialogOpen, setDialogOpen] = useState(false);
   const max = maximumDate ? parseDay(maximumDate) : undefined;
+  const min = minimumDate ? parseDay(minimumDate) : undefined;
   const today = toDayString(new Date());
   const pick = (date: Date) => onChange(toDayString(date));
 
@@ -60,7 +63,10 @@ export function DateField({ label, value, onChange, maximumDate, error, clearabl
               value={parseDay(value)}
               mode="date"
               display="compact"
+              // 端末の言語ではなく、アプリの言語で出す（アプリの文言と言語をそろえる）
+              locale={i18n.language}
               maximumDate={max}
+              minimumDate={min}
               accentColor={theme.color.accent.default}
               onValueChange={(_, date) => pick(date)}
             />
@@ -82,6 +88,7 @@ export function DateField({ label, value, onChange, maximumDate, error, clearabl
           value={value === '' ? new Date() : parseDay(value)}
           mode="date"
           maximumDate={max}
+          minimumDate={min}
           accentColor={theme.color.accent.default}
           onValueChange={(_, date) => {
             setDialogOpen(false);

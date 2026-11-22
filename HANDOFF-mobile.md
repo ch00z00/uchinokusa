@@ -12,7 +12,7 @@
 ```
 /kiro:spec-impl household-plant-care-mvp 16.3
 ```
-- 16.2 は確認済み（2026-11-22）。いまは 16.3（お手入れタスクの設定）
+- 16.2 は確認済み（2026-11-22）。いまは 16.3（お手入れタスクの設定）を3つに分けて進める：16.3a 詳細のタスクの一覧と作成（実装済みで確認待ち）→ 16.3b 変更・一時停止・再開・削除 → 16.3c 植え替えの予定日を避ける時期にしたときの注意
 - 16.1 は確認済み（2026-11-20）
 - あとで直す：世帯の設定（HH-01）に、世帯名・地域・メンバー・招待・置き場所・退出・削除が並び、項目が多くなった。ユーザーから「「世帯の設定」の中にまとめるにはデザイン的に微妙になってきた」（2026-11-20）。設定のタブの構成ごと見直す（時期はユーザーと決める）
 - iOS のビルド：`npx expo run:ios --device <シミュレーターの ID> --port 8082`（Xcode 26.6、iOS 26.5 のプラットフォームは入れた。2026-11-19）。ネイティブのモジュールを足したら `npx expo prebuild --platform ios --no-install` のあとにビルドし直す
@@ -79,6 +79,13 @@
 - 日付は `components/DateField.tsx`（`@expo/ui/community/datetime-picker`。iOS は compact、Android はダイアログ。ネイティブの追加はなし）。購入日は未来を選べない（サーバーはまだ受け付けるが、アプリで止める）
 - 16.2c 植え替えの提案：`(app)/plants/[id]/repotting.tsx`（登録のモーダルを `router.replace` で置き換える）。提案の理由は `features/suggestion/suggestionText.ts` で材料から組み立てる。部品 `SuggestionCard` を足した（今日やること（17.1）でも使う）
 - 16.2d 削除・アーカイブ：編集の画面の下に「アーカイブする」「植物を削除」（OS の確認のアラート → トースト → `router.dismissTo` で元の一覧へ）。アーカイブした植物（PLANT-05）は `(tabs)/plants/archived.tsx`（植物のタブの中）。入口は植物の一覧のいちばん下の行で、アーカイブした植物があり、検索・絞り込みをしていないときだけ出す（ユーザーが選んだ。たまにしか使わない入口をヘッダーに置かない。2026-11-21）。アーカイブの解除は詳細（PLANT-10）の「アーカイブ済み」の表示の中。アーカイブ・削除のあとは、世帯のキャッシュ（`['households', id]`）をまとめて取り直す（提案・今日のタスクも変わるため）
+## 16.3 で決めたこと（2026-11-22）
+- 植物の詳細（PLANT-10）は、OS のセグメントの切り替えで「概要・履歴・メモ・カレンダー」に分ける（ユーザーが選んだ）。概要に植物の情報とタスクの一覧。履歴・メモ・カレンダーは 17.3 まで「準備中」
+- タスクの作成は `(app)/plants/[id]/tasks/new.tsx`（モーダル）。入力の決まりは `features/task/taskValidation.ts`（サーバーと同じ上限）、表示は `careTask.ts`・`taskText.ts`
+- おすすめの初期値：task-defaults の実行条件（いまは水やりだけ）。周期の目安は植え替えの24か月だけ（0028）。ほかは出典がないので空
+- 部品を足した：CareKindIcon（仮置きのシンボル）、Badge（RoleBadge はこれを使う）、IntervalInput、SeasonalIntervalEditor、TaskListItem。ListRow に `leading`、DateField に `minimumDate`
+- 16.3c の植え替えの注意は、保存のあとに提案の一覧を取り直し、そのタスクの `repotting.avoid` があれば OS のアラートで理由を出し、詳細のタスクの項目にも注意の1行を残す（ユーザーが選んだ）
+- 試しのデータ：ポトスに、水やり（季節ごとの周期・実行条件つき）、肥料、葉水（一時停止中）のタスクを API で入れた
 - ヘッダーの文字のボタンは `components/HeaderTextButton.tsx` の `headerRightTextButton()`（背景なし）
 - 試しのデータ：ローカルの API に、エミュレーター用の署名なしのトークン（`alg: none`、`iss`・`aud` は `demo-uchinokusa`、`user_id` は DB の `users.firebase_uid`）で呼べる。スクリプトはリポジトリに入れない
 
