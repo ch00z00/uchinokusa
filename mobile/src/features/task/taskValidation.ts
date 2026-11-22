@@ -98,13 +98,15 @@ export function validateTaskForm(input: TaskFormInput, minDueOn?: string): TaskF
     if (customName === '') errors.customName = 'required';
     else if (length(customName) > maxCustomNameLength) errors.customName = 'too_long';
   }
-  const base = intervalError(input.interval);
-  if (base) errors.interval = base;
+  // 季節ごとに変えるときは、基本の周期の欄を隠して4つの季節だけを入れる（2026-11-22）
   if (input.seasonal.enabled) {
     for (const season of seasons) {
       const error = intervalError(input.seasonal[season]);
       if (error) errors[`seasonal.${season}`] = error;
     }
+  } else {
+    const base = intervalError(input.interval);
+    if (base) errors.interval = base;
   }
   if (input.nextDueOn === '') errors.nextDueOn = 'required';
   // YYYY-MM-DD は文字列の順が日付の順
@@ -123,6 +125,13 @@ const toInterval = (interval: IntervalForm): IntervalInput => ({
   unit: interval.unit,
 });
 
+/**
+ * 送る基本の周期。季節ごとに変えるときは、4つの季節がすべて入っていて基本の周期は計算に使われないが、
+ * API が必須にしているので、春の周期を入れる
+ */
+const toBaseInterval = (value: TaskFormInput): IntervalInput =>
+  toInterval(value.seasonal.enabled ? value.seasonal.spring : value.interval);
+
 const toSeasonal = (seasonal: TaskFormInput['seasonal']): components['schemas']['SeasonalIntervalsInput'] =>
   seasonal.enabled ? Object.fromEntries(seasons.map((s) => [s, toInterval(seasonal[s])])) : {};
 
@@ -134,7 +143,7 @@ export function toCreateTaskRequest(
   return {
     kind: value.kind,
     ...(value.kind === 'other' ? { customName: value.customName } : {}),
-    interval: toInterval(value.interval),
+    interval: toBaseInterval(value),
     ...(value.seasonal.enabled ? { seasonalIntervals: seasonal } : {}),
     ...(value.conditionText !== '' ? { conditionText: value.conditionText } : {}),
     ...(value.note !== '' ? { note: value.note } : {}),
@@ -149,7 +158,7 @@ export function toCreateTaskRequest(
 export function toUpdateTaskRequest(value: TaskFormInput): components['schemas']['UpdateCareTaskRequest'] {
   return {
     ...(value.kind === 'other' ? { customName: value.customName } : {}),
-    interval: toInterval(value.interval),
+    interval: toBaseInterval(value),
     seasonalIntervals: toSeasonal(value.seasonal),
     conditionText: value.conditionText,
     note: value.note,

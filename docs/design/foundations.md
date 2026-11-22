@@ -212,8 +212,8 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | FilterChips | 横に流れるチップの並び。チップは高さ 36pt（上下に余白を足して、押せる領域を 44pt 以上にする）、角丸 `radius/full`、内側 左右 `space/md`、文字 `subheadline`。選択中は 地 `accent` ＋ 文字 `on-accent`、選択していないものは 地 `bg/subtle` ＋ 文字 `text/primary`（16.2a で追加） |
 | DateField | 見出しは FormField と同じ。未設定なら ListRow（「未設定」、進む印つき）。日付の選択は OS の部品（iOS：compact の DatePicker を `bg/surface` の欄に置く、Android：日付のダイアログ）。色は `accent`。値があれば、下に「未設定に戻す」（Button の副）（16.2b で追加）。選べる最初の日・最後の日を決められる。iOS の部品は、端末の言語ではなくアプリの言語で出す（16.3a） |
 | TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加） |
-| IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
-| SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる（16.3a で追加） |
+| IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード、プレースホルダー「例：7」）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
+| SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる。基本の周期の欄より上に置き、オンのあいだは基本の周期の欄を隠す（16.3a で追加） |
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |
 | ChoiceField / ChoiceSheet | 決まった選択肢から1つを選ぶ欄。見出しは FormField と同じ、欄は ListRow（今の値を題名に、進む印つき）を角丸 `radius/md` で切り抜く。押すと OS のシート（モーダル）で、選択肢を ListRow の一覧（選択中の印つき）で出す。都道府県と置き場所の環境の項目で使う（16.1 で追加）。シートの最後に操作の項目（「＋ 新しい置き場所」）を置ける（16.2b で追加） |
 | Toast | 操作の結果（「保存しました」など）を、タブバーの上に3秒だけ出す。地 `text/primary`・文字 `bg/base`（反転して画面の内容と区別する）、`callout`、角丸 `radius/md`、内側 左右 `space/lg`・上下 `space/md`。押す操作はなく、画面の読み上げにも伝える。取り消しのボタンつきは TODAY-02 のスナックバー（15.2 で追加） |

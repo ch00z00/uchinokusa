@@ -134,16 +134,10 @@ export function TaskForm(props: Props) {
           returnKeyType="done"
         />
       )}
-      <IntervalInput
-        label={t('tasks.form.interval')}
-        value={input.interval}
-        onChange={(interval) => update({ ...input, interval }, ['interval'])}
-        error={fieldError('interval')}
-      />
       <SeasonalIntervalEditor
         value={input.seasonal}
         onChange={(seasonal) => {
-          // 開いたとき、空の季節は基本の周期で埋める（そこから直せばよいように）
+          // 開いたとき、空の季節はそれまでの周期で埋める（変えたい季節だけ直せばよいように）
           const filled =
             seasonal.enabled && !input.seasonal.enabled
               ? {
@@ -160,6 +154,16 @@ export function TaskForm(props: Props) {
         }}
         errorOf={(season) => fieldError(`seasonal.${season}`)}
       />
+      {/* 季節ごとに変えるときは、4つの季節の周期だけを入れる（基本の周期と重ねて入れさせない。2026-11-22）。
+          スイッチを上に置き、切り替えてもスイッチの位置が動かないようにする */}
+      {!input.seasonal.enabled && (
+        <IntervalInput
+          label={t('tasks.form.interval')}
+          value={input.interval}
+          onChange={(interval) => update({ ...input, interval }, ['interval'])}
+          error={fieldError('interval')}
+        />
+      )}
       <DateField
         label={dueLabel}
         value={input.nextDueOn}

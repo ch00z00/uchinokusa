@@ -72,6 +72,17 @@ describe('validateTaskForm', () => {
     });
   });
 
+  it('季節ごとに変えるときは、基本の周期を隠すので確かめない（2026-11-22）', () => {
+    const seasonal = {
+      enabled: true,
+      spring: { value: '7', unit: 'day' as const },
+      summer: { value: '4', unit: 'day' as const },
+      autumn: { value: '7', unit: 'day' as const },
+      winter: { value: '2', unit: 'week' as const },
+    };
+    expect(validateTaskForm(form({ interval: { value: '', unit: 'day' }, seasonal }), today).ok).toBe(true);
+  });
+
   it('予定日は必須。作成では今日より前を選べない', () => {
     expect(validateTaskForm(form({ nextDueOn: '' }), today)).toEqual({ ok: false, errors: { nextDueOn: 'required' } });
     expect(validateTaskForm(form({ nextDueOn: '2026-11-21' }), today)).toEqual({
@@ -104,11 +115,12 @@ describe('toCreateTaskRequest', () => {
     });
   });
 
-  it('季節ごとの周期を開いていれば、4つとも送る', () => {
+  it('季節ごとの周期を開いていれば、4つとも送る。必須の基本の周期には、春の周期を入れる', () => {
     const request = toCreateTaskRequest(
       valid(
         form({
           kind: 'other',
+          interval: { value: '', unit: 'day' },
           customName: '葉水',
           conditionText: '乾燥していたら',
           note: '霧吹きで',
@@ -148,6 +160,17 @@ describe('toUpdateTaskRequest', () => {
       note: '',
       nextDueOn: today,
     });
+  });
+
+  it('季節ごとの周期を開いていれば、基本の周期には春の周期を入れる', () => {
+    const seasonal = {
+      enabled: true,
+      spring: { value: '10', unit: 'day' as const },
+      summer: { value: '4', unit: 'day' as const },
+      autumn: { value: '7', unit: 'day' as const },
+      winter: { value: '2', unit: 'week' as const },
+    };
+    expect(toUpdateTaskRequest(form({ seasonal })).interval).toEqual({ value: 10, unit: 'day' });
   });
 });
 

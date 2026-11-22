@@ -35,6 +35,9 @@ export function IntervalInput({ label, value, onChange, error }: Props) {
           keyboardType="number-pad"
           returnKeyType="done"
           maxLength={3}
+          // 何を入れる欄かわかるように、例と分かる形で出す（「7」だけだと入力済みの値に見えるため。2026-11-22）
+          placeholder={t('tasks.form.intervalPlaceholder')}
+          placeholderTextColor={theme.color.text.tertiary}
           style={[
             theme.text.body,
             styles.count,
@@ -72,6 +75,6 @@ export function IntervalInput({ label, value, onChange, error }: Props) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
-  count: { width: 72, textAlign: 'center' },
+  count: { width: 84, textAlign: 'center' },
   units: { flex: 1 },
 });
