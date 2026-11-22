@@ -74,7 +74,15 @@ function ArchivedNotice({ householdId, plant, canEdit }: { householdId: string; 
           title={t('plants.archive.unarchive')}
           variant="secondary"
           loading={unarchive.isPending}
-          onPress={() => unarchive.mutate(undefined, { onSuccess: () => toast.show(t('plants.archive.unarchived')) })}
+          onPress={() =>
+            unarchive.mutate(undefined, {
+              // 解除したら植物の一覧へ戻り、植物が一覧に戻ったことを見せる（2026-11-22）
+              onSuccess: () => {
+                toast.show(t('plants.archive.unarchived'));
+                router.dismissTo('/plants');
+              },
+            })
+          }
         />
       )}
       {unarchive.error && (
