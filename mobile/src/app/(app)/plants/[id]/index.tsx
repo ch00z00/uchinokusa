@@ -11,6 +11,7 @@ import { can } from '@/features/household/permissions';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import type { Plant } from '@/features/plant/plantList';
 import { usePlant, useUnarchivePlant } from '@/features/plant/usePlants';
+import { confirm } from '@/lib/confirm';
 import { formatDate } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
@@ -56,6 +57,26 @@ function ArchivedNotice({ householdId, plant, canEdit }: { householdId: string; 
   const toast = useToast();
   const unarchive = useUnarchivePlant(householdId, plant.id);
 
+  const restore = async () => {
+    const ok = await confirm({
+      title: t('plants.unarchive.confirmTitle', { name: plant.name }),
+      message: t('plants.unarchive.confirmMessage'),
+      confirmLabel: t('plants.unarchive.confirm'),
+      cancelLabel: t('common.cancel'),
+    });
+    if (!ok) return;
+    // 成功すると植物がアーカイブ中でなくなり、この表示ごと消える。消えた部品には mutate の onSuccess が
+    // 呼ばれないので、mutateAsync で完了を待ってから知らせる。失敗は unarchive.error で下に出す
+    try {
+      await unarchive.mutateAsync();
+    } catch {
+      return;
+    }
+    toast.show(t('plants.unarchive.done'));
+    // 植物の一覧へ戻り、植物が一覧に戻ったことを見せる（2026-11-22）
+    router.dismissTo('/plants');
+  };
+
   return (
     <View
       style={{
@@ -71,18 +92,10 @@ function ArchivedNotice({ householdId, plant, canEdit }: { householdId: string; 
       </AppText>
       {canEdit && (
         <Button
-          title={t('plants.archive.unarchive')}
+          title={t('plants.unarchive.action')}
           variant="secondary"
           loading={unarchive.isPending}
-          onPress={() =>
-            unarchive.mutate(undefined, {
-              // 解除したら植物の一覧へ戻り、植物が一覧に戻ったことを見せる（2026-11-22）
-              onSuccess: () => {
-                toast.show(t('plants.archive.unarchived'));
-                router.dismissTo('/plants');
-              },
-            })
-          }
+          onPress={() => void restore()}
         />
       )}
       {unarchive.error && (

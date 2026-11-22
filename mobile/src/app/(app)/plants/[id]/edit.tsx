@@ -61,12 +61,15 @@ function EditPlant({ householdId, plant }: { householdId: string; plant: Plant }
       cancelLabel: t('common.cancel'),
     });
     if (!ok) return;
-    archive.mutate(undefined, {
-      onSuccess: () => {
-        toast.show(t('plants.archive.done'));
-        backToList();
-      },
-    });
+    // 成功すると植物のデータが変わり（削除なら消え）、この画面が描き直される。そのあいだも確実に戻れるように、
+    // mutate の onSuccess ではなく、mutateAsync で完了を待つ。失敗は archive.error で下に出す
+    try {
+      await archive.mutateAsync();
+    } catch {
+      return;
+    }
+    toast.show(t('plants.archive.done'));
+    backToList();
   };
 
   const deletePlant = async () => {
@@ -78,12 +81,15 @@ function EditPlant({ householdId, plant }: { householdId: string; plant: Plant }
       destructive: true,
     });
     if (!ok) return;
-    remove.mutate(undefined, {
-      onSuccess: () => {
-        toast.show(t('plants.delete.done'));
-        backToList();
-      },
-    });
+    // 成功すると植物のデータが変わり（削除なら消え）、この画面が描き直される。そのあいだも確実に戻れるように、
+    // mutate の onSuccess ではなく、mutateAsync で完了を待つ。失敗は remove.error で下に出す
+    try {
+      await remove.mutateAsync();
+    } catch {
+      return;
+    }
+    toast.show(t('plants.delete.done'));
+    backToList();
   };
 
   const actionError = archive.error ?? remove.error;
