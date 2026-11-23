@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/api';
 import type { components } from '@/api/schema';
@@ -36,10 +36,50 @@ export function useCreateCareTask(householdId: string, plantId: string) {
   return useMutation({
     mutationFn: (body: components['schemas']['CreateCareTaskRequest']) =>
       unwrap(api.POST('/plants/{plantId}/tasks', { params: { path: { plantId } }, body })),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: plantKeys.detail(plantId) }),
-        queryClient.invalidateQueries({ queryKey: ['households', householdId] }),
-      ]),
+    onSuccess: () => invalidateTaskChange(queryClient, householdId, plantId),
+  });
+}
+
+/** タスクが変わったら、植物（タスクの一覧を含む）と世帯（植物の一覧の次の予定日・今日やること・提案）を取り直す */
+const invalidateTaskChange = (queryClient: QueryClient, householdId: string, plantId: string) =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: plantKeys.detail(plantId) }),
+    queryClient.invalidateQueries({ queryKey: ['households', householdId] }),
+  ]);
+
+/** タスクの変更（PATCH /tasks/{id}。編集者以上。要件8-8） */
+export function useUpdateCareTask(householdId: string, plantId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: components['schemas']['UpdateCareTaskRequest']) =>
+      unwrap(api.PATCH('/tasks/{taskId}', { params: { path: { taskId } }, body })),
+    onSuccess: () => invalidateTaskChange(queryClient, householdId, plantId),
+  });
+}
+
+/** タスクの一時停止（POST /tasks/{id}/pause。編集者以上。要件8-9） */
+export function usePauseCareTask(householdId: string, plantId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/tasks/{taskId}/pause', { params: { path: { taskId } } })),
+    onSuccess: () => invalidateTaskChange(queryClient, householdId, plantId),
+  });
+}
+
+/** タスクの再開（POST /tasks/{id}/resume。編集者以上。次の予定日が過ぎていたら、サーバーが今日にする） */
+export function useResumeCareTask(householdId: string, plantId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.POST('/tasks/{taskId}/resume', { params: { path: { taskId } } })),
+    onSuccess: () => invalidateTaskChange(queryClient, householdId, plantId),
+  });
+}
+
+/** タスクの削除（DELETE /tasks/{id}。編集者以上。これまでの記録は履歴に残る。要件8-10） */
+export function useDeleteCareTask(householdId: string, plantId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.DELETE('/tasks/{taskId}', { params: { path: { taskId } } })),
+    onSuccess: () => invalidateTaskChange(queryClient, householdId, plantId),
   });
 }

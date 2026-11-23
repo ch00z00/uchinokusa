@@ -3,6 +3,7 @@ import {
   emptyTaskForm,
   taskToForm,
   toCreateTaskRequest,
+  editMinDueOn,
   toUpdateTaskRequest,
   validateTaskForm,
   type TaskFormInput,
@@ -153,13 +154,18 @@ describe('toCreateTaskRequest', () => {
 
 describe('toUpdateTaskRequest', () => {
   it('種類は送らない。空の任意の項目は空文字で消し、閉じた季節ごとの周期は {} で消す', () => {
-    expect(toUpdateTaskRequest(form())).toEqual({
+    expect(toUpdateTaskRequest(form(), form())).toEqual({
       interval: { value: 7, unit: 'day' },
       seasonalIntervals: {},
       conditionText: '',
       note: '',
-      nextDueOn: today,
     });
+  });
+
+  it('予定日は変えたときだけ送る（送ると、季節の切り替えで計算し直さなくなるため）', () => {
+    const initial = form({ nextDueOn: '2026-11-25' });
+    expect(toUpdateTaskRequest(form({ nextDueOn: '2026-11-25' }), initial).nextDueOn).toBeUndefined();
+    expect(toUpdateTaskRequest(form({ nextDueOn: '2026-11-28' }), initial).nextDueOn).toBe('2026-11-28');
   });
 
   it('季節ごとの周期を開いていれば、基本の周期には春の周期を入れる', () => {
@@ -170,7 +176,7 @@ describe('toUpdateTaskRequest', () => {
       autumn: { value: '7', unit: 'day' as const },
       winter: { value: '2', unit: 'week' as const },
     };
-    expect(toUpdateTaskRequest(form({ seasonal })).interval).toEqual({ value: 10, unit: 'day' });
+    expect(toUpdateTaskRequest(form({ seasonal }), form()).interval).toEqual({ value: 10, unit: 'day' });
   });
 });
 
@@ -235,5 +241,13 @@ describe('changeKind', () => {
     expect(repotting.interval).toEqual({ value: '24', unit: 'month' });
     expect(changeKind(repotting, 'watering', defaults).interval).toEqual({ value: '', unit: 'day' });
     expect(changeKind(form(), 'repotting', defaults).interval).toEqual({ value: '7', unit: 'day' });
+  });
+});
+
+describe('editMinDueOn', () => {
+  it('今日と今の予定日の早いほう（期限切れのタスクも、予定日を変えずに保存できるように）', () => {
+    expect(editMinDueOn(today, '2026-11-30')).toBe(today);
+    expect(editMinDueOn(today, '2026-11-20')).toBe('2026-11-20');
+    expect(editMinDueOn(today, '')).toBe(today);
   });
 });

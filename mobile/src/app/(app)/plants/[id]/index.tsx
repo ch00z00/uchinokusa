@@ -89,7 +89,7 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
   const locations = useLocations(householdId);
   const tasks = useCareTasks(plant.id);
   const archived = plant.archivedAt !== undefined;
-  // アーカイブ中の植物には、タスクの操作を出さない（PLANT-10）
+  // アーカイブ中の植物には、タスクの操作（追加・編集）を出さない（PLANT-10）
   const canAddTask = canEdit && !archived;
   const locationName = plant.locationId ? locations.data?.find((l) => l.id === plant.locationId)?.name : undefined;
   const species = plant.speciesName ?? plant.speciesFreeText;
@@ -128,7 +128,20 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
               </AppText>
             )}
             {tasks.data.map((task) => (
-              <TaskListItem key={task.id} task={task} />
+              <TaskListItem
+                key={task.id}
+                task={task}
+                // 編集（TASK-01）は編集者以上で、アーカイブ中でない植物だけ
+                onPress={
+                  canAddTask
+                    ? () =>
+                        router.push({
+                          pathname: '/plants/[id]/tasks/[taskId]',
+                          params: { id: plant.id, taskId: task.id },
+                        })
+                    : undefined
+                }
+              />
             ))}
             {canAddTask && (
               <ListRow

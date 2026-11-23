@@ -32,6 +32,8 @@ type Props = {
   creating: boolean;
   /** 予定日の欄の見出し（作成は「初回の予定日」） */
   dueLabel: string;
+  /** 予定日の欄の下の補足（編集では、周期を変えても予定日は変わらないこと） */
+  dueHint?: string;
   /** 選べる最初の予定日（`YYYY-MM-DD`）。作成では今日 */
   minDueOn?: string;
   submitLabel: string;
@@ -51,7 +53,7 @@ function serverField(field: string): TaskField | undefined {
 
 /** お手入れタスクの入力（TASK-01 の作成と編集で使う。要件8-1〜8-6） */
 export function TaskForm(props: Props) {
-  const { initial, defaults, creating, dueLabel, minDueOn, submitLabel, onSubmit, pending, error } = props;
+  const { initial, defaults, creating, dueLabel, dueHint, minDueOn, submitLabel, onSubmit, pending, error } = props;
   const { t } = useTranslation();
   const theme = useTheme();
   const [input, setInput] = useState(initial);
@@ -164,14 +166,21 @@ export function TaskForm(props: Props) {
           error={fieldError('interval')}
         />
       )}
-      <DateField
-        label={dueLabel}
-        value={input.nextDueOn}
-        onChange={(nextDueOn) => update({ ...input, nextDueOn }, ['nextDueOn'])}
-        minimumDate={minDueOn}
-        clearable={false}
-        error={fieldError('nextDueOn')}
-      />
+      <View style={{ gap: theme.space.xs }}>
+        <DateField
+          label={dueLabel}
+          value={input.nextDueOn}
+          onChange={(nextDueOn) => update({ ...input, nextDueOn }, ['nextDueOn'])}
+          minimumDate={minDueOn}
+          clearable={false}
+          error={fieldError('nextDueOn')}
+        />
+        {dueHint && (
+          <AppText variant="footnote" color="secondary">
+            {dueHint}
+          </AppText>
+        )}
+      </View>
       <AppText variant="footnote" color="secondary">
         {t('tasks.form.optionalNote')}
       </AppText>

@@ -153,18 +153,26 @@ export function toCreateTaskRequest(
 
 /**
  * 変更で送る値（種類は変えられない）。空の実行条件・メモは空文字で消し、閉じた季節ごとの周期は {} で消す。
- * 予定日を送ると、サーバーはその日を手で決めた日として扱う（季節の切り替えで動かさない）
+ * 予定日は、開いたとき（`initial`）から変えたときだけ送る。送った予定日は手で決めた日になり、
+ * 季節の切り替えで計算し直さなくなるため（API の決まり）
  */
-export function toUpdateTaskRequest(value: TaskFormInput): components['schemas']['UpdateCareTaskRequest'] {
+export function toUpdateTaskRequest(
+  value: TaskFormInput,
+  initial: TaskFormInput,
+): components['schemas']['UpdateCareTaskRequest'] {
   return {
     ...(value.kind === 'other' ? { customName: value.customName } : {}),
     interval: toBaseInterval(value),
     seasonalIntervals: toSeasonal(value.seasonal),
     conditionText: value.conditionText,
     note: value.note,
-    nextDueOn: value.nextDueOn,
+    ...(value.nextDueOn !== initial.nextDueOn ? { nextDueOn: value.nextDueOn } : {}),
   };
 }
+
+/** 編集で選べる最初の予定日（`YYYY-MM-DD`）。今日と今の予定日の早いほう（期限切れのタスクも、そのまま保存できるように） */
+export const editMinDueOn = (today: string, current: string): string =>
+  current !== '' && current < today ? current : today;
 
 const intervalToForm = (interval: { value: number; unit: IntervalUnit }): IntervalForm => ({
   value: String(interval.value),

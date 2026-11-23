@@ -84,6 +84,7 @@
 - タスクの作成は `(app)/plants/[id]/tasks/new.tsx`（モーダル）。入力の決まりは `features/task/taskValidation.ts`（サーバーと同じ上限）、表示は `careTask.ts`・`taskText.ts`
 - おすすめの初期値：task-defaults の実行条件（いまは水やりだけ）。周期の目安は植え替えの24か月だけ（0028）。ほかは出典がないので空
 - 「季節ごとに変える」をオンにすると、基本の「周期」の欄を隠して4つの季節だけを入れる（ユーザーが選んだ案A。重ねて入れさせない）。API が必須の基本の周期には春の周期を送る。周期の数の欄のプレースホルダーは「例：7」
+- タスクの編集（16.3b）は `(app)/plants/[id]/tasks/[taskId].tsx`（モーダル）。タスク1件の API がないので一覧から探す。予定日は変えたときだけ送る（送ると手で決めた日になり、季節の切り替えで計算し直さなくなる）。一時停止・再開・削除は下の行で、押したらトーストを出して閉じる
 - 部品を足した：CareKindIcon（仮置きのシンボル）、Badge（RoleBadge はこれを使う）、IntervalInput、SeasonalIntervalEditor、TaskListItem。ListRow に `leading`、DateField に `minimumDate`
 - 16.3c の植え替えの注意は、保存のあとに提案の一覧を取り直し、そのタスクの `repotting.avoid` があれば OS のアラートで理由を出し、詳細のタスクの項目にも注意の1行を残す（ユーザーが選んだ）
 - 試しのデータ：ポトスに、水やり（季節ごとの周期・実行条件つき）、肥料、葉水（一時停止中）のタスクを API で入れた
