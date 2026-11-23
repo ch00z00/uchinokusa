@@ -128,7 +128,7 @@
 
 ## 担当の分け方
 - バックエンドとアプリは、別々のエージェントが同じ作業フォルダ・同じブランチ（`main`）で並行して進める
-- **アプリ担当がコミットしてよいファイル**：`mobile/`（`openapi.yaml` から生成した `mobile/src/api/schema.d.ts` を含む。2026-11-08 にユーザーと決めた）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、`docs/design/screen-inventory.md`・`foundations.md`（`design.md` の決まりで、画面の実装の前に直すため。15.1 から）、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）
+- **アプリ担当がコミットしてよいファイル**：`mobile/`（`openapi.yaml` から生成した `mobile/src/api/schema.d.ts` を含む。2026-11-08 にユーザーと決めた）、`HANDOFF-mobile.md`、`tasks.md` のアプリのタスク（14〜20）の行、`docs/design/screen-inventory.md`・`foundations.md`（`design.md` の決まりで、画面の実装の前に直すため。15.1 から）、デザインの振り返りのファイル（`.claude/skills/retro/`、`docs/design/preferences.md`、`docs/design/retro/`）、README と進捗（ルートの `README.md`、`scripts/update-progress.mjs`、`.githooks/`、`docs/roadmap.md`、`docs/progress/`。2026-11-23 にユーザーと決めた。`docs/roadmap.md` の「MVP：リリース準備（バックエンド）」のチェックはバックエンドも付ける）
 - コミットは、自分のファイルのパスを指定して行う。`git add -A` や `git add .` は使わない（もう片方の作りかけの変更が入るため）
   ```
   git add <自分のファイル>

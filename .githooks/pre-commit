@@ -1,0 +1,14 @@
+#!/bin/sh
+# README.md の進捗を、進捗の元になるファイルを含むコミットで書き直す（scripts/update-progress.mjs）。
+# 有効にするには：git config core.hooksPath .githooks
+if git diff --cached --name-only | grep -qE '^(\.kiro/specs/[^/]+/tasks\.md|docs/roadmap\.md|docs/progress/schedule\.json|scripts/update-progress\.mjs)$'; then
+  if ! command -v node >/dev/null 2>&1; then
+    echo "pre-commit: node がないので、README.md の進捗を更新しませんでした" >&2
+    exit 0
+  fi
+  node scripts/update-progress.mjs || exit 1
+  git add README.md
+  # パスを指定したコミット（git commit -- <パス>）では、ここで足した README.md が本来のインデックスに残らない。
+  # post-commit でそろえるための印
+  touch "$(git rev-parse --git-dir)/progress-updated"
+fi

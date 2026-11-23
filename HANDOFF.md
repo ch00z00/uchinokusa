@@ -56,6 +56,35 @@
 - タスクが終わったら、`tasks.md` のチェックボックスを `[x]` にし、コミットする
 - push は大きいタスク（7, 8 など）の単位で行う。サブタスク（8.1 など）ごとにはコミットだけして、そのタスクのサブタスクがすべて終わったらまとめて push する（2026-11-05 にユーザーと決定）
 
+## アプリ担当とユーザーからの引き継ぎ（2026-11-23。最優先）
+ユーザーの方針：**何としても 11月中（2026-11-30）に MVP をリリースする**（家族に TestFlight で配る）。アプリは 14〜16 が終わり、残りは 14.4・15.3・17・18・19・20。バックエンドは、アプリと並行して、次のことを上から進める。進み具合は `docs/roadmap.md` の「MVP：リリース準備（バックエンド）」のチェックボックスに付ける（README の進捗に出る）
+
+1. **植え替えの時期の既定のルールを見直す**（ユーザーの指摘）
+   - ユーザーの言葉：「植え替え時期に関しては夏は問題ないよ。暖かければ3月からOKで、デッドラインは10月の頭くらいまでかな」
+   - いまの既定値は `server/internal/domain/repotting.go` の `DefaultRepottingRule`（適期 5〜6月・9月、避ける 7〜8月（真夏）・12〜2月（真冬））。根拠は docs/decisions/0009
+   - **値は AI の知識で決めず、出典を確かめて残す**（ユーザーの方針）。ユーザーの指摘を手がかりに出典を探し、案（適期・どちらでもない・避ける月）をユーザーに見せて決める。0009 を置き換える記録を足す
+   - 月で判定しているので「暖かければ3月から」は表せない。3月を「どちらでもない」（予定日にしても注意を出さないが、提案日にはしない）にする案などを、ユーザーと決める
+   - アプリへの影響：アプリは判定をしていない。提案の `messageKey`（`repotting.initial` / `repotting.avoid`）と `reasonKey`（`repotting.avoid.{midsummer|midwinter|avoid}.reason`）を見て文言を出すだけ。**キーの名前を変えなければ、アプリの変更は要らない**（真夏の注意が出なくなるだけ）。キーを変える・足すときは、HANDOFF-mobile.md に書く
+   - 最初の植え替えの提案日（`RepottingRule.Propose`）も変わるので、テストを直す
+2. **本番の環境を用意する**（tasks.md にない作業。判断は docs/decisions/ に残す）
+   - Cloud Run（API）、Cloud SQL か Neon（DB。コストで選ぶ）、Secret Manager、マイグレーションの流し方
+   - Cloud Scheduler に定期ジョブ（reminders 5分・notifications 1分・seasons 1時間・daily-advice 1日）を OIDC で登録する
+   - 本番の Firebase のプロジェクト（Apple / Google のサインイン、FCM。APNs の鍵を FCM に登録）
+   - 招待用ドメインと、アプリを開くための検証ファイル（`apple-app-site-association`・`assetlinks.json`）を Firebase Hosting に置く。アプリ側（15.3）とそろえるので、パスと Bundle ID は HANDOFF-mobile.md と突き合わせる
+   - テストとデプロイを GitHub Actions で動かす
+3. **ユーザーにしかできない手続きを、早めにユーザーに頼む**（審査や支払いがあり、日数がかかる）
+   - Apple Developer Program への登録（14.4 のサインイン、18.2 のプッシュ通知、TestFlight に必要。アプリ担当も待っている）
+   - GCP の請求先の設定とプロジェクトの作成、Firebase の本番プロジェクトの作成
+   - 招待用のドメインを決める（取るか、Firebase Hosting の既定のドメインを使うか）
+   - アカウントの作成・支払い・規約への同意は、エージェントはせず、ユーザーに手順を示す
+4. 20.3（性能の目標の確認）のうち、サーバー側
+
+### README の進捗（アプリ担当が作った。2026-11-23）
+- ルートの `README.md` に進捗の表とガントチャートがあり、`scripts/update-progress.mjs` が tasks.md・`docs/roadmap.md` のチェックボックスと `docs/progress/schedule.json` の期間から書き直す
+- `.githooks/pre-commit` が、これらのファイルを含むコミットで README を書き直して **コミットに含める**。`.githooks/post-commit` が、パス指定のコミットでインデックスに残る古い README をそろえる。有効にするには `git config core.hooksPath .githooks`（このリポジトリでは有効にしてある）
+- そのため、バックエンドが tasks.md・roadmap.md をコミットすると、`README.md` もそのコミットに入る（想定どおり）。README の進捗の区間は手で書き換えない
+- これらのファイルはアプリ担当のもの。ただし `docs/roadmap.md` の「MVP：リリース準備（バックエンド）」のチェックボックスは、バックエンドが付けてよい
+
 ## ユーザーとのやり取りで決まったこと（仕様に反映済み）
 - 回答は日本語で行う
 - MVPはコア機能＋共有機能。写真は扱わず、テキストのメモのみ。カレンダーは植物ごと

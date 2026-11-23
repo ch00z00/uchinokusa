@@ -1,0 +1,68 @@
+{
+  "deadline": "2027-01-31",
+  "milestones": [{ "name": "MVP リリース", "date": "2026-11-30" }],
+  "phases": [
+    {
+      "id": "backend",
+      "name": "MVP：バックエンド",
+      "gantt": "MVP バックエンド",
+      "start": "2026-10-24",
+      "end": "2026-11-30",
+      "sources": [
+        { "tasks": ".kiro/specs/household-plant-care-mvp/tasks.md", "chapters": [1, 13] },
+        { "roadmap": "docs/roadmap.md", "section": "MVP：リリース準備（バックエンド）" }
+      ]
+    },
+    {
+      "id": "app",
+      "name": "MVP：アプリ",
+      "gantt": "MVP アプリ",
+      "start": "2026-11-08",
+      "end": "2026-11-30",
+      "sources": [
+        { "tasks": ".kiro/specs/household-plant-care-mvp/tasks.md", "chapters": [14, 19] },
+        { "roadmap": "docs/roadmap.md", "section": "MVP：リリース準備（アプリ）" }
+      ]
+    },
+    {
+      "id": "e2e",
+      "name": "MVP：通しの確認",
+      "gantt": "MVP 通しの確認",
+      "start": "2026-11-26",
+      "end": "2026-11-30",
+      "sources": [{ "tasks": ".kiro/specs/household-plant-care-mvp/tasks.md", "chapters": [20, 20] }]
+    },
+    {
+      "id": "p2",
+      "name": "Phase 2：天気の助言",
+      "gantt": "Phase 2 天気の助言",
+      "start": "2026-12-01",
+      "end": "2026-12-14",
+      "sources": [{ "roadmap": "docs/roadmap.md", "section": "Phase 2：天気の助言" }]
+    },
+    {
+      "id": "p3",
+      "name": "Phase 3：記録と通知の改善",
+      "gantt": "Phase 3 記録と通知の改善",
+      "start": "2026-12-15",
+      "end": "2026-12-28",
+      "sources": [{ "roadmap": "docs/roadmap.md", "section": "Phase 3：記録と通知の改善" }]
+    },
+    {
+      "id": "p4",
+      "name": "Phase 4：AI 機能",
+      "gantt": "Phase 4 AI 機能",
+      "start": "2026-12-29",
+      "end": "2027-01-17",
+      "sources": [{ "roadmap": "docs/roadmap.md", "section": "Phase 4：AI 機能" }]
+    },
+    {
+      "id": "p5",
+      "name": "Phase 5：一般公開",
+      "gantt": "Phase 5 一般公開",
+      "start": "2027-01-18",
+      "end": "2027-01-31",
+      "sources": [{ "roadmap": "docs/roadmap.md", "section": "Phase 5：一般公開" }]
+    }
+  ]
+}

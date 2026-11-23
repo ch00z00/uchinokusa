@@ -1,0 +1,8 @@
+#!/bin/sh
+# pre-commit が README.md の進捗を書き直したとき、本来のインデックスの README.md をコミットにそろえる
+# （パスを指定したコミットで、古い README.md がインデックスに残り、元に戻す変更のように見えるのを防ぐ）
+marker="$(git rev-parse --git-dir)/progress-updated"
+if [ -f "$marker" ]; then
+  rm -f "$marker"
+  git reset -q -- README.md
+fi
