@@ -39,3 +39,8 @@ export function formatDayWithYear(date: string): string {
     weekday: 'short',
   }).format(parseDay(date));
 }
+
+/** 日時を「10:15」の形で出す（端末のタイムゾーン、アプリの言語） */
+export function formatTime(iso: string): string {
+  return new Intl.DateTimeFormat(i18n.language, { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}

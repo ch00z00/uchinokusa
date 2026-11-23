@@ -96,6 +96,9 @@
 - 17.1 今日やること（`(tabs)/today/index.tsx`）：API の `today` をそのまま並べ、まとめ方（予定日順・置き場所ごと・作業の種類ごと）は `features/today/todayList.ts`。表示の切り替えはヘッダーの右の OS のメニュー（iOS は `unstable_headerRightItems` の `menu`、Android は `@expo/ui` の MenuView）で、端末に保存する（ユーザーが選んだ）
 - 部品を足した：TaskCard（完了のボタンは 17.2 で `trailing` に置く）、OverdueBadge、EmptyState
 - 提案の文は `todaySuggestionText`（植え替えの注意は本文＋理由、知らない提案は種類ごとの一般的な文）
+- 17.2 は 17.2a 完了と取り消し → 17.2b スキップと実施日を変えて記録 → 17.2c まとめて完了 に分ける（ユーザーが選んだ）
+- 17.2a：完了は `features/today/useCompletion.ts` の `useCompleteTask`（今日の一覧から楽観的に外し、失敗で戻す）。画面の流れは今日の画面の `useCompletionFlow`（スナックバー・すでに完了のダイアログ・通信できないときのトースト）。取り消しは `useUndoRecord`。部品を足した：CompleteButton（丸いチェック。ユーザーが選んだ）、Snackbar（ルートの `SnackbarProvider`）。トークン `borderWidth.thick` を足した
+- 完了のボタンの mutation は、カードではなく一覧（`TodaySections`）に置く。カードは完了の直後に一覧から外れて消えるので、カードに置くと、そのあとのダイアログや取り消しが動かなくなるため
 - 試しのデータ：寝室のサンスベリア（水やり、3日過ぎ）、ローズマリー（剪定、今日）、アイビー（肥料、今日、置き場所なし）のタスクを API で入れた
 
 ### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）

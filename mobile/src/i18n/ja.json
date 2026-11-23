@@ -32,6 +32,21 @@
     "overdue": "{{count}}日過ぎています",
     "separator": "・",
     "openPlantHint": "植物の詳細を開きます",
+    "complete": {
+      "label": "{{task}}を完了",
+      "done": "{{plant}}の{{task}}を記録しました",
+      "undo": "取り消す",
+      "undone": "取り消しました",
+      "offline": "通信できないため、記録できませんでした。通信が戻ったら、もう一度完了してください",
+      "stale": "ほかの人が予定を変えたため、一覧を更新しました"
+    },
+    "conflict": {
+      "title": "すでに記録されています",
+      "message": "{{name}}さんが {{time}} に{{task}}を記録しています",
+      "skip": "記録しない",
+      "extra": "追加で記録する",
+      "extraDone": "追加で記録しました"
+    },
     "empty": {
       "title": "今日のお手入れはありません",
       "next": "次は {{plant}} の{{task}}（{{date}}）です",

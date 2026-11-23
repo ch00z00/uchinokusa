@@ -145,4 +145,5 @@ export const size = {
 // shadow/card は「なし」（border/subtle の 1pt の枠で区切る）なので、トークンを作らない
 export const borderWidth = {
   hairline: 1,
+  thick: 2,
 } as const;

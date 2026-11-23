@@ -90,7 +90,7 @@ export function TaskCard({
         </AppText>
         {conditionText && <AppText variant="callout">{conditionText}</AppText>}
       </View>
-      {trailing}
+      {trailing && <View style={styles.trailing}>{trailing}</View>}
     </Pressable>
   );
 }
@@ -100,4 +100,5 @@ const styles = StyleSheet.create({
   main: { flex: 1 },
   titleLine: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   shrink: { flexShrink: 1 },
+  trailing: { alignSelf: 'center' },
 });

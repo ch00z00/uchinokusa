@@ -126,6 +126,8 @@ HIG の文字スタイル（Dynamic Type の「標準」の大きさ）にそろ
 | トークン | 値 | 用途 |
 |---|---|---|
 | `shadow/card` | なし（`border/subtle` の1pt の枠で区切る） | アースカラーの落ち着いた雰囲気に合わせ、影に頼らない。Figma で比べて必要なら追加する |
+| `borderWidth/hairline` | 1pt | カード・一覧の区切り、入力欄の誤りの枠 |
+| `borderWidth/thick` | 2pt | 丸い完了のボタン（CompleteButton）の枠（17.2a で追加） |
 | `size/tap-min` | 44pt | タップできる領域の最小 |
 | `size/icon/sm` | 16pt | バッジの中 |
 | `size/icon/md` | 20pt | 一覧の項目、TaskCard |
@@ -218,6 +220,8 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |
 | ChoiceField / ChoiceSheet | 決まった選択肢から1つを選ぶ欄。見出しは FormField と同じ、欄は ListRow（今の値を題名に、進む印つき）を角丸 `radius/md` で切り抜く。押すと OS のシート（モーダル）で、選択肢を ListRow の一覧（選択中の印つき）で出す。都道府県と置き場所の環境の項目で使う（16.1 で追加）。シートの最後に操作の項目（「＋ 新しい置き場所」）を置ける（16.2b で追加） |
 | Toast | 操作の結果（「保存しました」など）を、タブバーの上に3秒だけ出す。地 `text/primary`・文字 `bg/base`（反転して画面の内容と区別する）、`callout`、角丸 `radius/md`、内側 左右 `space/lg`・上下 `space/md`。押す操作はなく、画面の読み上げにも伝える。取り消しのボタンつきは TODAY-02 のスナックバー（15.2 で追加） |
+| Snackbar | 取り消しのボタンつきの知らせ（TODAY-02）。Toast と同じ地・文字・位置で、右に「取り消す」（`headline`、`accent/subtle` の文字）。5秒で消える。連続したときは最後の1件だけを出す（17.2a で追加） |
+| CompleteButton | 完了の丸いボタン（TaskCard の右）。36pt の円（押せる領域は周りの余白で 44pt 以上）、`accent` の枠（`borderWidth/thick`）と、中にチェックのシンボル（`icon/md`、`accent`）。押している間は地を `accent/subtle` にする（17.2a で追加） |
 | QRCodeView | 模様 `qr/foreground`、地 `qr/background`、周りに `space/lg` の余白（読み取りに必要な余白を兼ねる）、角丸 `radius/lg`。大きさは画面の幅に合わせ、最大 240pt（15.2 で追加） |
 | QRScanner | カメラの映像を画面全体に出し、OS のカメラの許可のダイアログを使う。許可がないときは、説明と「カメラを使う」、拒否されたあとは「設定を開く」のボタンを出す（15.2 で追加） |
 
