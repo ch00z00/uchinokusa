@@ -13,6 +13,8 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 // 期間の経過より、このポイント以上遅れていたら「遅れ気味」にする
 const behindThreshold = 20;
 const barWidth = 10;
+// ガントチャートの幅（px）
+const ganttWidth = 1400;
 
 /** 端末のタイムゾーンでの今日（YYYY-MM-DD） */
 function localToday() {
@@ -131,6 +133,8 @@ export function render(schedule, files, today) {
     ),
     '',
     '```mermaid',
+    // 期間が3か月あり、表示する場所の幅に合わせると棒と文字が詰まるので、幅を固定して横に広げる
+    `%%{init: {"gantt": {"useWidth": ${ganttWidth}, "useMaxWidth": false, "barHeight": 24, "fontSize": 13, "sectionFontSize": 13}}}%%`,
     'gantt',
     '    title スケジュール（赤：遅れ／濃い色：進行中）',
     '    dateFormat YYYY-MM-DD',

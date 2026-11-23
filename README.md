@@ -24,6 +24,7 @@
 | Phase 5：一般公開 | 01/18〜01/31 | `░░░░░░░░░░` 0%（0/8） | 0% | ⏳ 開始前 |
 
 ```mermaid
+%%{init: {"gantt": {"useWidth": 1400, "useMaxWidth": false, "barHeight": 24, "fontSize": 13, "sectionFontSize": 13}}}%%
 gantt
     title スケジュール（赤：遅れ／濃い色：進行中）
     dateFormat YYYY-MM-DD
