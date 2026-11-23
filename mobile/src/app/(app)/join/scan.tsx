@@ -4,14 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { Pressable } from 'react-native';
 
 import { AppText } from '@/components/AppText';
+import { useHeaderHitArea } from '@/components/HeaderTextButton';
 import { QRScanner } from '@/components/QRScanner';
 import { inviteTokenFromScan } from '@/features/invitation/inviteLink';
-import { useTheme } from '@/theme';
 
 // INV-11 QR コードの読み取り。招待の QR なら参加の確認（INV-12）へ、そうでなければ案内を出して読み取りを続ける
 export default function ScanScreen() {
   const { t } = useTranslation();
-  const theme = useTheme();
+  const hitArea = useHeaderHitArea();
   const [notInvite, setNotInvite] = useState(false);
   // 同じ QR を映している間、何度も呼ばれるので、一度だけ進む
   const done = useRef(false);
@@ -33,7 +33,7 @@ export default function ScanScreen() {
       <Stack.Screen
         options={{
           headerLeft: () => (
-            <Pressable accessibilityRole="button" hitSlop={theme.space.md} onPress={() => router.back()}>
+            <Pressable accessibilityRole="button" style={hitArea} onPress={() => router.back()}>
               <AppText color="accent">{t('common.cancel')}</AppText>
             </Pressable>
           ),

@@ -217,7 +217,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加）。植え替えの時期の注意があれば、いちばん下に、警告のシンボル（`icon/sm`、`accent`）と「注意：」から始まる1行（`footnote`、`text/primary`）を出す（色だけに頼らず、言葉で示す。16.3c で追加。`suggestion/avoid` の色では気づきにくいと言われたので改めた） |
 | IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード、プレースホルダー「例：7」）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
 | SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる。基本の周期の欄より上に置き、オンのあいだは基本の周期の欄を隠す（16.3a で追加） |
-| HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |
+| HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加）。押せる領域は、ビューの枠そのものを高さ・幅とも `size.tapMin`（44pt）以上にする（`useHeaderHitArea`）。iOS のネイティブのヘッダーに埋め込んだビューは枠の外のタッチを受け付けず、`hitSlop` が効かないため。ヘッダーに置く自作の部品はすべてこれを使う（17.2c で、押しても反応しないことがある不具合を直した） |
 | ChoiceField / ChoiceSheet | 決まった選択肢から1つを選ぶ欄。見出しは FormField と同じ、欄は ListRow（今の値を題名に、進む印つき）を角丸 `radius/md` で切り抜く。押すと OS のシート（モーダル）で、選択肢を ListRow の一覧（選択中の印つき）で出す。都道府県と置き場所の環境の項目で使う（16.1 で追加）。シートの最後に操作の項目（「＋ 新しい置き場所」）を置ける（16.2b で追加） |
 | Toast | 操作の結果（「保存しました」など）を、タブバーの上に3秒だけ出す。地 `text/primary`・文字 `bg/base`（反転して画面の内容と区別する）、`callout`、角丸 `radius/md`、内側 左右 `space/lg`・上下 `space/md`。押す操作はなく、画面の読み上げにも伝える。取り消しのボタンつきは TODAY-02 のスナックバー（15.2 で追加） |
 | Snackbar | 取り消しのボタンつきの知らせ（TODAY-02）。Toast と同じ地・文字・位置で、右に「取り消す」（`headline`、`accent/subtle` の文字）。5秒で消える。連続したときは最後の1件だけを出す（17.2a で追加） |

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Pressable } from 'react-native';
 
 import { AppText } from '@/components/AppText';
-import { useTheme } from '@/theme';
+import { useHeaderHitArea } from '@/components/HeaderTextButton';
 
 import { useSelectedHousehold } from './SelectedHouseholdProvider';
 
@@ -14,7 +14,7 @@ import { useSelectedHousehold } from './SelectedHouseholdProvider';
  */
 export function HouseholdSwitcher() {
   const { t } = useTranslation();
-  const theme = useTheme();
+  const hitArea = useHeaderHitArea();
   const { state } = useSelectedHousehold();
   if (state.status !== 'selected') return null;
   return (
@@ -22,8 +22,9 @@ export function HouseholdSwitcher() {
       <Pressable
         accessibilityRole="button"
         accessibilityHint={t('household.switcher.hint')}
-        hitSlop={theme.space.md}
-        style={{ maxWidth: 200 }}
+        // 押せる領域は 44pt 以上（ネイティブのヘッダーでは hitSlop が効かない。useHeaderHitArea）。
+        // Link の asChild にはスタイルの配列を渡せないので、1つのオブジェクトにする
+        style={{ ...hitArea, maxWidth: 200, alignItems: 'flex-start' }}
       >
         {/* TODO：「▾」を OS のシンボル（chevron.down / expand_more）にする（SettingsHeaderButton と同じく、アイコンの導入のあと） */}
         <AppText variant="headline" color="accent" numberOfLines={1}>
