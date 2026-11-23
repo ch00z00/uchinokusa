@@ -16,6 +16,8 @@ import { useLocations } from '@/features/location/useLocations';
 import type { Plant } from '@/features/plant/plantList';
 import { usePlant, useUnarchivePlant } from '@/features/plant/usePlants';
 import { confirm } from '@/lib/confirm';
+import { findRepottingAvoid, repottingAvoidText } from '@/features/suggestion/suggestionText';
+import { useSuggestions } from '@/features/suggestion/useSuggestions';
 import { TaskListItem } from '@/features/task/TaskListItem';
 import { useCareTasks } from '@/features/task/useCareTasks';
 import { formatDate, formatDayWithYear } from '@/lib/formatDate';
@@ -88,11 +90,17 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
   const theme = useTheme();
   const locations = useLocations(householdId);
   const tasks = useCareTasks(plant.id);
+  // 植え替えの時期の注意（16.3c）。予定日を変えて向かない時期でなくなると、サーバーが撤回して消える
+  const suggestions = useSuggestions(householdId);
   const archived = plant.archivedAt !== undefined;
   // アーカイブ中の植物には、タスクの操作（追加・編集）を出さない（PLANT-10）
   const canAddTask = canEdit && !archived;
   const locationName = plant.locationId ? locations.data?.find((l) => l.id === plant.locationId)?.name : undefined;
   const species = plant.speciesName ?? plant.speciesFreeText;
+  const cautionOf = (taskId: string) => {
+    const avoid = findRepottingAvoid(suggestions.data ?? [], taskId);
+    return avoid ? repottingAvoidText(avoid, t).message : undefined;
+  };
 
   return (
     <>
@@ -131,6 +139,7 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
               <TaskListItem
                 key={task.id}
                 task={task}
+                caution={cautionOf(task.id)}
                 // 編集（TASK-01）は編集者以上で、アーカイブ中でない植物だけ
                 onPress={
                   canAddTask

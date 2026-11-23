@@ -206,12 +206,12 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | Badge | `caption`、角丸 `radius/sm`、色は役割の色の subtle を背景に。期限切れ・ロール・一時停止中。`tone`：accent（`accent/subtle` の地＋`accent` の文字）/ neutral（`bg/subtle` の地＋`text/secondary` の文字）。RoleBadge はこれを使う（16.3a で部品にした） |
 | Button（アプリの層） | 主：アクセントの背景＋`on-accent` の文字。副：枠だけ。高さ 44pt 以上、角丸 `radius/md`。危険な操作は OS のアラートに任せる |
 | EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |
-| ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加）。右端に操作のボタン（Button の副）を置ける。置くときは項目そのものを押せなくし、操作はボタンだけにする（15.2 で追加）。一覧の中の操作の項目（「＋ 新しい置き場所」など）は、文字を `accent` にする（16.2b で追加）。左にアイコンなどを置ける（`leading`。16.3a で追加） |
+| ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加）。右端に操作のボタン（Button の副）を置ける。置くときは項目そのものを押せなくし、操作はボタンだけにする（15.2 で追加）。一覧の中の操作の項目（「＋ 新しい置き場所」など）は、文字を `accent` にする（16.2b で追加）。左にアイコンなどを置ける（`leading`。16.3a で追加）。補足の下に、注意などの行を置ける（`footer`。16.3c で追加） |
 | FormField | 見出し `subheadline` の `text/secondary`、入力欄は背景 `bg/subtle`・角丸 `radius/md`・高さ 44pt 以上、エラーのときは枠を `danger` にし、入力欄の下に理由を `footnote` の `danger` で出す（15.1 で追加） |
 | PlantListItem | ListRow の形で、題名に植物名、補足に置き場所（未設定なら「置き場所未設定」）と種類、右に次の予定日（なければ「予定なし」）。押すと植物の詳細。状態：通常 / 置き場所未設定 / 予定のタスクなし / アーカイブ済み（右に予定日の代わりに「〇月〇日(曜)にアーカイブ」。`archived`）（16.2a で追加、16.2d でアーカイブ済みを足した） |
 | FilterChips | 横に流れるチップの並び。チップは高さ 36pt（上下に余白を足して、押せる領域を 44pt 以上にする）、角丸 `radius/full`、内側 左右 `space/md`、文字 `subheadline`。選択中は 地 `accent` ＋ 文字 `on-accent`、選択していないものは 地 `bg/subtle` ＋ 文字 `text/primary`（16.2a で追加） |
 | DateField | 見出しは FormField と同じ。未設定なら ListRow（「未設定」、進む印つき）。日付の選択は OS の部品（iOS：compact の DatePicker を `bg/surface` の欄に置く、Android：日付のダイアログ）。色は `accent`。値があれば、下に「未設定に戻す」（Button の副）（16.2b で追加）。選べる最初の日・最後の日を決められる。iOS の部品は、端末の言語ではなくアプリの言語で出す（16.3a） |
-| TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加） |
+| TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加）。植え替えの時期の注意があれば、いちばん下に「注意：」から始まる1行を `footnote`・`suggestion/avoid` の色で出す（色だけに頼らず、言葉で示す。16.3c で追加） |
 | IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード、プレースホルダー「例：7」）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
 | SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる。基本の周期の欄より上に置き、オンのあいだは基本の周期の欄を隠す（16.3a で追加） |
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |

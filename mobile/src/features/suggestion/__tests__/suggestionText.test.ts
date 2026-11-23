@@ -1,6 +1,8 @@
 import i18n from '@/i18n';
 
-import { findInitialRepotting, repottingReason } from '../suggestionText';
+import { formatDay } from '@/lib/formatDate';
+
+import { findInitialRepotting, findRepottingAvoid, repottingAvoidText, repottingReason } from '../suggestionText';
 
 const t = i18n.t.bind(i18n);
 
@@ -54,5 +56,50 @@ describe('findInitialRepotting', () => {
       s({ id: 'B', plantId: 'P1', status: 'dismissed' }),
     ];
     expect(findInitialRepotting(list, 'P1')).toBeUndefined();
+  });
+});
+
+describe('findRepottingAvoid', () => {
+  const avoid = (extra: object) => ({
+    id: 'S',
+    providerId: 'repotting.v1',
+    kind: 'avoid' as const,
+    action: 'info' as const,
+    taskId: 'T1',
+    messageKey: 'repotting.avoid',
+    messageParams: { plantName: 'ポトス', date: '2027-01-10' },
+    reasonKey: 'repotting.avoid.midwinter.reason',
+    reasonParams: {},
+    validFrom: '2026-11-22',
+    status: 'pending' as const,
+    ...extra,
+  });
+
+  it('そのタスクへの、未回答の植え替えの時期の注意を返す', () => {
+    const list = [avoid({ id: 'A', taskId: 'T2' }), avoid({ id: 'B' })];
+    expect(findRepottingAvoid(list, 'T1')?.id).toBe('B');
+  });
+
+  it('ほかの提案や、回答済みのものは返さない', () => {
+    const list = [avoid({ id: 'A', messageKey: 'repotting.initial' }), avoid({ id: 'B', status: 'dismissed' })];
+    expect(findRepottingAvoid(list, 'T1')).toBeUndefined();
+  });
+
+  it('本文に日付、理由に時期ごとの文を入れる', () => {
+    const text = repottingAvoidText(avoid({}), t);
+    expect(text.message).toBe(`${formatDay('2027-01-10')}は植え替えに向かない時期です`);
+    expect(text.reason).toBe('寒さで根が傷みやすくなります');
+    expect(repottingAvoidText(avoid({ reasonKey: 'repotting.avoid.midsummer.reason' }), t).reason).toBe(
+      '暑さで生長が鈍り、植え替えのあと回復しにくくなります',
+    );
+    expect(repottingAvoidText(avoid({ reasonKey: 'repotting.avoid.avoid.reason' }), t).reason).toBe(
+      'この植物の種類の植え替えには向きません',
+    );
+  });
+
+  it('知らない理由のキーや、日付のない材料でも文を作る', () => {
+    const text = repottingAvoidText(avoid({ reasonKey: 'repotting.avoid.rainy.reason', messageParams: {} }), t);
+    expect(text.message).toBe('予定日は植え替えに向かない時期です');
+    expect(text.reason).toBe('株を傷めやすくなります');
   });
 });

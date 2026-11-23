@@ -377,6 +377,19 @@
     "clear": "未設定に戻す"
   },
   "suggestion": {
+    "repottingAvoid": {
+      "title": "植え替えの時期に注意",
+      "message": "{{date}}は植え替えに向かない時期です",
+      "dueDate": "予定日",
+      "reason": {
+        "midsummer": "暑さで生長が鈍り、植え替えのあと回復しにくくなります",
+        "midwinter": "寒さで根が傷みやすくなります",
+        "avoid": "この植物の種類の植え替えには向きません",
+        "general": "株を傷めやすくなります"
+      },
+      "saved": "予定日はこのまま保存しました。変えるときは、お手入れを編集してください",
+      "listNote": "注意：{{message}}"
+    },
     "repotting": {
       "title": "植え替えにおすすめの日",
       "message": "{{plantName}}の植え替えは、{{date}}がおすすめです",

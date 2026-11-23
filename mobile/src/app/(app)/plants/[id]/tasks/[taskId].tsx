@@ -20,6 +20,7 @@ import {
   useTaskDefaults,
   useUpdateCareTask,
 } from '@/features/task/useCareTasks';
+import { useRepottingAvoidAlert } from '@/features/task/useRepottingAvoidAlert';
 import { confirm } from '@/lib/confirm';
 import { formatDay, toDayString } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
@@ -76,6 +77,7 @@ function EditTask({
   const pause = usePauseCareTask(householdId, task.plantId, task.id);
   const resume = useResumeCareTask(householdId, task.plantId, task.id);
   const remove = useDeleteCareTask(householdId, task.plantId, task.id);
+  const alertRepottingAvoid = useRepottingAvoidAlert(householdId);
   const initial = taskToForm(task);
   const paused = task.status === 'paused';
   const busy = pause.isPending || resume.isPending || remove.isPending;
@@ -136,14 +138,17 @@ function EditTask({
           submitLabel={t('common.save')}
           pending={update.isPending}
           error={update.error}
-          onSubmit={(value) =>
-            update.mutate(toUpdateTaskRequest(value, initial), {
-              onSuccess: () => {
+          onSubmit={(value) => {
+            const request = toUpdateTaskRequest(value, initial);
+            update.mutate(request, {
+              onSuccess: (saved) => {
                 toast.show(t('common.saved'));
                 router.back();
+                // 予定日を変えたときだけ、サーバーが植え替えの時期を確かめ直す（16.3c）
+                if (request.nextDueOn !== undefined) void alertRepottingAvoid(saved);
               },
-            })
-          }
+            });
+          }}
         />
       </View>
 

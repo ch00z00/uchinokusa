@@ -8,18 +8,21 @@ export const suggestionKeys = {
   list: (householdId: string) => ['households', householdId, 'suggestions'] as const,
 };
 
-/** 世帯の有効な提案（GET /households/{id}/suggestions。端末での今日に有効なもの） */
+/** 世帯の有効な提案を取る（GET /households/{id}/suggestions。端末での今日に有効なもの） */
+export const fetchSuggestions = async (householdId: string) =>
+  (
+    await unwrap(
+      api.GET('/households/{householdId}/suggestions', {
+        params: { path: { householdId }, query: { date: toDayString(new Date()) } },
+      }),
+    )
+  ).suggestions;
+
+/** 世帯の有効な提案 */
 export function useSuggestions(householdId: string) {
   return useQuery({
     queryKey: suggestionKeys.list(householdId),
-    queryFn: async () =>
-      (
-        await unwrap(
-          api.GET('/households/{householdId}/suggestions', {
-            params: { path: { householdId }, query: { date: toDayString(new Date()) } },
-          }),
-        )
-      ).suggestions,
+    queryFn: () => fetchSuggestions(householdId),
   });
 }
 

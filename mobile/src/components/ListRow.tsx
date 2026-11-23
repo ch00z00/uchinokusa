@@ -11,6 +11,8 @@ export type ListRowProps = {
   detail?: string;
   /** 題名の下の補足 */
   subtitle?: string;
+  /** 補足の下に置くもの（注意の行など） */
+  footer?: ReactNode;
   /** 項目の左に置くもの（作業の種類のアイコンなど） */
   leading?: ReactNode;
   /** 題名の右に置くもの（バッジなど） */
@@ -38,6 +40,7 @@ export function ListRow({
   title,
   detail,
   subtitle,
+  footer,
   leading,
   accessory,
   trailing,
@@ -85,6 +88,7 @@ export function ListRow({
             {subtitle}
           </AppText>
         )}
+        {footer}
       </View>
       {detail !== undefined && (
         <AppText color="secondary" numberOfLines={1} style={styles.shrink}>

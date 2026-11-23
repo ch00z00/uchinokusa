@@ -10,6 +10,7 @@ import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProv
 import { TaskForm } from '@/features/task/TaskForm';
 import { emptyTaskForm, toCreateTaskRequest } from '@/features/task/taskValidation';
 import { useCreateCareTask, useTaskDefaults } from '@/features/task/useCareTasks';
+import { useRepottingAvoidAlert } from '@/features/task/useRepottingAvoidAlert';
 import { toDayString } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
@@ -23,6 +24,7 @@ export default function NewTaskScreen() {
   const householdId = state.status === 'selected' ? state.household.id : '';
   const defaults = useTaskDefaults(id);
   const create = useCreateCareTask(householdId, id);
+  const alertRepottingAvoid = useRepottingAvoidAlert(householdId);
   const today = toDayString(new Date());
 
   return (
@@ -45,9 +47,11 @@ export default function NewTaskScreen() {
           error={create.error}
           onSubmit={(value) =>
             create.mutate(toCreateTaskRequest(value), {
-              onSuccess: () => {
+              onSuccess: (task) => {
                 toast.show(t('tasks.create.done'));
                 router.back();
+                // 植え替えの予定日が向かない時期なら、閉じたあとに知らせる（16.3c）
+                void alertRepottingAvoid(task);
               },
             })
           }
