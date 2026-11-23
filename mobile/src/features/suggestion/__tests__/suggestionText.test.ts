@@ -2,7 +2,13 @@ import i18n from '@/i18n';
 
 import { formatDay } from '@/lib/formatDate';
 
-import { findInitialRepotting, findRepottingAvoid, repottingAvoidText, repottingReason } from '../suggestionText';
+import {
+  findInitialRepotting,
+  findRepottingAvoid,
+  repottingAvoidText,
+  repottingReason,
+  todaySuggestionText,
+} from '../suggestionText';
 
 const t = i18n.t.bind(i18n);
 
@@ -101,5 +107,43 @@ describe('findRepottingAvoid', () => {
     const text = repottingAvoidText(avoid({ reasonKey: 'repotting.avoid.rainy.reason', messageParams: {} }), t);
     expect(text.message).toBe('予定日は植え替えに向かない時期です');
     expect(text.reason).toBe('株を傷めやすくなります');
+  });
+});
+
+describe('todaySuggestionText', () => {
+  const base = {
+    id: 'S',
+    providerId: 'x',
+    action: 'info' as const,
+    messageParams: {},
+    reasonParams: {},
+    validFrom: '2026-11-23',
+    status: 'pending' as const,
+  };
+
+  it('植え替えの時期の注意は、本文と理由をつなぐ', () => {
+    const text = todaySuggestionText(
+      {
+        ...base,
+        kind: 'avoid',
+        messageKey: 'repotting.avoid',
+        messageParams: { date: '2027-01-10' },
+        reasonKey: 'repotting.avoid.midwinter.reason',
+      },
+      t,
+    );
+    expect(text).toBe(`${formatDay('2027-01-10')}は植え替えに向かない時期です。寒さで根が傷みやすくなります`);
+  });
+
+  it('知らない提案は、種類ごとの一般的な文にする。条件つきは条件を入れる', () => {
+    expect(todaySuggestionText({ ...base, kind: 'avoid', messageKey: 'weather.rain', reasonKey: 'x' }, t)).toBe(
+      '今日はやらない方がよさそうです',
+    );
+    expect(
+      todaySuggestionText(
+        { ...base, kind: 'conditional', messageKey: 'weather.x', reasonKey: 'x', conditionText: '土が湿っていたら' },
+        t,
+      ),
+    ).toBe('もし土が湿っていたら、今日は見送ってください');
   });
 });

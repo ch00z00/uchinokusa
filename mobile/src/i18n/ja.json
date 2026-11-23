@@ -21,7 +21,28 @@
     "settings": "設定"
   },
   "today": {
-    "title": "今日"
+    "title": "今日",
+    "grouping": {
+      "label": "表示",
+      "date": "予定日順",
+      "location": "置き場所ごと",
+      "kind": "作業の種類ごと"
+    },
+    "dueToday": "今日",
+    "overdue": "{{count}}日過ぎています",
+    "separator": "・",
+    "openPlantHint": "植物の詳細を開きます",
+    "empty": {
+      "title": "今日のお手入れはありません",
+      "next": "次は {{plant}} の{{task}}（{{date}}）です",
+      "noSchedule": "植物の詳細で、水やりなどの周期を決めると、その日にここに出ます"
+    },
+    "noPlants": {
+      "title": "植物を登録しましょう",
+      "message": "植物を登録して、水やりなどの周期を決めると、その日にやることがここに並びます",
+      "viewerMessage": "世帯に植物が登録されると、その日にやることがここに並びます",
+      "action": "植物を登録"
+    }
   },
   "plants": {
     "title": "植物",
@@ -377,6 +398,10 @@
     "clear": "未設定に戻す"
   },
   "suggestion": {
+    "today": {
+      "avoid": "今日はやらない方がよさそうです",
+      "conditional": "もし{{condition}}、今日は見送ってください"
+    },
     "repottingAvoid": {
       "title": "植え替えの時期に注意",
       "message": "{{date}}は植え替えに向かない時期です",

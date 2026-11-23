@@ -200,12 +200,13 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 
 | 部品 | 決めておくこと |
 |---|---|
-| TaskCard | 背景 `bg/surface`、角丸 `radius/lg`、内側 `space/lg`。左に作業の種類のアイコン（`icon/md`、作業の種類の色）、植物名 `headline`、置き場所と予定日 `subheadline`、実行条件 `callout`。右に完了のボタン（44pt 以上、アクセントの色）。状態：通常 / 期限切れ / 今日は不要 / 条件つき / 閲覧者 / 選択モード / 完了直後 |
+| TaskCard | 背景 `bg/surface`、角丸 `radius/lg`、内側 `space/lg`。左に作業の種類のアイコン（`icon/md`、作業の種類の色）、植物名 `headline`、置き場所と予定日 `subheadline`、実行条件 `callout`。右に完了のボタン（44pt 以上、アクセントの色）。状態：通常 / 期限切れ / 今日は不要 / 条件つき / 閲覧者 / 選択モード / 完了直後。17.1 の形：左に CareKindIcon、1行目に植物名と OverdueBadge、2行目に作業の種類の名前・置き場所・予定日（`subheadline`、`text/secondary`）、その下に実行条件。今日は不要は地を `bg/subtle` にし、上に「今日は不要」（`subheadline`、`suggestion/avoid`）と理由（`callout`）。条件つきは上に「条件つき」（`suggestion/conditional`）と「もし〜なら、〜」。完了のボタンは 17.2 で足す（17.1 で追加） |
 | CareKindIcon | オリジナルのアイコン＋作業の種類の色。線と塗り、大きさ sm / md / lg。オリジナルができるまでは 4.1 の仮置きのシンボル（iOS：SF Symbols、Android：Material Symbols の water_drop・compost・potted_plant・content_cut・eco）を作業の種類の色で塗る。読み上げでは読ませず、種類の名前をいっしょに出す（16.3a で実装） |
 | SuggestionCard | 提案の種類のアイコンと色、本文 `body`、理由 `callout`、採用・見送りのボタン。地 `bg/surface`、`border/subtle` の枠、角丸 `radius/lg`、内側 `space/lg`。種類は色だけに頼らず、種類の名前（「おすすめ」など、`subheadline`、`suggestion/*` の色）を上に出す。アイコンはオリジナルができてから（16.2c で実装） |
 | Badge | `caption`、角丸 `radius/sm`、色は役割の色の subtle を背景に。期限切れ・ロール・一時停止中。`tone`：accent（`accent/subtle` の地＋`accent` の文字）/ neutral（`bg/subtle` の地＋`text/secondary` の文字）。RoleBadge はこれを使う（16.3a で部品にした） |
 | Button（アプリの層） | 主：アクセントの背景＋`on-accent` の文字。副：枠だけ。高さ 44pt 以上、角丸 `radius/md`。危険な操作は OS のアラートに任せる |
-| EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン |
+| EmptyState | イラスト、`title3` の見出し、`subheadline` の説明、任意のボタン。イラストはオリジナルができてから（17.1 で、見出しと説明とボタンで実装） |
+| OverdueBadge | Badge（accent）で「3日過ぎています」。TaskCard の植物名の右に出す（17.1 で追加） |
 | ListRow（一覧の項目） | 背景 `bg/surface`（押している間は `bg/subtle`）、高さ 44pt 以上、内側 左右 `space/lg`・上下 `space/md`、下に `border/subtle` の区切り線。題名 `body`、補足 `footnote`、右の値 `body` の `text/secondary`。選択中の印・進む印を右に出す。取り消せない操作の項目は、文字を `danger` にする（15.1 で追加）。右端に操作のボタン（Button の副）を置ける。置くときは項目そのものを押せなくし、操作はボタンだけにする（15.2 で追加）。一覧の中の操作の項目（「＋ 新しい置き場所」など）は、文字を `accent` にする（16.2b で追加）。左にアイコンなどを置ける（`leading`。16.3a で追加）。補足の下に、注意などの行を置ける（`footer`。16.3c で追加） |
 | FormField | 見出し `subheadline` の `text/secondary`、入力欄は背景 `bg/subtle`・角丸 `radius/md`・高さ 44pt 以上、エラーのときは枠を `danger` にし、入力欄の下に理由を `footnote` の `danger` で出す（15.1 で追加） |
 | PlantListItem | ListRow の形で、題名に植物名、補足に置き場所（未設定なら「置き場所未設定」）と種類、右に次の予定日（なければ「予定なし」）。押すと植物の詳細。状態：通常 / 置き場所未設定 / 予定のタスクなし / アーカイブ済み（右に予定日の代わりに「〇月〇日(曜)にアーカイブ」。`archived`）（16.2a で追加、16.2d でアーカイブ済みを足した） |

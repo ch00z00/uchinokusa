@@ -64,3 +64,18 @@ export function repottingAvoidText(suggestion: Suggestion, t: TFunction): { mess
       : t('suggestion.repottingAvoid.reason.general'),
   };
 }
+
+/**
+ * 今日の一覧のカードに出す、提案の文（要件9-4・19-4）。知っている提案は本文と理由を、
+ * 知らない提案（フェーズ2の天気など、アプリが文言を持たないもの）は種類ごとの一般的な文にする
+ */
+export function todaySuggestionText(suggestion: Suggestion, t: TFunction): string {
+  if (suggestion.messageKey === 'repotting.avoid') {
+    const { message, reason } = repottingAvoidText(suggestion, t);
+    return `${message}。${reason}`;
+  }
+  if (suggestion.kind === 'conditional' && suggestion.conditionText) {
+    return t('suggestion.today.conditional', { condition: suggestion.conditionText });
+  }
+  return t('suggestion.today.avoid');
+}

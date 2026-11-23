@@ -92,6 +92,12 @@
 - ヘッダーの文字のボタンは `components/HeaderTextButton.tsx` の `headerRightTextButton()`（背景なし）
 - 試しのデータ：ローカルの API に、エミュレーター用の署名なしのトークン（`alg: none`、`iss`・`aud` は `demo-uchinokusa`、`user_id` は DB の `users.firebase_uid`）で呼べる。スクリプトはリポジトリに入れない
 
+## 17 で決めたこと（2026-11-23）
+- 17.1 今日やること（`(tabs)/today/index.tsx`）：API の `today` をそのまま並べ、まとめ方（予定日順・置き場所ごと・作業の種類ごと）は `features/today/todayList.ts`。表示の切り替えはヘッダーの右の OS のメニュー（iOS は `unstable_headerRightItems` の `menu`、Android は `@expo/ui` の MenuView）で、端末に保存する（ユーザーが選んだ）
+- 部品を足した：TaskCard（完了のボタンは 17.2 で `trailing` に置く）、OverdueBadge、EmptyState
+- 提案の文は `todaySuggestionText`（植え替えの注意は本文＋理由、知らない提案は種類ごとの一般的な文）
+- 試しのデータ：寝室のサンスベリア（水やり、3日過ぎ）、ローズマリー（剪定、今日）、アイビー（肥料、今日、置き場所なし）のタスクを API で入れた
+
 ### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）
 リポジトリには入れない。scratchpad などに次のような Node のスクリプトを置き、`http://localhost:8090` → `8080` に流して CORS のヘッダーを足す。web は `EXPO_PUBLIC_API_BASE_URL=http://localhost:8090/v1 npx expo start --web -c` で起動する
 - OPTIONS には 204 と `Access-Control-Allow-Origin: http://localhost:8081`・`Allow-Headers: Authorization, Content-Type`・`Allow-Methods` を返し、ほかは `http.request` で 8080 に流して同じヘッダーを足す
