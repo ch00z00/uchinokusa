@@ -211,7 +211,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | PlantListItem | ListRow の形で、題名に植物名、補足に置き場所（未設定なら「置き場所未設定」）と種類、右に次の予定日（なければ「予定なし」）。押すと植物の詳細。状態：通常 / 置き場所未設定 / 予定のタスクなし / アーカイブ済み（右に予定日の代わりに「〇月〇日(曜)にアーカイブ」。`archived`）（16.2a で追加、16.2d でアーカイブ済みを足した） |
 | FilterChips | 横に流れるチップの並び。チップは高さ 36pt（上下に余白を足して、押せる領域を 44pt 以上にする）、角丸 `radius/full`、内側 左右 `space/md`、文字 `subheadline`。選択中は 地 `accent` ＋ 文字 `on-accent`、選択していないものは 地 `bg/subtle` ＋ 文字 `text/primary`（16.2a で追加） |
 | DateField | 見出しは FormField と同じ。未設定なら ListRow（「未設定」、進む印つき）。日付の選択は OS の部品（iOS：compact の DatePicker を `bg/surface` の欄に置く、Android：日付のダイアログ）。色は `accent`。値があれば、下に「未設定に戻す」（Button の副）（16.2b で追加）。選べる最初の日・最後の日を決められる。iOS の部品は、端末の言語ではなくアプリの言語で出す（16.3a） |
-| TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加）。植え替えの時期の注意があれば、いちばん下に「注意：」から始まる1行を `footnote`・`suggestion/avoid` の色で出す（色だけに頼らず、言葉で示す。16.3c で追加） |
+| TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加）。植え替えの時期の注意があれば、いちばん下に、警告のシンボル（`icon/sm`、`accent`）と「注意：」から始まる1行（`footnote`、`text/primary`）を出す（色だけに頼らず、言葉で示す。16.3c で追加。`suggestion/avoid` の色では気づきにくいと言われたので改めた） |
 | IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード、プレースホルダー「例：7」）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
 | SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる。基本の周期の欄より上に置き、オンのあいだは基本の周期の欄を隠す（16.3a で追加） |
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加） |

@@ -1,4 +1,6 @@
+import { SymbolView } from 'expo-symbols';
 import { useTranslation } from 'react-i18next';
+import { StyleSheet, View } from 'react-native';
 
 import { Badge } from '@/components/Badge';
 import { CareKindIcon } from '@/components/CareKindIcon';
@@ -44,10 +46,20 @@ export function TaskListItem({ task, caution, onPress }: Props) {
       subtitle={task.conditionText ? `${summary}\n${task.conditionText}` : summary}
       footer={
         caution ? (
-          // 色だけに頼らず、「注意：」の言葉で示す
-          <AppText variant="footnote" style={{ color: theme.color.suggestion.avoid }}>
-            {t('suggestion.repottingAvoid.listNote', { message: caution })}
-          </AppText>
+          // 気づけるように、警告のシンボル（color/accent）と本文の色の文字で出す。色だけに頼らず「注意：」の言葉でも示す
+          <View style={[styles.caution, { gap: theme.space.xs }]}>
+            <SymbolView
+              name={{ ios: 'exclamationmark.triangle.fill', android: 'warning' }}
+              size={theme.size.icon.sm}
+              tintColor={theme.color.accent.default}
+              style={{ width: theme.size.icon.sm, height: theme.size.icon.sm }}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            />
+            <AppText variant="footnote" style={styles.cautionText}>
+              {t('suggestion.repottingAvoid.listNote', { message: caution })}
+            </AppText>
+          </View>
         ) : undefined
       }
       navigates={onPress !== undefined}
@@ -55,3 +67,8 @@ export function TaskListItem({ task, caution, onPress }: Props) {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  caution: { flexDirection: 'row', alignItems: 'flex-start' },
+  cautionText: { flexShrink: 1 },
+});
