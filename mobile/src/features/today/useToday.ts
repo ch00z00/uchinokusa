@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { api, unwrap } from '@/api';
-import { getTodayGrouping, setTodayGrouping } from '@/lib/deviceStorage';
+import { getTodayGrouping, getTodayLongPressUsed, setTodayGrouping, setTodayLongPressUsed } from '@/lib/deviceStorage';
 import { toDayString } from '@/lib/formatDate';
 
 import { parseGrouping, type TodayGrouping } from './todayList';
@@ -43,4 +43,28 @@ export function useTodayGrouping(): [TodayGrouping, (next: TodayGrouping) => voi
     void setTodayGrouping(next).catch(() => undefined);
   };
   return [grouping, change];
+}
+
+/**
+ * カードの長押しのメニューを知らせるか（一度使うまで出す）。読み込むまでは出さない（出てすぐ消えるのを防ぐ）。
+ * 返す関数は、メニューを使ったときに呼ぶ
+ */
+export function useLongPressHint(): [boolean, () => void] {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getTodayLongPressUsed()
+      .then((used) => {
+        if (active) setShow(!used);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  const markUsed = () => {
+    setShow(false);
+    void setTodayLongPressUsed().catch(() => undefined);
+  };
+  return [show, markUsed];
 }

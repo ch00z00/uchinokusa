@@ -70,6 +70,25 @@ function AppStack() {
         name="plants/[id]/tasks/[taskId]"
         options={{ title: t('tasks.edit.title'), presentation: 'modal' }}
       />
+      {/* TODAY-03 スキップ・TODAY-04 実施日を変えて記録。今日の一覧のカードの長押しのメニューから開く OS のシート */}
+      <Stack.Screen
+        name="today/[taskId]/skip"
+        options={{
+          title: t('today.skip.title'),
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.75, 1],
+          sheetGrabberVisible: true,
+        }}
+      />
+      <Stack.Screen
+        name="today/[taskId]/record"
+        options={{
+          title: t('today.record.title'),
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.4, 1],
+          sheetGrabberVisible: true,
+        }}
+      />
       {/* PLANT-04 植え替えの提案。登録のモーダルを置き換えて出す。答えずに閉じても、提案は残る */}
       <Stack.Screen
         name="plants/[id]/repotting"

@@ -26,6 +26,8 @@ type Props = {
   /** 右に置く操作（完了のボタン。17.2 で足す。閲覧者には渡さない） */
   trailing?: ReactNode;
   onPress?: () => void;
+  /** 長押し（スキップなどのメニュー。Android。iOS はリンクのメニューで出す） */
+  onLongPress?: () => void;
   accessibilityHint?: string;
 };
 
@@ -42,6 +44,7 @@ export function TaskCard({
   suggestion,
   trailing,
   onPress,
+  onLongPress,
   accessibilityHint,
 }: Props) {
   const { t } = useTranslation();
@@ -53,6 +56,7 @@ export function TaskCard({
       accessibilityHint={accessibilityHint}
       disabled={!onPress}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.card,
         {

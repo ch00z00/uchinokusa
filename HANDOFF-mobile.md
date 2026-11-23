@@ -98,8 +98,13 @@
 - 提案の文は `todaySuggestionText`（植え替えの注意は本文＋理由、知らない提案は種類ごとの一般的な文）
 - 17.2 は 17.2a 完了と取り消し → 17.2b スキップと実施日を変えて記録 → 17.2c まとめて完了 に分ける（ユーザーが選んだ）
 - 17.2a：完了は `features/today/useCompletion.ts` の `useCompleteTask`（今日の一覧から楽観的に外し、失敗で戻す）。画面の流れは今日の画面の `useCompletionFlow`（スナックバー・すでに完了のダイアログ・通信できないときのトースト）。取り消しは `useUndoRecord`。部品を足した：CompleteButton（丸いチェック。ユーザーが選んだ）、Snackbar（ルートの `SnackbarProvider`）。トークン `borderWidth.thick` を足した
+- 17.2b：スキップ（`(app)/today/[taskId]/skip.tsx`）と実施日を変えて記録（`record.tsx`）は OS のシート。入口はカードの長押しのメニュー（ユーザーが選んだ。iOS は `Link.Menu`、Android は `Alert` の選択肢）。一度使うまで一覧の上に知らせを出す（端末に保存）。完了・スキップの流れは `features/today/useCompletionFlow.ts` に共通化。シートは開いたときのタスクを `useOpenedTodayItem` で覚える（楽観的更新で一覧から外れても中身が消えないように）
 - 完了のボタンの mutation は、カードではなく一覧（`TodaySections`）に置く。カードは完了の直後に一覧から外れて消えるので、カードに置くと、そのあとのダイアログや取り消しが動かなくなるため
 - 試しのデータ：寝室のサンスベリア（水やり、3日過ぎ）、ローズマリー（剪定、今日）、アイビー（肥料、今日、置き場所なし）のタスクを API で入れた
+
+## 最終の QA で確かめること（ユーザーと決めた。2026-11-23）
+- 17.2a：ほかのメンバーが先に完了していたときの確認（画面に出ているタスクを、API で先に完了させてから押す）
+- 17.2a：通信できないときの知らせ（API サーバーを止めてから押す）
 
 ### CORS の中継（ブラウザで API を確かめるとき。バックエンドが CORS に対応するまで）
 リポジトリには入れない。scratchpad などに次のような Node のスクリプトを置き、`http://localhost:8090` → `8080` に流して CORS のヘッダーを足す。web は `EXPO_PUBLIC_API_BASE_URL=http://localhost:8090/v1 npx expo start --web -c` で起動する

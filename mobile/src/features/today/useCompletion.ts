@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/api';
+import type { components } from '@/api/schema';
 import { plantKeys } from '@/features/plant/usePlants';
 
 import { withoutTask } from './completion';
@@ -15,34 +16,53 @@ const refreshHousehold = (queryClient: QueryClient, householdId: string) =>
     queryClient.invalidateQueries({ queryKey: plantKeys.details }),
   ]);
 
-type CompleteVariables = { taskId: string; cycleSeq: number; allowExtra?: boolean };
+type CompleteVariables = { taskId: string; cycleSeq: number; allowExtra?: boolean; performedOn?: string };
 
 /**
- * タスクの完了（POST /tasks/{id}/completions。編集者以上。要件10-1・10-4・11-2）。
+ * 今日やることの一覧から、そのタスクを楽観的に外す（完了・スキップの共通）。失敗したら元に戻せるように、外す前の一覧を返す
+ */
+async function removeFromToday(queryClient: QueryClient, householdId: string, taskId: string) {
+  // 取得の途中の結果で、外した項目が戻らないように止める
+  await queryClient.cancelQueries({ queryKey: todayPrefix(householdId) });
+  const snapshot = queryClient.getQueriesData<TodayList>({ queryKey: todayPrefix(householdId) });
+  queryClient.setQueriesData<TodayList>({ queryKey: todayPrefix(householdId) }, (list) =>
+    list ? withoutTask(list, taskId) : list,
+  );
+  return { snapshot };
+}
+
+function restoreToday(queryClient: QueryClient, context: Awaited<ReturnType<typeof removeFromToday>> | undefined) {
+  for (const [key, data] of context?.snapshot ?? []) queryClient.setQueryData(key, data);
+}
+
+/**
+ * タスクの完了（POST /tasks/{id}/completions。編集者以上。要件10-1・10-3・10-4・11-2）。
  * 押した直後に、今日やることの一覧から外す（楽観的更新）。失敗したら一覧を元に戻す（理由の知らせは画面で行う）
  */
 export function useCompleteTask(householdId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, cycleSeq, allowExtra }: CompleteVariables) =>
+    mutationFn: ({ taskId, cycleSeq, allowExtra, performedOn }: CompleteVariables) =>
       unwrap(
         api.POST('/tasks/{taskId}/completions', {
           params: { path: { taskId } },
-          body: { cycleSeq, ...(allowExtra ? { allowExtra } : {}) },
+          body: { cycleSeq, ...(allowExtra ? { allowExtra } : {}), ...(performedOn ? { performedOn } : {}) },
         }),
       ),
-    onMutate: async ({ taskId }) => {
-      // 取得の途中の結果で、外した項目が戻らないように止める
-      await queryClient.cancelQueries({ queryKey: todayPrefix(householdId) });
-      const snapshot = queryClient.getQueriesData<TodayList>({ queryKey: todayPrefix(householdId) });
-      queryClient.setQueriesData<TodayList>({ queryKey: todayPrefix(householdId) }, (list) =>
-        list ? withoutTask(list, taskId) : list,
-      );
-      return { snapshot };
-    },
-    onError: (_error, _variables, context) => {
-      for (const [key, data] of context?.snapshot ?? []) queryClient.setQueryData(key, data);
-    },
+    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, taskId),
+    onError: (_error, _variables, context) => restoreToday(queryClient, context),
+    onSettled: () => refreshHousehold(queryClient, householdId),
+  });
+}
+
+/** タスクのスキップ（POST /tasks/{id}/skips。編集者以上。要件10-6〜10-8）。完了と同じく、一覧から楽観的に外す */
+export function useSkipTask(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, body }: { taskId: string; body: components['schemas']['SkipCareTaskRequest'] }) =>
+      unwrap(api.POST('/tasks/{taskId}/skips', { params: { path: { taskId } }, body })),
+    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, taskId),
+    onError: (_error, _variables, context) => restoreToday(queryClient, context),
     onSettled: () => refreshHousehold(queryClient, householdId),
   });
 }

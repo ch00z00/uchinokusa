@@ -11,6 +11,8 @@ export const storageKeys = {
   selectedHouseholdId: `${prefix}selectedHouseholdId`,
   /** 今日やることの表示（予定日順・置き場所ごと・作業の種類ごと。要件9-5） */
   todayGrouping: `${prefix}todayGrouping`,
+  /** 今日の一覧のカードの長押しのメニューを、一度使ったか（使うまで知らせを出す） */
+  todayLongPressUsed: `${prefix}todayLongPressUsed`,
 } as const;
 
 export async function getDeviceId(): Promise<string | null> {
@@ -35,6 +37,14 @@ export async function getTodayGrouping(): Promise<string | null> {
 
 export async function setTodayGrouping(value: string): Promise<void> {
   await AsyncStorage.setItem(storageKeys.todayGrouping, value);
+}
+
+export async function getTodayLongPressUsed(): Promise<boolean> {
+  return (await AsyncStorage.getItem(storageKeys.todayLongPressUsed)) === 'true';
+}
+
+export async function setTodayLongPressUsed(): Promise<void> {
+  await AsyncStorage.setItem(storageKeys.todayLongPressUsed, 'true');
 }
 
 /** アプリが保存した値を、すべて消す（サインアウトのとき） */

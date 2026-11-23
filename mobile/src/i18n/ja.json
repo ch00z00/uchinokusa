@@ -40,6 +40,39 @@
       "offline": "通信できないため、記録できませんでした。通信が戻ったら、もう一度完了してください",
       "stale": "ほかの人が予定を変えたため、一覧を更新しました"
     },
+    "menu": {
+      "skip": "スキップ",
+      "record": "実施日を変えて記録",
+      "open": "植物の詳細"
+    },
+    "missing": "このお手入れは、今日の一覧にありません。ほかの人が先に記録した可能性があります",
+    "longPressHint": "カードを長押しすると、スキップや、実施日を変えた記録ができます",
+    "skip": {
+      "title": "スキップ",
+      "lead": "{{plant}}の{{task}}を、今回はしないことにします。確認日に、また今日の一覧に出ます",
+      "reason": "理由（任意）",
+      "reasons": {
+        "soil_wet": "土がまだ湿っている",
+        "bad_weather": "天気が悪い",
+        "plant_weak": "株が弱っている",
+        "other": "その他"
+      },
+      "reasonText": "理由",
+      "reasonTextPlaceholder": "例：旅行で留守にする",
+      "recheckOn": "次の確認日",
+      "submit": "スキップする",
+      "done": "スキップしました。次は {{date}} に確認します",
+      "errors": {
+        "reasonText": { "too_long": "200文字以内で入力してください" },
+        "recheckOn": { "past": "明日以降の日を選んでください" }
+      }
+    },
+    "record": {
+      "title": "実施日を変えて記録",
+      "lead": "{{plant}}の{{task}}を、選んだ日にしたこととして記録します。次の予定は、その日から数えます",
+      "performedOn": "実施日",
+      "submit": "記録する"
+    },
     "conflict": {
       "title": "すでに記録されています",
       "message": "{{name}}さんが {{time}} に{{task}}を記録しています",
