@@ -1,6 +1,6 @@
 import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 
@@ -15,6 +15,7 @@ import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProv
 import { useLocations } from '@/features/location/useLocations';
 import type { Plant } from '@/features/plant/plantList';
 import { usePlant, useUnarchivePlant } from '@/features/plant/usePlants';
+import { HistorySection } from '@/features/record/HistorySection';
 import { confirm } from '@/lib/confirm';
 import { findRepottingAvoid, repottingAvoidText } from '@/features/suggestion/suggestionText';
 import { useSuggestions } from '@/features/suggestion/useSuggestions';
@@ -23,7 +24,7 @@ import { useCareTasks } from '@/features/task/useCareTasks';
 import { formatDate, formatDayWithYear } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
-// 詳細の中のタブ（2026-11-22 に決定）。履歴・メモ・カレンダーはタスク 17.3 で作る
+// 詳細の中のタブ（2026-11-22 に決定）。メモ・カレンダーはタスク 17.3b・17.3c で作る
 const sections = ['overview', 'history', 'notes', 'calendar'] as const;
 type Section = (typeof sections)[number];
 
@@ -37,10 +38,18 @@ export default function PlantDetailScreen() {
   const householdId = state.status === 'selected' ? state.household.id : '';
   const canEdit = state.status === 'selected' && can(state.household.role, 'edit');
   const [section, setSection] = useState<Section>('overview');
+  // 履歴の続きの読み込み。スクロールが下の端に近づいたら、履歴のタブが入れた関数を呼ぶ
+  const endReachedRef = useRef<(() => void) | undefined>(undefined);
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
+      scrollEventThrottle={200}
+      onScroll={({ nativeEvent: { layoutMeasurement, contentOffset, contentSize } }) => {
+        if (layoutMeasurement.height + contentOffset.y >= contentSize.height - layoutMeasurement.height / 2) {
+          endReachedRef.current?.();
+        }
+      }}
       contentContainerStyle={{ paddingVertical: theme.space.lg, gap: theme.space.xl }}
     >
       <Stack.Screen
@@ -73,6 +82,13 @@ export default function PlantDetailScreen() {
           </View>
           {section === 'overview' ? (
             <Overview householdId={householdId} plant={plant.data} canEdit={canEdit} />
+          ) : section === 'history' ? (
+            // アーカイブ中の植物の記録は見るだけ（PLANT-05）
+            <HistorySection
+              plantId={plant.data.id}
+              canEdit={canEdit && plant.data.archivedAt === undefined}
+              endReachedRef={endReachedRef}
+            />
           ) : (
             <AppText color="secondary" style={{ paddingHorizontal: theme.space.lg }}>
               {t('plantDetail.comingSoon')}

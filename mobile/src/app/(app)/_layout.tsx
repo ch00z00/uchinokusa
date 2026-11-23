@@ -89,6 +89,16 @@ function AppStack() {
           sheetGrabberVisible: true,
         }}
       />
+      {/* PLANT-12 記録の編集・削除。履歴の記録を押すと開く OS のシート */}
+      <Stack.Screen
+        name="plants/[id]/records/[recordId]"
+        options={{
+          title: t('history.edit.title'),
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.5, 1],
+          sheetGrabberVisible: true,
+        }}
+      />
       {/* PLANT-04 植え替えの提案。登録のモーダルを置き換えて出す。答えずに閉じても、提案は残る */}
       <Stack.Screen
         name="plants/[id]/repotting"

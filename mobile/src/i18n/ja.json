@@ -619,5 +619,34 @@
         }
       }
     }
+  },
+  "history": {
+    "title": "記録",
+    "lastPerformed": "最後にしたお手入れ",
+    "filterLabel": "作業の種類で絞り込む",
+    "outcome": {
+      "completed": "完了",
+      "skipped": "スキップ"
+    },
+    "extra": "追加の記録",
+    "deletedUser": "退会したユーザー",
+    "skipReason": "理由：{{reason}}",
+    "empty": "まだ記録がありません。今日の画面で完了すると、ここに残ります",
+    "emptyFiltered": "この作業の記録はありません",
+    "edit": {
+      "title": "記録の編集",
+      "missing": "この記録は見つかりませんでした。ほかの人が削除した可能性があります",
+      "lead": "{{task}}（{{outcome}}）・{{name}}",
+      "performedOn": "実施日",
+      "skippedOn": "スキップした日",
+      "hint": "いちばん新しい完了の実施日を変える・削除すると、次の予定日も計算し直します"
+    },
+    "delete": {
+      "action": "この記録を削除",
+      "confirmTitle": "この記録を削除しますか？",
+      "confirmMessage": "削除した記録は元に戻せません",
+      "confirm": "削除",
+      "done": "記録を削除しました"
+    }
   }
 }
