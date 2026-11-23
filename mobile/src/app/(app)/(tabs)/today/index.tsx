@@ -1,6 +1,7 @@
 import { MenuView } from '@expo/ui/community/menu';
 import type { TFunction } from 'i18next';
 import { Link, router, Stack } from 'expo-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, SectionList, View } from 'react-native';
 
@@ -39,6 +40,17 @@ export default function TodayScreen() {
   const canEdit = state.status === 'selected' && can(state.household.role, 'edit');
   const today = useToday(householdId);
   const [grouping, setGrouping] = useTodayGrouping();
+  // 引っぱって取り直しているあいだだけ、スピナーを出す。シートを開いたときや完了のあとの裏の取り直し
+  // （isRefetching）で出すと、一覧が下にずれてスピナーが出たままに見えるため（2026-11-23）
+  const [pulling, setPulling] = useState(false);
+  const pullToRefresh = async () => {
+    setPulling(true);
+    try {
+      await today.refetch();
+    } finally {
+      setPulling(false);
+    }
+  };
 
   return (
     <>
@@ -58,8 +70,8 @@ export default function TodayScreen() {
           list={today.data}
           grouping={grouping}
           canEdit={canEdit}
-          refreshing={today.isRefetching}
-          onRefresh={() => void today.refetch()}
+          refreshing={pulling}
+          onRefresh={() => void pullToRefresh()}
         />
       )}
     </>
