@@ -21,12 +21,12 @@ type CompleteVariables = { taskId: string; cycleSeq: number; allowExtra?: boolea
 /**
  * 今日やることの一覧から、そのタスクを楽観的に外す（完了・スキップの共通）。失敗したら元に戻せるように、外す前の一覧を返す
  */
-async function removeFromToday(queryClient: QueryClient, householdId: string, taskId: string) {
+async function removeFromToday(queryClient: QueryClient, householdId: string, taskIds: readonly string[]) {
   // 取得の途中の結果で、外した項目が戻らないように止める
   await queryClient.cancelQueries({ queryKey: todayPrefix(householdId) });
   const snapshot = queryClient.getQueriesData<TodayList>({ queryKey: todayPrefix(householdId) });
   queryClient.setQueriesData<TodayList>({ queryKey: todayPrefix(householdId) }, (list) =>
-    list ? withoutTask(list, taskId) : list,
+    list ? taskIds.reduce(withoutTask, list) : list,
   );
   return { snapshot };
 }
@@ -49,7 +49,7 @@ export function useCompleteTask(householdId: string) {
           body: { cycleSeq, ...(allowExtra ? { allowExtra } : {}), ...(performedOn ? { performedOn } : {}) },
         }),
       ),
-    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, taskId),
+    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, [taskId]),
     onError: (_error, _variables, context) => restoreToday(queryClient, context),
     onSettled: () => refreshHousehold(queryClient, householdId),
   });
@@ -61,7 +61,32 @@ export function useSkipTask(householdId: string) {
   return useMutation({
     mutationFn: ({ taskId, body }: { taskId: string; body: components['schemas']['SkipCareTaskRequest'] }) =>
       unwrap(api.POST('/tasks/{taskId}/skips', { params: { path: { taskId } }, body })),
-    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, taskId),
+    onMutate: ({ taskId }) => removeFromToday(queryClient, householdId, [taskId]),
+    onError: (_error, _variables, context) => restoreToday(queryClient, context),
+    onSettled: () => refreshHousehold(queryClient, householdId),
+  });
+}
+
+/**
+ * まとめて完了（POST /households/{id}/completions:batch。編集者以上。要件10-9）。
+ * 選んだタスクを一覧から楽観的に外す。項目ごとの失敗は結果で返り、取り直しで一覧に戻る
+ */
+export function useCompleteTasks(householdId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (items: components['schemas']['CompleteCareTasksItem'][]) =>
+      unwrap(
+        api.POST('/households/{householdId}/completions:batch', {
+          params: { path: { householdId } },
+          body: { items },
+        }),
+      ),
+    onMutate: (items) =>
+      removeFromToday(
+        queryClient,
+        householdId,
+        items.map((i) => i.taskId),
+      ),
     onError: (_error, _variables, context) => restoreToday(queryClient, context),
     onSettled: () => refreshHousehold(queryClient, householdId),
   });

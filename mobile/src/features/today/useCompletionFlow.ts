@@ -11,7 +11,8 @@ import { formatDay, formatTime, toDayString } from '@/lib/formatDate';
 import { classifyCompletionError } from './completion';
 import { toSkipRequest, type SkipForm } from './skip';
 import type { TodayItem } from './todayList';
-import { useCompleteTask, useSkipTask, useUndoRecord } from './useCompletion';
+import { summarizeBatch } from './batch';
+import { useCompleteTask, useCompleteTasks, useSkipTask, useUndoRecord } from './useCompletion';
 
 /**
  * 完了・スキップの流れ（TODAY-02〜05、要件10-1〜10-8・11-2・20-5）。今日の一覧と、スキップ・実施日のシートで共通に使う。
@@ -26,6 +27,7 @@ export function useCompletionFlow(householdId: string) {
   const snackbar = useSnackbar();
   const completeTask = useCompleteTask(householdId);
   const skipTask = useSkipTask(householdId);
+  const completeTasks = useCompleteTasks(householdId);
   const undoRecord = useUndoRecord(householdId);
 
   const undo = async (recordId: string) => {
@@ -106,5 +108,48 @@ export function useCompletionFlow(householdId: string) {
     }
   };
 
-  return { complete, skip, pending: completeTask.isPending || skipTask.isPending };
+  /**
+   * まとめて完了（TODAY-06）。記録できなかったタスクの ID を返す（選んだまま残すため）。
+   * 通信できないなど、まとめて失敗したときは、選んだすべてを返す
+   */
+  const completeMany = async (items: readonly TodayItem[]): Promise<string[]> => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    try {
+      const { results } = await completeTasks.mutateAsync(
+        items.map((i) => ({ taskId: i.task.id, cycleSeq: i.task.cycleSeq })),
+      );
+      const { recordIds, alreadyCount, failedTaskIds } = summarizeBatch(results);
+      if (recordIds.length > 0) {
+        const done = t('today.batch.done', { count: recordIds.length });
+        snackbar.show({
+          message: alreadyCount > 0 ? `${done}${t('today.batch.already', { count: alreadyCount })}` : done,
+          actionLabel: t('today.complete.undo'),
+          // まとめて記録した分を、まとめて取り消す
+          onAction: () => void undoMany(recordIds),
+        });
+      } else if (alreadyCount > 0) {
+        toast.show(t('today.batch.allAlready', { count: alreadyCount }));
+      }
+      if (failedTaskIds.length > 0) toast.show(t('today.batch.failed', { count: failedTaskIds.length }));
+      return failedTaskIds;
+    } catch (error) {
+      const failure = classifyCompletionError(error);
+      toast.show(failure.type === 'network' ? t('today.complete.offline') : t(errorMessageKey(error)));
+      return items.map((i) => i.task.id);
+    }
+  };
+
+  const undoMany = async (recordIds: readonly string[]) => {
+    const results = await Promise.allSettled(recordIds.map((id) => undoRecord.mutateAsync(id)));
+    const failed = results.find((r) => r.status === 'rejected');
+    toast.show(failed ? t(errorMessageKey(failed.reason)) : t('today.complete.undone'));
+  };
+
+  return {
+    complete,
+    skip,
+    completeMany,
+    pending: completeTask.isPending || skipTask.isPending,
+    batchPending: completeTasks.isPending,
+  };
 }

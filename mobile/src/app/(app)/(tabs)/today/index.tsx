@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 import { Link, router, Stack } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, SectionList, View } from 'react-native';
 
 import { errorMessageKey } from '@/api/errorMessage';
@@ -10,8 +11,11 @@ import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { CompleteButton } from '@/components/CompleteButton';
 import { EmptyState } from '@/components/EmptyState';
+import { HeaderTextButton } from '@/components/HeaderTextButton';
+import { SelectionCheck } from '@/components/SelectionCheck';
 import { TaskCard } from '@/components/TaskCard';
 import { can } from '@/features/household/permissions';
+import { householdSwitcherOptions } from '@/features/household/HouseholdSwitcher';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import { usePlants } from '@/features/plant/usePlants';
 import { todaySuggestionText } from '@/features/suggestion/suggestionText';
@@ -25,10 +29,12 @@ import {
   type TodayItem,
   type TodayList,
 } from '@/features/today/todayList';
+import { toggleSelection } from '@/features/today/batch';
 import { useCompletionFlow } from '@/features/today/useCompletionFlow';
 import { useLongPressHint, useToday, useTodayGrouping } from '@/features/today/useToday';
 import { formatDay } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
+import { space } from '@/theme/tokens';
 
 // TODAY-01 今日やること（ホーム。要件9）。予定日が今日以前の未完了のタスクを、TaskCard で並べる。
 // 表示の切り替え（予定日順・置き場所ごと・作業の種類ごと）は、ヘッダーの右の OS のメニュー（2026-11-23 に決定）
@@ -43,6 +49,13 @@ export default function TodayScreen() {
   // 引っぱって取り直しているあいだだけ、スピナーを出す。シートを開いたときや完了のあとの裏の取り直し
   // （isRefetching）で出すと、一覧が下にずれてスピナーが出たままに見えるため（2026-11-23）
   const [pulling, setPulling] = useState(false);
+  // まとめて完了の選択モード（TODAY-06）。null なら選択モードでない
+  const [selection, setSelection] = useState<Set<string> | null>(null);
+  const items = today.data?.items ?? [];
+  // 今日のタスクがなくなったら、選択モードを終える
+  if (selection !== null && today.data && items.length === 0) setSelection(null);
+  // 一覧にないタスク（ほかの人が記録した、など）は、選んだものから外して数える
+  const selectedIds = selection === null ? [] : items.filter((i) => selection.has(i.task.id)).map((i) => i.task.id);
   const pullToRefresh = async () => {
     setPulling(true);
     try {
@@ -54,7 +67,25 @@ export default function TodayScreen() {
 
   return (
     <>
-      <Stack.Screen options={groupingMenuOptions(grouping, setGrouping, t)} />
+      <Stack.Screen
+        options={
+          selection !== null
+            ? selectionHeaderOptions({
+                allSelected: selectedIds.length === items.length,
+                onToggleAll: () =>
+                  setSelection(selectedIds.length === items.length ? new Set() : new Set(items.map((i) => i.task.id))),
+                onCancel: () => setSelection(null),
+                t,
+              })
+            : {
+                ...householdSwitcherOptions,
+                ...groupingMenuOptions(grouping, setGrouping, t, {
+                  // 選択（まとめて完了）は、編集者以上で、今日のタスクがあるときだけ
+                  onSelect: canEdit && items.length > 0 ? () => setSelection(new Set()) : undefined,
+                }),
+              }
+        }
+      />
       {today.isError && !today.data ? (
         <View style={{ padding: theme.space.lg, gap: theme.space.md }}>
           <AppText color="secondary">{t(errorMessageKey(today.error))}</AppText>
@@ -72,6 +103,9 @@ export default function TodayScreen() {
           canEdit={canEdit}
           refreshing={pulling}
           onRefresh={() => void pullToRefresh()}
+          selection={selection}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelection}
         />
       )}
     </>
@@ -85,6 +119,9 @@ function TodaySections({
   canEdit,
   refreshing,
   onRefresh,
+  selection,
+  selectedIds,
+  onSelectionChange,
 }: {
   householdId: string;
   list: TodayList;
@@ -92,10 +129,26 @@ function TodaySections({
   canEdit: boolean;
   refreshing: boolean;
   onRefresh: () => void;
+  /** 選択モードで選んだタスク。null なら選択モードでない */
+  selection: Set<string> | null;
+  /** 選んだタスクのうち、一覧にあるもの */
+  selectedIds: string[];
+  onSelectionChange: (next: Set<string> | null) => void;
 }) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const { complete } = useCompletionFlow(householdId);
+  const insets = useSafeAreaInsets();
+  const { complete, completeMany, batchPending } = useCompletionFlow(householdId);
+  const selecting = selection !== null;
+  // 下の「N件を完了」の位置（Toast・Snackbar と同じく、タブバーの上）
+  const barBottom = insets.bottom + theme.space['2xl'] * 2;
+
+  const submitBatch = async () => {
+    const chosen = list.items.filter((i) => selectedIds.includes(i.task.id));
+    const failed = await completeMany(chosen);
+    // 全部うまくいけば選択モードを終え、失敗した分は選んだまま残す
+    onSelectionChange(failed.length === 0 ? null : new Set(failed));
+  };
   const [showHint, markHintUsed] = useLongPressHint();
   const sections = groupTodayItems(list.items, grouping, t('plants.list.locationUnset')).map((section) => ({
     ...section,
@@ -105,37 +158,65 @@ function TodaySections({
   }));
 
   return (
-    <SectionList
-      contentInsetAdjustmentBehavior="automatic"
-      sections={list.items.length === 0 ? [] : sections}
-      keyExtractor={(item) => item.task.id}
-      contentContainerStyle={{ padding: theme.space.lg, gap: theme.space.md }}
-      stickySectionHeadersEnabled={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      renderSectionHeader={({ section }) =>
-        section.title ? (
-          <AppText variant="headline" style={{ paddingTop: theme.space.md }}>
-            {section.title}
-          </AppText>
-        ) : null
-      }
-      ListHeaderComponent={
-        // 長押しのメニューは気づきにくいので、一度使うまで知らせる（編集者以上）
-        canEdit && showHint && list.items.length > 0 ? (
-          <AppText variant="footnote" color="secondary">
-            {t('today.longPressHint')}
-          </AppText>
-        ) : undefined
-      }
-      renderItem={({ item }) => (
-        <TodayTaskCard
-          item={item}
-          onComplete={canEdit ? () => void complete(item) : undefined}
-          onMenuUsed={canEdit ? markHintUsed : undefined}
-        />
+    <>
+      <SectionList
+        contentInsetAdjustmentBehavior="automatic"
+        sections={list.items.length === 0 ? [] : sections}
+        keyExtractor={(item) => item.task.id}
+        // 選択モードでは、下の「N件を完了」に最後の項目が隠れないように、下に余白を足す
+        contentContainerStyle={{
+          padding: theme.space.lg,
+          gap: theme.space.md,
+          paddingBottom: selecting ? barBottom + theme.size.tapMin + theme.space.lg : theme.space.lg,
+        }}
+        stickySectionHeadersEnabled={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderSectionHeader={({ section }) =>
+          section.title ? (
+            <AppText variant="headline" style={{ paddingTop: theme.space.md }}>
+              {section.title}
+            </AppText>
+          ) : null
+        }
+        ListHeaderComponent={
+          // 長押しのメニューは気づきにくいので、一度使うまで知らせる（編集者以上）
+          canEdit && showHint && !selecting && list.items.length > 0 ? (
+            <AppText variant="footnote" color="secondary">
+              {t('today.longPressHint')}
+            </AppText>
+          ) : undefined
+        }
+        renderItem={({ item }) =>
+          selecting ? (
+            <TodayTaskCard
+              item={item}
+              selected={selection.has(item.task.id)}
+              onToggle={() => onSelectionChange(toggleSelection(selection, item.task.id))}
+            />
+          ) : (
+            <TodayTaskCard
+              item={item}
+              onComplete={canEdit ? () => void complete(item) : undefined}
+              onMenuUsed={canEdit ? markHintUsed : undefined}
+            />
+          )
+        }
+        ListEmptyComponent={<TodayEmpty householdId={householdId} next={list.next} canEdit={canEdit} />}
+      />
+      {selecting && (
+        <View
+          pointerEvents="box-none"
+          style={{ position: 'absolute', left: 0, right: 0, bottom: barBottom, paddingHorizontal: theme.space.lg }}
+        >
+          <Button
+            title={t('today.select.submit', { count: selectedIds.length })}
+            disabled={selectedIds.length === 0}
+            loading={batchPending}
+            onPress={() => void submitBatch()}
+          />
+        </View>
       )}
-      ListEmptyComponent={<TodayEmpty householdId={householdId} next={list.next} canEdit={canEdit} />}
-    />
+    </>
   );
 }
 
@@ -147,9 +228,14 @@ function TodayTaskCard({
   item,
   onComplete,
   onMenuUsed,
+  selected,
+  onToggle,
 }: {
   item: TodayItem;
   onComplete?: () => void;
+  /** 選択モードで選んでいるか。渡すと、押すと選ぶ・外す（onToggle）カードになる */
+  selected?: boolean;
+  onToggle?: () => void;
   /** 長押しのメニューを使ったとき（知らせを消す）。閲覧者には渡さない（メニューを出さない） */
   onMenuUsed?: () => void;
 }) {
@@ -172,6 +258,20 @@ function TodayTaskCard({
       { text: t('common.cancel'), style: 'cancel' },
     ]);
 
+  if (onToggle) {
+    return (
+      <TaskCard
+        kind={normalizeCareKind(item.task.kind)}
+        title={item.plant.name}
+        meta={meta}
+        overdueDays={item.overdueDays}
+        conditionText={item.task.conditionText}
+        selected={selected}
+        onPress={onToggle}
+        trailing={<SelectionCheck selected={selected === true} />}
+      />
+    );
+  }
   const card = (
     <TaskCard
       kind={normalizeCareKind(item.task.kind)}
@@ -260,9 +360,16 @@ function TodayEmpty({
  * ヘッダーの右の、表示の切り替えのメニュー（OS の層）。iOS はヘッダーのネイティブのメニューで、選んだ表示にチェックを付ける。
  * Android は @expo/ui の MenuView
  */
-function groupingMenuOptions(grouping: TodayGrouping, setGrouping: (next: TodayGrouping) => void, t: TFunction) {
+function groupingMenuOptions(
+  grouping: TodayGrouping,
+  setGrouping: (next: TodayGrouping) => void,
+  t: TFunction,
+  { onSelect }: { onSelect?: () => void },
+) {
   const label = t('today.grouping.label');
+  const selectButton = onSelect ? <HeaderTextButton title={t('today.select.start')} onPress={onSelect} /> : null;
   return {
+    // iOS では、右端に「選択」、その左に ↑↓ のメニューが並ぶ（iOS の写真と同じく「選択」が右端）
     unstable_headerRightItems: () => [
       {
         type: 'menu' as const,
@@ -278,21 +385,49 @@ function groupingMenuOptions(grouping: TodayGrouping, setGrouping: (next: TodayG
           })),
         },
       },
+      ...(selectButton ? [{ type: 'custom' as const, element: selectButton, hidesSharedBackground: true }] : []),
     ],
     headerRight: () => (
-      <MenuView
-        title={label}
-        actions={todayGroupings.map((g) => ({
-          id: g,
-          title: t(`today.grouping.${g}`),
-          state: g === grouping ? ('on' as const) : ('off' as const),
-        }))}
-        onPressAction={({ nativeEvent }) => setGrouping(nativeEvent.event as TodayGrouping)}
-      >
-        <Pressable accessibilityRole="button" accessibilityLabel={label}>
-          <AppText color="accent">{label}</AppText>
-        </Pressable>
-      </MenuView>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.lg }}>
+        {selectButton}
+        <MenuView
+          title={label}
+          actions={todayGroupings.map((g) => ({
+            id: g,
+            title: t(`today.grouping.${g}`),
+            state: g === grouping ? ('on' as const) : ('off' as const),
+          }))}
+          onPressAction={({ nativeEvent }) => setGrouping(nativeEvent.event as TodayGrouping)}
+        >
+          <Pressable accessibilityRole="button" accessibilityLabel={label}>
+            <AppText color="accent">{label}</AppText>
+          </Pressable>
+        </MenuView>
+      </View>
     ),
+  };
+}
+
+/** 選択モードのヘッダー（TODAY-06）。左に「すべて選択」（全部選んでいれば「選択を解除」）、右に「キャンセル」 */
+function selectionHeaderOptions({
+  allSelected,
+  onToggleAll,
+  onCancel,
+  t,
+}: {
+  allSelected: boolean;
+  onToggleAll: () => void;
+  onCancel: () => void;
+  t: TFunction;
+}) {
+  const left = (
+    <HeaderTextButton title={t(allSelected ? 'today.select.none' : 'today.select.all')} onPress={onToggleAll} />
+  );
+  const right = <HeaderTextButton title={t('today.select.cancel')} onPress={onCancel} />;
+  return {
+    headerLeft: () => left,
+    unstable_headerLeftItems: () => [{ type: 'custom' as const, element: left, hidesSharedBackground: true }],
+    headerRight: () => right,
+    unstable_headerRightItems: () => [{ type: 'custom' as const, element: right, hidesSharedBackground: true }],
   };
 }

@@ -222,6 +222,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | Toast | 操作の結果（「保存しました」など）を、タブバーの上に3秒だけ出す。地 `text/primary`・文字 `bg/base`（反転して画面の内容と区別する）、`callout`、角丸 `radius/md`、内側 左右 `space/lg`・上下 `space/md`。押す操作はなく、画面の読み上げにも伝える。取り消しのボタンつきは TODAY-02 のスナックバー（15.2 で追加） |
 | Snackbar | 取り消しのボタンつきの知らせ（TODAY-02）。Toast と同じ地・文字・位置で、右に「取り消す」（`headline`、`accent/subtle` の文字）。5秒で消える。連続したときは最後の1件だけを出す（17.2a で追加） |
 | CompleteButton | 完了の丸いボタン（TaskCard の右）。36pt の円（押せる領域は周りの余白で 44pt 以上）、`accent` の枠（`borderWidth/thick`）と、中にチェックのシンボル（`icon/md`、`accent`）。押している間は地を `accent/subtle` にする（17.2a で追加） |
+| SelectionCheck | 選択モードの、選んだかの印（TaskCard の右）。24pt の円。選んでいれば地 `accent` に白（`on-accent`）のチェック、選んでいなければ `text/tertiary` の枠（`borderWidth/thick`）。読み上げはカードの選択の状態で伝える（17.2c で追加） |
 | QRCodeView | 模様 `qr/foreground`、地 `qr/background`、周りに `space/lg` の余白（読み取りに必要な余白を兼ねる）、角丸 `radius/lg`。大きさは画面の幅に合わせ、最大 240pt（15.2 で追加） |
 | QRScanner | カメラの映像を画面全体に出し、OS のカメラの許可のダイアログを使う。許可がないときは、説明と「カメラを使う」、拒否されたあとは「設定を開く」のボタンを出す（15.2 で追加） |
 

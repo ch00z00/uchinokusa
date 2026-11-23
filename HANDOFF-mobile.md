@@ -99,6 +99,7 @@
 - 17.2 は 17.2a 完了と取り消し → 17.2b スキップと実施日を変えて記録 → 17.2c まとめて完了 に分ける（ユーザーが選んだ）
 - 17.2a：完了は `features/today/useCompletion.ts` の `useCompleteTask`（今日の一覧から楽観的に外し、失敗で戻す）。画面の流れは今日の画面の `useCompletionFlow`（スナックバー・すでに完了のダイアログ・通信できないときのトースト）。取り消しは `useUndoRecord`。部品を足した：CompleteButton（丸いチェック。ユーザーが選んだ）、Snackbar（ルートの `SnackbarProvider`）。トークン `borderWidth.thick` を足した
 - 17.2b：スキップ（`(app)/today/[taskId]/skip.tsx`）と実施日を変えて記録（`record.tsx`）は OS のシート。入口はカードの長押しのメニュー（ユーザーが選んだ。iOS は `Link.Menu`、Android は `Alert` の選択肢）。一度使うまで一覧の上に知らせを出す（端末に保存）。完了・スキップの流れは `features/today/useCompletionFlow.ts` に共通化。シートは開いたときのタスクを `useOpenedTodayItem` で覚える（楽観的更新で一覧から外れても中身が消えないように）
+- 17.2c：まとめて完了は、ヘッダーの右端の「選択」から選択モードへ（ユーザーが選んだ）。選んだ状態は今日の画面（`TodayScreen`）の `selection`、結果の分け方は `features/today/batch.ts`、送るのは `useCompleteTasks`（楽観的に外す）。失敗した分は選んだまま残す。部品を足した：SelectionCheck
 - 完了のボタンの mutation は、カードではなく一覧（`TodaySections`）に置く。カードは完了の直後に一覧から外れて消えるので、カードに置くと、そのあとのダイアログや取り消しが動かなくなるため
 - 試しのデータ：寝室のサンスベリア（水やり、3日過ぎ）、ローズマリー（剪定、今日）、アイビー（肥料、今日、置き場所なし）のタスクを API で入れた
 

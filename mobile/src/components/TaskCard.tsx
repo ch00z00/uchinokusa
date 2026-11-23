@@ -26,6 +26,8 @@ type Props = {
   /** 右に置く操作（完了のボタン。17.2 で足す。閲覧者には渡さない） */
   trailing?: ReactNode;
   onPress?: () => void;
+  /** 選択モードで選んでいるか（読み上げに伝える。印は trailing の SelectionCheck） */
+  selected?: boolean;
   /** 長押し（スキップなどのメニュー。Android。iOS はリンクのメニューで出す） */
   onLongPress?: () => void;
   accessibilityHint?: string;
@@ -45,6 +47,7 @@ export function TaskCard({
   trailing,
   onPress,
   onLongPress,
+  selected,
   accessibilityHint,
 }: Props) {
   const { t } = useTranslation();
@@ -54,6 +57,7 @@ export function TaskCard({
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityHint={accessibilityHint}
+      accessibilityState={selected === undefined ? undefined : { selected }}
       disabled={!onPress}
       onPress={onPress}
       onLongPress={onLongPress}
