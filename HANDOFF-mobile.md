@@ -130,6 +130,7 @@
   - ブラウザでは `@react-native-firebase` が動かないので、開発では Firebase の JS SDK で Auth Emulator にサインインする（14.1。サーバーは Emulator のトークンを受け付ける）
   - iOS の標準部品は、ブラウザでは見た目が変わる。形と流れはブラウザで試し、最後の見た目は iOS シミュレーターで確かめる
 - **18.1 で決めたこと（リアルタイム同期）**：`src/realtime/`。`RealtimeConnection`（接続・購読・30秒ごとの ping と10秒の pong 待ち・1秒から倍で最大30秒のつなぎ直し）は React から切り離してテストする。`RealtimeProvider` を `(app)/_layout.tsx` に置き、所属するすべての世帯を購読する。購読できたら世帯のデータを取り直し、世帯ごとのバージョン番号が飛んだら世帯をすべて取り直す。変更イベントは `invalidationTargets` で、世帯のキー（`['households', id]`）と植物の詳細（`['plants', plantId]`）を取り直す。ブラウザ（web）は接続のヘッダーを付けられないので、いまはつながない（0030 の「最初のメッセージでトークン」がバックエンドに要る。web を使うときに依頼する）
+- **18.2 は手続き待ち（2026-11-24）**：プッシュ通知の受け取りは `@react-native-firebase/messaging`（tech.md）で、本番の Firebase のプロジェクトの `GoogleService-Info.plist` と、APNs の鍵の Firebase への登録が要る。ユーザーが Apple Developer Program と Firebase の手続きをしてから、18.2（通知設定の画面・許可・トークンの登録・通知を押したときの移動）をまとめて作る。ユーザーには手順（App ID `app.uchinokusa`、Push Notifications と Sign in with Apple、APNs の `.p8`・Key ID・Team ID）を伝えた。`.p8` はリポジトリに入れない
 - **次の `/retro` で拾うこと（2026-11-24）**：メモの一覧を見て、ユーザーが「リストアイテムは角丸のカードにした方がいい」と言った。見た目の直しは 19.4 でまとめて行う。カレンダーの印（アイコン＋円の形で状態）を見て「状態は良く表現できている。デザインは直感的に意味が伝わるのが大事」と言った
 - **デザインの振り返り（`/retro`）**：デザインの作業の区切り（1画面が終わったときなど）で `/retro` を呼ぶ。試行錯誤から好みを抜き出して `docs/design/preferences.md` を育て、デザインの作業の前に読む（`.claude/skills/retro/SKILL.md`）
 
