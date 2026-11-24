@@ -136,6 +136,7 @@ export const radius = {
 export const size = {
   tapMin: 44,
   icon: {
+    xs: 11,
     sm: 16,
     md: 20,
     lg: 28,

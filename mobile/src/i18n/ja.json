@@ -194,7 +194,6 @@
       "calendar": "カレンダー"
     },
     "sectionsLabel": "表示の切り替え",
-    "comingSoon": "この画面は準備中です",
     "species": "種類",
     "location": "置き場所",
     "acquiredOn": "購入日・お迎え日",
@@ -674,5 +673,21 @@
       "confirm": "削除",
       "done": "メモを削除しました"
     }
+  },
+  "calendar": {
+    "monthFormat": "yyyy年 M月",
+    "legend": {
+      "completed": "完了",
+      "planned": "予定",
+      "skipped": "スキップ",
+      "note": "メモ"
+    },
+    "more": "+{{count}}",
+    "a11y": {
+      "markers": "お手入れ {{count}}件"
+    },
+    "dayEmpty": "この日の記録・予定・メモはありません",
+    "planned": "予定",
+    "projected": "予定（周期からの見込み）"
   }
 }

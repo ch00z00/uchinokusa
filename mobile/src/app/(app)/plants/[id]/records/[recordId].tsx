@@ -10,6 +10,8 @@ import { Button } from '@/components/Button';
 import { DateField } from '@/components/DateField';
 import { ListRow } from '@/components/ListRow';
 import { useToast } from '@/components/Toast';
+import type { PlantCalendar } from '@/features/calendar/calendarDays';
+import { calendarKeys } from '@/features/calendar/useCalendar';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import {
   actorOf,
@@ -34,11 +36,18 @@ export default function RecordEditScreen() {
   const householdId = state.status === 'selected' ? state.household.id : '';
   // 記録1件を取る API はないので、履歴の取得の結果から探す。保存・削除で履歴を取り直しても、
   // 開いたときの記録を使い続ける（削除の途中で「見つかりません」に変わらないように）
+  // 記録1件を取る API はないので、履歴とカレンダーの取得の結果から探す。保存・削除で取り直しても、
+  // 開いたときの記録を使い続ける（削除の途中で「見つかりません」に変わらないように）
   const [record] = useState(() =>
     findRecord(
-      queryClient
-        .getQueriesData<InfiniteData<CareRecordPage>>({ queryKey: recordKeys.all(id) })
-        .map(([, data]) => data?.pages),
+      [
+        ...queryClient
+          .getQueriesData<InfiniteData<CareRecordPage>>({ queryKey: recordKeys.all(id) })
+          .map(([, data]) => data?.pages),
+        ...queryClient
+          .getQueriesData<PlantCalendar>({ queryKey: calendarKeys.all(id) })
+          .map(([, data]) => (data ? [data] : undefined)),
+      ],
       recordId,
     ),
   );

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
 
 import { AppText } from '@/components/AppText';
+import type { PlantCalendar } from '@/features/calendar/calendarDays';
+import { calendarKeys } from '@/features/calendar/useCalendar';
 import { useToast } from '@/components/Toast';
 import { flattenNotes, type Note, type NotePage } from '@/features/note/note';
 import { NoteEditor } from '@/features/note/NoteEditor';
@@ -18,11 +20,17 @@ export default function EditNoteScreen() {
   const theme = useTheme();
   const { id, noteId } = useLocalSearchParams<{ id: string; noteId: string }>();
   const queryClient = useQueryClient();
-  // メモ1件を取る API はないので、メモの一覧の取得の結果から探す。保存・削除で一覧を取り直しても、開いたときのメモを使い続ける
-  const [note] = useState(() =>
-    flattenNotes(queryClient.getQueryData<InfiniteData<NotePage>>(noteKeys.list(id))?.pages).find(
-      (n) => n.id === noteId,
-    ),
+  // メモ1件を取る API はないので、メモの一覧とカレンダーの取得の結果から探す。保存・削除で取り直しても、
+  // 開いたときのメモを使い続ける
+  const [note] = useState(
+    () =>
+      flattenNotes(queryClient.getQueryData<InfiniteData<NotePage>>(noteKeys.list(id))?.pages).find(
+        (n) => n.id === noteId,
+      ) ??
+      queryClient
+        .getQueriesData<PlantCalendar>({ queryKey: calendarKeys.all(id) })
+        .flatMap(([, data]) => data?.notes ?? [])
+        .find((n) => n.note.id === noteId)?.note,
   );
   if (!note) {
     return (

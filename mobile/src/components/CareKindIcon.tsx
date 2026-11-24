@@ -17,15 +17,17 @@ const symbols: Record<CareKind, SymbolViewProps['name']> = {
 
 type Props = {
   kind: CareKind | string;
-  /** sm 16pt（バッジの中）・md 20pt（一覧・TaskCard）・lg 28pt（植物の詳細のタスク） */
-  size?: 'sm' | 'md' | 'lg';
+  /** xs 11pt（カレンダーの印）・sm 16pt（バッジの中）・md 20pt（一覧・TaskCard）・lg 28pt（植物の詳細のタスク） */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  /** 塗る色。省くと作業の種類の色（color/care/*）。カレンダーの完了の印（種類の色の円の上）などで変える */
+  color?: string;
 };
 
 /**
  * 作業の種類のアイコン（アプリの層。foundations.md の 5章の CareKindIcon）。作業の種類の色（color/care/*）で塗る。
  * 色だけに頼らないよう、使う場所では種類の名前もいっしょに出す。読み上げでは名前のほうを読ませる
  */
-export function CareKindIcon({ kind, size = 'md' }: Props) {
+export function CareKindIcon({ kind, size = 'md', color }: Props) {
   const theme = useTheme();
   const normalized = normalizeCareKind(kind);
   const px = theme.size.icon[size];
@@ -33,7 +35,7 @@ export function CareKindIcon({ kind, size = 'md' }: Props) {
     <SymbolView
       name={symbols[normalized]}
       size={px}
-      tintColor={theme.color.care[normalized]}
+      tintColor={color ?? theme.color.care[normalized]}
       style={{ width: px, height: px }}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

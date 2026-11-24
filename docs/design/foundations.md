@@ -129,6 +129,7 @@ HIG の文字スタイル（Dynamic Type の「標準」の大きさ）にそろ
 | `borderWidth/hairline` | 1pt | カード・一覧の区切り、入力欄の誤りの枠 |
 | `borderWidth/thick` | 2pt | 丸い完了のボタン（CompleteButton）の枠（17.2a で追加） |
 | `size/tap-min` | 44pt | タップできる領域の最小 |
+| `size/icon/xs` | 11pt | カレンダーの日のマスの印（17.3c で追加） |
 | `size/icon/sm` | 16pt | バッジの中 |
 | `size/icon/md` | 20pt | 一覧の項目、TaskCard |
 | `size/icon/lg` | 28pt | 植物の詳細のタスク、空の状態の補助 |
@@ -217,6 +218,7 @@ SF Symbols（Regular）と並べて違和感がないようにする。
 | TaskListItem | ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足に周期（季節ごとの周期の季節なら「今：夏 4日ごと」）・次の予定日、その下に実行条件。一時停止中は Badge（neutral）を題名の右に出し、次の予定日を出さない（16.3a で追加）。植え替えの時期の注意があれば、いちばん下に、警告のシンボル（`icon/sm`、`accent`）と「注意：」から始まる1行（`footnote`、`text/primary`）を出す（色だけに頼らず、言葉で示す。16.3c で追加。`suggestion/avoid` の色では気づきにくいと言われたので改めた） |
 | RecordListItem | 履歴の記録（PLANT-11）。ListRow の形で、左に CareKindIcon（`icon/lg`）、題名に作業の名前、補足の1行目に「完了」または「スキップ」・実施日（追加の記録なら「追加の記録」を足す）、2行目に対応したメンバー名、スキップの理由があれば「理由：…」。完了とスキップは色ではなく言葉で区別する。編集者以上は押すと記録の編集（PLANT-12）（17.3a で追加） |
 | NoteListItem | メモ（PLANT-13）。本文を全文（`body`、`text/primary`）、その下に作成日時・作成者（`footnote`、`text/secondary`）。編集したメモは「・編集済み」を足す。書いた本人とオーナーだけ押せる（編集へ）（17.3b で追加） |
+| CalendarDayMarker | カレンダーの日のマスの印（PLANT-15）。直径 18pt の円に CareKindIcon（`icon/xs`）。完了：作業の種類の色（`color/care/*`）で塗った円に `bg/surface` のアイコン。予定：種類の色の枠（`borderWidth/hairline`）の円に種類の色のアイコン。スキップ：`text/tertiary` の点線の枠の円に `text/tertiary` のアイコン。色だけに頼らず、円の形で状態を示す。1つのマスに2つまで（17.3c で追加） |
 | IntervalInput | 見出しは FormField と同じ。数の入力欄（FormField と同じ見た目、幅は固定、数字のキーボード、プレースホルダー「例：7」）＋単位の OS のセグメントの切り替え（日・週・か月）＋「ごと」を横に並べる（16.3a で追加） |
 | SeasonalIntervalEditor | 「季節ごとに変える」と説明（`footnote`）＋ OS のスイッチ（オンは `accent`）。オンにすると、春（3〜5月）・夏・秋・冬の IntervalInput を縦に並べる。基本の周期の欄より上に置き、オンのあいだは基本の周期の欄を隠す（16.3a で追加） |
 | HeaderTextButton | ヘッダーの右の文字のボタン（「追加」「編集」）。`headline` の `accent`、背景なし（iOS 26 のガラスの背景も消す）。世帯名（HouseholdSwitcher）とそろえる（16.2b で追加）。押せる領域は、ビューの枠そのものを高さ・幅とも `size.tapMin`（44pt）以上にする（`useHeaderHitArea`）。iOS のネイティブのヘッダーに埋め込んだビューは枠の外のタッチを受け付けず、`hitSlop` が効かないため。ヘッダーに置く自作の部品はすべてこれを使う（17.2c で、押しても反応しないことがある不具合を直した） |

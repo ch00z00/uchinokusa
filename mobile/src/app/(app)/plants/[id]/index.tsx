@@ -15,6 +15,7 @@ import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProv
 import { useLocations } from '@/features/location/useLocations';
 import type { Plant } from '@/features/plant/plantList';
 import { usePlant, useUnarchivePlant } from '@/features/plant/usePlants';
+import { CalendarSection } from '@/features/calendar/CalendarSection';
 import { NotesSection } from '@/features/note/NotesSection';
 import { HistorySection } from '@/features/record/HistorySection';
 import { confirm } from '@/lib/confirm';
@@ -25,7 +26,7 @@ import { useCareTasks } from '@/features/task/useCareTasks';
 import { formatDate, formatDayWithYear } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
-// 詳細の中のタブ（2026-11-22 に決定）。カレンダーはタスク 17.3c で作る
+// 詳細の中のタブ（2026-11-22 に決定）
 const sections = ['overview', 'history', 'notes', 'calendar'] as const;
 type Section = (typeof sections)[number];
 
@@ -98,9 +99,11 @@ export default function PlantDetailScreen() {
               endReachedRef={endReachedRef}
             />
           ) : (
-            <AppText color="secondary" style={{ paddingHorizontal: theme.space.lg }}>
-              {t('plantDetail.comingSoon')}
-            </AppText>
+            <CalendarSection
+              plantId={plant.data.id}
+              role={state.status === 'selected' ? state.household.role : 'viewer'}
+              canEditRecords={canEdit && plant.data.archivedAt === undefined}
+            />
           )}
         </>
       )}
