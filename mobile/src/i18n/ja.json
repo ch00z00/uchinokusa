@@ -18,6 +18,7 @@
   "tabs": {
     "today": "今日",
     "plants": "植物",
+    "shops": "探す",
     "settings": "設定"
   },
   "today": {
@@ -695,5 +696,10 @@
     "someone": "ほかのメンバー",
     "revoked": "「{{household}}」から外されました",
     "roleChanged": "「{{household}}」でのロールが{{role}}に変わりました"
+  },
+  "shops": {
+    "query": "園芸店",
+    "a11yLabel": "近くの園芸店を探す",
+    "failed": "地図を開けませんでした"
   }
 }
