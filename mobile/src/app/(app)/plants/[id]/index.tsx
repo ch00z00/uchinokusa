@@ -15,6 +15,7 @@ import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProv
 import { useLocations } from '@/features/location/useLocations';
 import type { Plant } from '@/features/plant/plantList';
 import { usePlant, useUnarchivePlant } from '@/features/plant/usePlants';
+import { NotesSection } from '@/features/note/NotesSection';
 import { HistorySection } from '@/features/record/HistorySection';
 import { confirm } from '@/lib/confirm';
 import { findRepottingAvoid, repottingAvoidText } from '@/features/suggestion/suggestionText';
@@ -24,7 +25,7 @@ import { useCareTasks } from '@/features/task/useCareTasks';
 import { formatDate, formatDayWithYear } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
-// 詳細の中のタブ（2026-11-22 に決定）。メモ・カレンダーはタスク 17.3b・17.3c で作る
+// 詳細の中のタブ（2026-11-22 に決定）。カレンダーはタスク 17.3c で作る
 const sections = ['overview', 'history', 'notes', 'calendar'] as const;
 type Section = (typeof sections)[number];
 
@@ -87,6 +88,13 @@ export default function PlantDetailScreen() {
             <HistorySection
               plantId={plant.data.id}
               canEdit={canEdit && plant.data.archivedAt === undefined}
+              endReachedRef={endReachedRef}
+            />
+          ) : section === 'notes' ? (
+            // メモはアーカイブ中の植物にも書ける（API の決まり）
+            <NotesSection
+              plantId={plant.data.id}
+              role={state.status === 'selected' ? state.household.role : 'viewer'}
               endReachedRef={endReachedRef}
             />
           ) : (

@@ -89,6 +89,12 @@ function AppStack() {
           sheetGrabberVisible: true,
         }}
       />
+      {/* PLANT-14 メモの作成・編集 */}
+      <Stack.Screen name="plants/[id]/notes/new" options={{ title: t('notes.create.title'), presentation: 'modal' }} />
+      <Stack.Screen
+        name="plants/[id]/notes/[noteId]"
+        options={{ title: t('notes.edit.title'), presentation: 'modal' }}
+      />
       {/* PLANT-12 記録の編集・削除。履歴の記録を押すと開く OS のシート */}
       <Stack.Screen
         name="plants/[id]/records/[recordId]"
