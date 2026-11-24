@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
+// リンクで奥の画面（アカウントの削除など）を直接開いても、下に設定のトップを積み、戻れるようにする
+export const unstable_settings = { initialRouteName: 'index' };
+
 // 設定のタブ（SET-01）。世帯の設定（HH-01）・メンバー・招待・置き場所も、このタブの中で進む（戻るボタンに「設定」と出る）
 export default function SettingsLayout() {
   const { t } = useTranslation();

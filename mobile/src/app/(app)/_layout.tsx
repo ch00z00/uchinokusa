@@ -8,6 +8,9 @@ import { SelectedHouseholdProvider, useSelectedHousehold } from '@/features/hous
 import { rememberPendingInvite } from '@/features/invitation/pendingInvite';
 import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 
+// リンクや通知から植物の詳細などを直接開いても、下にタブを積み、戻れるようにする（18.2 の通知のタップでも使う）
+export const unstable_settings = { initialRouteName: '(tabs)' };
+
 // サインインしてから使う画面。未サインインなら、サインインの画面へ移す
 export default function AppLayout() {
   const auth = useAuth();

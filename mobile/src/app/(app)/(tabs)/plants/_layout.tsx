@@ -3,6 +3,9 @@ import { useTranslation } from 'react-i18next';
 
 import { householdSwitcherOptions } from '@/features/household/HouseholdSwitcher';
 
+// リンクで奥の画面（アーカイブした植物など）を直接開いても、下に植物の一覧を積み、戻れるようにする
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function PlantsLayout() {
   const { t } = useTranslation();
   return (
