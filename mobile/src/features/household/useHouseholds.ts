@@ -58,10 +58,13 @@ export function useMembers(householdId: string) {
   return useQuery({
     queryKey: householdKeys.members(householdId),
     enabled: householdId !== '',
-    queryFn: async () =>
-      (await unwrap(api.GET('/households/{householdId}/members', { params: { path: { householdId } } }))).members,
+    queryFn: () => fetchMembers(householdId),
   });
 }
+
+/** 世帯のメンバーを取る（リアルタイム同期で、操作した人の名前を引くときにも使う） */
+export const fetchMembers = async (householdId: string) =>
+  (await unwrap(api.GET('/households/{householdId}/members', { params: { path: { householdId } } }))).members;
 
 /** ロールの変更（編集者 ⇄ 閲覧者。オーナーのみ） */
 export function useUpdateMemberRole(householdId: string) {

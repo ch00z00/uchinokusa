@@ -8,7 +8,7 @@ import { AppText } from './AppText';
 
 const visibleMs = 3000;
 
-type ToastContextValue = {
+export type ToastContextValue = {
   /** 操作の結果を、画面の下に数秒だけ出す（「保存しました」など） */
   show: (message: string) => void;
 };

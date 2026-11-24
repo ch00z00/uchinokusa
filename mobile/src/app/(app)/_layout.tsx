@@ -6,6 +6,7 @@ import { useAuth, useProfileSetup } from '@/auth/AuthProvider';
 import { useMe } from '@/features/account/useMe';
 import { SelectedHouseholdProvider, useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import { rememberPendingInvite } from '@/features/invitation/pendingInvite';
+import { RealtimeProvider } from '@/realtime/RealtimeProvider';
 
 // サインインしてから使う画面。未サインインなら、サインインの画面へ移す
 export default function AppLayout() {
@@ -24,7 +25,10 @@ export default function AppLayout() {
   // サインアウトするとこのレイアウトごと外れるので、選択中の世帯の状態も残らない
   return (
     <SelectedHouseholdProvider>
-      <AppStack />
+      {/* リアルタイム同期（18.1）。所属するすべての世帯を購読し、ほかのメンバーの変更を取り込む */}
+      <RealtimeProvider>
+        <AppStack />
+      </RealtimeProvider>
     </SelectedHouseholdProvider>
   );
 }

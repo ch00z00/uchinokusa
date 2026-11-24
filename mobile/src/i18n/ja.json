@@ -689,5 +689,11 @@
     "dayEmpty": "この日の記録・予定・メモはありません",
     "planned": "予定",
     "projected": "予定（周期からの見込み）"
+  },
+  "realtime": {
+    "handled": "{{name}}さんが{{plant}}の{{task}}に対応しました",
+    "someone": "ほかのメンバー",
+    "revoked": "「{{household}}」から外されました",
+    "roleChanged": "「{{household}}」でのロールが{{role}}に変わりました"
   }
 }
