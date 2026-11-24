@@ -21,9 +21,10 @@ import { HistorySection } from '@/features/record/HistorySection';
 import { confirm } from '@/lib/confirm';
 import { findRepottingAvoid, repottingAvoidText } from '@/features/suggestion/suggestionText';
 import { useSuggestions } from '@/features/suggestion/useSuggestions';
+import { overdueDays } from '@/features/task/careTask';
 import { TaskListItem } from '@/features/task/TaskListItem';
 import { useCareTasks } from '@/features/task/useCareTasks';
-import { formatDate, formatDayWithYear } from '@/lib/formatDate';
+import { formatDate, formatDayWithYear, toDayString } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
 // 詳細の中のタブ（2026-11-22 に決定）
@@ -120,6 +121,7 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
   // 植え替えの時期の注意（16.3c）。予定日を変えて向かない時期でなくなると、サーバーが撤回して消える
   const suggestions = useSuggestions(householdId);
   const archived = plant.archivedAt !== undefined;
+  const today = toDayString(new Date());
   // アーカイブ中の植物には、タスクの操作（追加・編集）を出さない（PLANT-10）
   const canAddTask = canEdit && !archived;
   const locationName = plant.locationId ? locations.data?.find((l) => l.id === plant.locationId)?.name : undefined;
@@ -167,6 +169,8 @@ function Overview({ householdId, plant, canEdit }: { householdId: string; plant:
                 key={task.id}
                 task={task}
                 caution={cautionOf(task.id)}
+                // 今日やることと同じく、期限切れを示す（17.4）。アーカイブ中の植物のタスクは今日やることに出ないので示さない
+                overdueDays={archived ? 0 : overdueDays(task, today)}
                 // 編集（TASK-01）は編集者以上で、アーカイブ中でない植物だけ
                 onPress={
                   canAddTask

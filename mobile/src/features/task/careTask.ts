@@ -40,3 +40,17 @@ export function currentInterval(
   const seasonal = task.seasonalIntervals[season];
   return seasonal ? { interval: seasonal, season } : { interval: task.interval, season: undefined };
 }
+
+const dayNumber = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number);
+  return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
+};
+
+/**
+ * タスクの次の予定日を過ぎた日数（要件9-3。植物の詳細で期限切れを示す、17.4）。0 なら期限切れではない。
+ * 今日やること（TODAY-01）に出るタスクと合わせ、一時停止中や予定日がないタスクは 0 にする
+ */
+export function overdueDays(task: Pick<CareTask, 'status' | 'nextDueOn'>, today: string): number {
+  if (task.status !== 'active' || !task.nextDueOn) return 0;
+  return Math.max(0, dayNumber(today) - dayNumber(task.nextDueOn));
+}

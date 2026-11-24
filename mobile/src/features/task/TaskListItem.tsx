@@ -6,6 +6,7 @@ import { Badge } from '@/components/Badge';
 import { CareKindIcon } from '@/components/CareKindIcon';
 import { AppText } from '@/components/AppText';
 import { ListRow } from '@/components/ListRow';
+import { OverdueBadge } from '@/components/OverdueBadge';
 import { formatDay } from '@/lib/formatDate';
 import { useTheme } from '@/theme';
 
@@ -18,6 +19,8 @@ type Props = {
   caution?: string;
   /** 押すとタスクの編集（16.3b。編集者以上）。渡さなければ押せない */
   onPress?: () => void;
+  /** 次の予定日を過ぎた日数（17.4）。1以上なら「3日過ぎています」を出し、行ごと目立たせる */
+  overdueDays?: number;
 };
 
 /**
@@ -25,7 +28,7 @@ type Props = {
  * 左に作業の種類のアイコン、題名に作業の名前、補足に周期（季節ごとの周期なら「今：夏 4日ごと」）・次の予定日・実行条件。
  * 一時停止中ならバッジを出す。植え替えの予定日が向かない時期なら、注意の行を出す
  */
-export function TaskListItem({ task, caution, onPress }: Props) {
+export function TaskListItem({ task, caution, onPress, overdueDays = 0 }: Props) {
   const { t } = useTranslation();
   const theme = useTheme();
   const { interval, season } = currentInterval(task, new Date());
@@ -42,7 +45,14 @@ export function TaskListItem({ task, caution, onPress }: Props) {
     <ListRow
       leading={<CareKindIcon kind={normalizeCareKind(task.kind)} size="lg" />}
       title={taskTitle(task, t)}
-      accessory={paused ? <Badge label={t('tasks.list.paused')} /> : undefined}
+      accessory={
+        paused ? (
+          <Badge label={t('tasks.list.paused')} />
+        ) : overdueDays > 0 ? (
+          <OverdueBadge days={overdueDays} onTint />
+        ) : undefined
+      }
+      emphasized={overdueDays > 0}
       subtitle={task.conditionText ? `${summary}\n${task.conditionText}` : summary}
       footer={
         caution ? (

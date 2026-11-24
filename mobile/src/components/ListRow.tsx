@@ -30,6 +30,8 @@ export type ListRowProps = {
   onPress?: () => void;
   disabled?: boolean;
   accessibilityHint?: string;
+  /** 行ごと目立たせる（期限切れのタスクなど）。地を accent/subtle にし、左に status/overdue の帯を付ける。色だけに頼らず、言葉（バッジなど）もいっしょに出す */
+  emphasized?: boolean;
 };
 
 /**
@@ -51,6 +53,7 @@ export function ListRow({
   onPress,
   disabled,
   accessibilityHint,
+  emphasized,
 }: ListRowProps) {
   const theme = useTheme();
   return (
@@ -66,9 +69,17 @@ export function ListRow({
         {
           minHeight: theme.size.tapMin,
           paddingHorizontal: theme.space.lg,
+          // 左の帯のぶん内側を狭め、アイコンと文字の位置をほかの行とそろえる
+          paddingLeft: theme.space.lg - (emphasized ? theme.borderWidth.emphasis : 0),
           paddingVertical: theme.space.md,
           gap: theme.space.sm,
-          backgroundColor: pressed ? theme.color.bg.subtle : theme.color.bg.surface,
+          backgroundColor: pressed
+            ? theme.color.bg.subtle
+            : emphasized
+              ? theme.color.accent.subtle
+              : theme.color.bg.surface,
+          borderLeftWidth: emphasized ? theme.borderWidth.emphasis : 0,
+          borderLeftColor: theme.color.status.overdue,
           borderBottomColor: theme.color.border.subtle,
           borderBottomWidth: theme.borderWidth.hairline,
         },

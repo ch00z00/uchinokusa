@@ -1,4 +1,4 @@
-import { currentInterval, normalizeCareKind, seasonOf } from '../careTask';
+import { currentInterval, normalizeCareKind, overdueDays, seasonOf } from '../careTask';
 
 describe('normalizeCareKind', () => {
   it('知っている種類はそのまま、知らない値は「その他」にする（API の決まり）', () => {
@@ -28,5 +28,23 @@ describe('currentInterval', () => {
       season: 'summer',
     });
     expect(currentInterval(task, new Date(2026, 0, 1))).toEqual({ interval: base, season: undefined });
+  });
+});
+
+describe('overdueDays', () => {
+  const task = { status: 'active' as const, nextDueOn: '2026-11-21' };
+  it('次の予定日を過ぎた日数。今日が予定日なら 0（今日やることと同じく、過ぎてはいない）', () => {
+    expect(overdueDays(task, '2026-11-24')).toBe(3);
+    expect(overdueDays(task, '2026-11-21')).toBe(0);
+    expect(overdueDays(task, '2026-11-20')).toBe(0);
+  });
+
+  it('月をまたいでも数える', () => {
+    expect(overdueDays({ ...task, nextDueOn: '2026-10-30' }, '2026-11-02')).toBe(3);
+  });
+
+  it('一時停止中・予定日がないタスクは、期限切れにしない（今日やることに出ないため）', () => {
+    expect(overdueDays({ ...task, status: 'paused' }, '2026-11-24')).toBe(0);
+    expect(overdueDays({ status: 'active', nextDueOn: undefined }, '2026-11-24')).toBe(0);
   });
 });

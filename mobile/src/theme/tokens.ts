@@ -147,4 +147,6 @@ export const size = {
 export const borderWidth = {
   hairline: 1,
   thick: 2,
+  /** 行の左の帯（期限切れの項目など、行ごと目立たせる） */
+  emphasis: 4,
 } as const;
