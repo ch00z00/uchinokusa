@@ -70,6 +70,14 @@ describe('invalidationTargets', () => {
     ]);
   });
 
+  it('メンバーの削除は、記録・メモの作業者名が変わるので、植物の詳細すべても取り直す（0035）', () => {
+    expect(invalidationTargets(changed({ entity: 'member', op: 'deleted' }))).toEqual([
+      { queryKey: ['households', 'h1'] },
+      { queryKey: ['plants'] },
+      { queryKey: ['households'], exact: true },
+    ]);
+  });
+
   it('世帯とメンバーの変更は、世帯の一覧（名前・ロール）も取り直す', () => {
     expect(invalidationTargets(changed({ entity: 'member' }))).toEqual([
       { queryKey: ['households', 'h1'] },

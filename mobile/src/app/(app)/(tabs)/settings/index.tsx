@@ -11,7 +11,7 @@ import { useMe } from '@/features/account/useMe';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
 import { useTheme } from '@/theme';
 
-// SET-01 設定のトップ。中身はタスク 14.2・15・19 で作る
+// SET-01 設定のトップ
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -49,6 +49,15 @@ export default function SettingsScreen() {
         loading={signOut.isPending}
         onPress={() => signOut.mutate()}
       />
+      {/* SET-04 アカウントの削除（19.2）。いちばん下に置く */}
+      <View style={{ borderRadius: theme.radius.md, overflow: 'hidden' }}>
+        <ListRow
+          title={t('account.delete.title')}
+          destructive
+          navigates
+          onPress={() => router.push('/settings/account-delete')}
+        />
+      </View>
     </ScrollView>
   );
 }

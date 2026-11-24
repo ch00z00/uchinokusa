@@ -13,6 +13,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="household/transfer" options={{ title: t('household.transfer.title') }} />
       <Stack.Screen name="household/invitations/index" options={{ title: t('invitations.title') }} />
       <Stack.Screen name="household/locations" options={{ title: t('location.list.title') }} />
+      <Stack.Screen name="account-delete" options={{ title: t('account.delete.title') }} />
       {/* INV-01 で作り、同じモーダルのまま INV-02 に切り替える */}
       <Stack.Screen
         name="household/invitations/new"

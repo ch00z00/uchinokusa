@@ -96,8 +96,11 @@ export function invalidationTargets(event: ChangedMessage): InvalidationTarget[]
   const targets: InvalidationTarget[] = [{ queryKey: ['households', event.householdId] }];
   if (event.entity === 'plant') targets.push({ queryKey: ['plants', event.entityId] });
   else if (event.plantId) targets.push({ queryKey: ['plants', event.plantId] });
-  // 置き場所の名前・削除（植物が「置き場所未設定」になる）は、どの植物の詳細にも出る
-  if (event.entity === 'location') targets.push({ queryKey: ['plants'] });
+  // 置き場所の名前・削除（植物が「置き場所未設定」になる）は、どの植物の詳細にも出る。
+  // メンバーの削除（アカウントの削除）では、記録・メモの作業者名が「退会したユーザー」に変わる（イベントは出ない。0035）
+  if (event.entity === 'location' || (event.entity === 'member' && event.op === 'deleted')) {
+    targets.push({ queryKey: ['plants'] });
+  }
   // 世帯の名前とロールは、世帯の一覧（GET /households）から出している
   if (event.entity === 'member' || event.entity === 'household')
     targets.push({ queryKey: ['households'], exact: true });

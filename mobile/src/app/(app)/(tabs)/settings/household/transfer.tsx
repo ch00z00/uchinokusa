@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 
@@ -8,16 +8,23 @@ import { ListRow } from '@/components/ListRow';
 import { RoleBadge } from '@/components/RoleBadge';
 import { useMe } from '@/features/account/useMe';
 import { useSelectedHousehold } from '@/features/household/SelectedHouseholdProvider';
-import { useMembers, useTransferOwnership, type Household } from '@/features/household/useHouseholds';
+import { useHouseholds, useMembers, useTransferOwnership, type Household } from '@/features/household/useHouseholds';
 import { confirm } from '@/lib/confirm';
 import { useTheme } from '@/theme';
 
-// HH-03 オーナー権限の移譲。退出（要件2-8）の途中から来る。
-// TODO(19.2)：アカウントの削除（要件1-7）からも、対象の世帯を指定して開けるようにする
+// HH-03 オーナー権限の移譲。退出（要件2-8）の途中からは選択中の世帯で、
+// アカウントの削除（要件1-7、SET-04）からは householdId で対象の世帯を指定して開く（選択中の世帯は変えない）
 export default function TransferScreen() {
+  const { householdId } = useLocalSearchParams<{ householdId?: string }>();
   const { state } = useSelectedHousehold();
-  if (state.status !== 'selected') return null;
-  return <Transfer household={state.household} />;
+  const households = useHouseholds();
+  const household = householdId
+    ? households.data?.find((h) => h.id === householdId)
+    : state.status === 'selected'
+      ? state.household
+      : undefined;
+  if (!household) return null;
+  return <Transfer household={household} />;
 }
 
 function Transfer({ household }: { household: Household }) {

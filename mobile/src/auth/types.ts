@@ -23,4 +23,14 @@ export interface AuthClient {
   getIdToken(forceRefresh: boolean): Promise<string | null>;
   signIn(provider: AuthProviderId): Promise<SignInResult>;
   signOut(): Promise<void>;
+  /** サインインに使ったプロバイダ。サインインしていなければ null */
+  currentProvider(): AuthProviderId | null;
+  /**
+   * Apple で再認証して、認可コードを返す（アカウントの削除で、サーバーが Apple のトークンを失効させるのに使う。要件1-6）。
+   * 利用者が閉じたら null。本物の Apple のサインインがない環境では AppleReauthUnavailable を投げる
+   */
+  appleAuthorizationCode(): Promise<string | null>;
 }
+
+/** Apple の再認証ができない環境（Emulator。本物の Apple のサインインはタスク 14.4 で作る） */
+export class AppleReauthUnavailable extends Error {}

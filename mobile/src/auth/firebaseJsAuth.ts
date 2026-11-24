@@ -14,7 +14,7 @@ import {
 
 import { config } from '@/config';
 
-import type { AuthClient, AuthProviderId, SignInResult } from './types';
+import { AppleReauthUnavailable, type AuthClient, type AuthProviderId, type SignInResult } from './types';
 
 /** プロバイダでのサインインのしかた（ブラウザはポップアップ、スマホは Emulator の偽のトークン） */
 export type ProviderSignIn = (auth: Auth, provider: AuthProviderId) => Promise<UserCredential>;
@@ -71,5 +71,13 @@ export function createFirebaseJsAuthClient(params: {
       }
     },
     signOut: () => signOut(auth),
+    currentProvider: () => {
+      const providerId = auth.currentUser?.providerData[0]?.providerId;
+      if (providerId === 'apple.com') return 'apple';
+      if (providerId === 'google.com') return 'google';
+      return null;
+    },
+    // JS SDK では Apple の認可コードを受け取れない。14.4 で、OS の Apple のサインイン（expo-apple-authentication）に置き換える
+    appleAuthorizationCode: () => Promise.reject(new AppleReauthUnavailable()),
   };
 }
